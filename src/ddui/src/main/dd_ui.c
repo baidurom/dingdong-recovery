@@ -2486,7 +2486,7 @@ STATUS dd_progress(char * icon, char *txt, char *fin_txt, int echo) {
   return ret_status;
 }
 
-STATUS dd_progress_animation(char * icon, char *txt, char *fin_txt, int echo) {
+STATUS dd_progress_animation(char * icon, char *txt, char *fin_txt, int echo, int type) {
   //-- Set Busy before everythings ready
   ag_setbusy();
 
@@ -2520,7 +2520,7 @@ STATUS dd_progress_animation(char * icon, char *txt, char *fin_txt, int echo) {
     chkX,chkY,chkW,chkH,
     btnX,btnY,btnW,btnH,
     &cvf, chkFX, chkFY, chkFH,
-    echo
+    echo, type
   );
 
   //-- Release Finished Canvas

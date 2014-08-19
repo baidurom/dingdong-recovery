@@ -122,10 +122,32 @@ static STATUS exec_restore(char* path, menuItem* p)
     return RET_OK;
 }
 
+STATUS exec_restore_auto(char* path)
+{
+	ddOp_send(OP_MOUNT, 1, path);
+    if(ddOp_result_get_int()) {
+    	return -1;
+    }
+
+    ddProgress_fun restore_fun;
+    restore_fun = &restore_progress;
+    strncpy(restore_arg->success_text, "<~restore.progress.success.info>", PATH_MAX);
+    strncpy(restore_arg->fail_text, "<~restore.progress.fail.info>", PATH_MAX);
+    restore_arg->path = path;
+    restore_arg->backup_restore_type = RESTORE_ALL;
+
+    ddProgress_init(restore_fun, restore_arg);
+    dd_progress_animation("@list.file", "<~backup.name>", "<~backup.name>", 0, ANIMATION_TYPE_RESTORE);
+    return 0;
+}
+
+
+
 static STATUS _backup_dir_show(char *path, menuItem* p, int operation)
 {
     DIR* d;
     struct dirent* de;
+    sync();
     printf("Opening backup path: %s\n", path);
     d = opendir(path);
     if (!d)
@@ -387,6 +409,28 @@ static void backup_progress(struct _ddProgress_unit *b_args)
     	aw_post(aw_msg(16, 0, 0, 0));
     else
     	aw_post(aw_msg(15, 0, 0, 0));
+}
+
+STATUS exec_backup_auto(char* path)
+{
+    ddOp_send(OP_MOUNT, 1, path);
+    if(ddOp_result_get_int()) {
+    	return -1;
+    }
+    printf("Backup path: %s\n", path);
+    memset(backup_arg, 0, sizeof(ddProgress_unit));
+
+    ddProgress_fun bakcup_fun;
+
+    bakcup_fun = &backup_progress;
+    strncpy(backup_arg->success_text, "<~backup.progress.success.info>", PATH_MAX);
+    strncpy(backup_arg->fail_text, "<~backup.progress.fail.info>", PATH_MAX);
+    backup_arg->path = path;
+    backup_arg->backup_restore_type = BACKUP_ALL;
+
+    ddProgress_init(bakcup_fun, backup_arg);
+    dd_progress_animation("@list.file", "<~backup.name>", "<~backup.name>", 0, ANIMATION_TYPE_BACKUP);
+    return 0;
 }
 
 static STATUS backup_child_show(menuItem* p)

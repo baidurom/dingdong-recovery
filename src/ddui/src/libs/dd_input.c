@@ -207,7 +207,7 @@ int ev_init(){
   
   //-- Create Watcher Thread
   evthread_active = 1;
-  screen_init();
+  //screen_init();
   pthread_t input_thread_t;
   pthread_create(&input_thread_t, NULL, ev_input_thread, NULL);
   pthread_detach(input_thread_t);

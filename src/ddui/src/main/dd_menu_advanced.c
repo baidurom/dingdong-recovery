@@ -10,68 +10,6 @@
 #include "../../../dd_op.h"
 
 #define BUILD_PROP "/system/build.prop"
-static STATUS advanced_root_show(struct _menuItem* p)
-{
-    if (RET_YES == dd_confirm(3, p->name, p->desc, p->icon)) {
-    	dd_busy_process(0);
-        ddOp_send(OP_MOUNT, 1, "/system");
-        ddOp_send(OP_MOUNT, 1, "/data");
-        char *sdk_version = dd_parseprop(BUILD_PROP, "ro.build.version.sdk");
-        int android_version = atoi(sdk_version);
-        dd_printf("Current sdk version: %d\n", android_version);
-        char cmd[PATH_MAX];
-        if(android_version < 18) {
-            snprintf(cmd, PATH_MAX - 1,
-            		"mkdir -p /data/app;"
-            		"mkdir -p /tmp/root;"
-            		"chmod 0755 /data;"
-            		"chmod 0644 /data/app;"
-            		"cp -f /dingdongroot/DingDongRoot.apk /tmp/root/DingDongRoot.apk.gz;"
-            		"cp -f /dingdongroot/su /tmp/root/su.gz;"
-            		"cd /tmp/root/;"
-            		"gzip -d *.gz;"
-            		"cp -f DingDongRoot.apk /data/app/DingDongRoot.apk;"
-            		"chmod 0644 /data/app/DingDongRoot.apk;"
-            		"cp -f su /system/bin/su;"
-            		"chmod 6755 /system/bin/su;"
-            		"cp -f su /system/xbin/su;"
-            		"chmod 6755 /system/xbin/su;"
-            		"exit $?"
-            		);
-        } else {
-            snprintf(cmd, PATH_MAX - 1,
-            		"mkdir -p /data/app;"
-            		"mkdir -p /tmp/root;"
-            		"chmod 0755 /data;"
-            		"chmod 0644 /data/app;"
-            		"cp -f /dingdongroot/DingDongRoot.apk /tmp/root/DingDongRoot.apk.gz;"
-            		"cp -f /dingdongroot/su /tmp/root/su.gz;"
-            		"cp -f /dingdongroot/recovery /tmp/root/recovery.gz;"
-            		"cd /tmp/root/;"
-            		"gzip -d *.gz;"
-            		"cp -f DingDongRoot.apk /data/app/DingDongRoot.apk;"
-            		"chmod 0644 /data/app/DingDongRoot.apk;"
-            		"cp -f su /system/bin/su;"
-            		"chmod 6755 /system/bin/su;"
-            		"cp -f su /system/xbin/su;"
-            		"chmod 6755 /system/xbin/su;"
-            		"cp -f recovery /system/etc/install-recovery.sh;"
-            		"chmod 0544 /system/etc/install-recovery.sh;"
-            		"exit $?"
-            		);
-        }
-        ddOp_send(OP_SYSTEM, 1, cmd);
-        int result = ddOp_result_get_int();
-        ddOp_send(OP_UNMOUNT, 1, "/system");
-        ddOp_send(OP_UNMOUNT, 1, "/data");
-        if (result)
-        	dd_alert(4, p->name, "<~advanced.root.fail.info>", NULL, acfg()->text_ok);
-        else
-        	dd_alert(4, p->name, "<~advanced.root.success.info>", NULL, acfg()->text_ok);
-        dd_printf("Root return: %d.\n", result);
-    }
-    return MENU_BACK;
-}
 
 static STATUS advanced_battary_show(struct _menuItem* p)
 {
@@ -204,16 +142,6 @@ struct _menuItem* advanced_ui_init()
     menuNode_init(p);
 
     struct _menuItem *temp;
-    //onekey root
-    if (acfg()->root == 1) {
-    	temp = common_ui_init();
-    	menuItem_set_name(temp, "<~advanced.root.name>");
-    	menuItem_set_desc(temp, "<~advanced.root.desc>");
-    	//menuItem_set_icon(temp, "@advanced.root");
-    	menuItem_set_show(temp, &advanced_root_show);
-    	menuNode_add(p, temp);
-    }
-
     //batarry wipe
     temp = common_ui_init();
     menuItem_set_name(temp, "<~advanced.battary.name>");

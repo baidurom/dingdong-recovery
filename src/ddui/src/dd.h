@@ -29,6 +29,10 @@ typedef int STATUS;
 #define MENU_MAIN MENU_BACK + 1
 #define MENU_QUIT MENU_MAIN + 1
 
+#define ANIMATION_TYPE_UPDATE  1
+#define ANIMATION_TYPE_BACKUP  2
+#define ANIMATION_TYPE_RESTORE 3
+
 #ifndef dd_printf
 #define dd_printf printf
 #endif
@@ -248,6 +252,10 @@ void ddProgress_set_text(char *str);
 int  ddProgress_set_pause(int status);
 void ddProgress_set_info(char* file_name);
 void ddProgress_reset_progress();
+int ddProgress_set_op_type(int type);
+
+STATUS exec_backup_auto(char* path);
+STATUS exec_restore_auto(char* path);
 
 //menuNode operation
 struct _menuItem * menuNode_init(struct _menuItem *node);

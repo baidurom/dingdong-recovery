@@ -123,7 +123,7 @@ STATUS install_start(char* path, int wipe_cache, char* install_file, int echo, i
 
     ddProgress_init(&install_package_progress, install_arg);
     if (autoinstall)
-    	ret = dd_progress_animation("@list.zip", "<~sd.install.title>", "<~sd.install.title>", echo);
+    	ret = dd_progress_animation("@list.zip", "<~sd.install.title>", "<~sd.install.title>", echo, ANIMATION_TYPE_UPDATE);
     else
     	ret = dd_progress("@list.zip", "<~sd.install.title>", "<~sd.install.title>", echo);
     return ret;

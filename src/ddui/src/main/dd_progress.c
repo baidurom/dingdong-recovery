@@ -56,6 +56,7 @@ static ACONTROLP ai_buftxt;
 static int		 ai_animation		 = 0;
 static int		 ai_an_h			 = 0;
 static CANVAS    ai_an;
+static int       ai_an_type          = 1;
 
 static pthread_mutex_t ai_progress_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t ai_canvas_mutex_progress = PTHREAD_MUTEX_INITIALIZER;
@@ -205,7 +206,23 @@ static void *ac_progressthread(void *cookie){
 
   PNGCANVAS ap[DD_ANIMATION_FRAM];
   char *text ;
-  text  = "<~update.wait>";
+  switch (ai_an_type) {
+  	  case ANIMATION_TYPE_UPDATE:
+  		  text  = "<~update.wait>";
+  		  break;
+
+  	  case ANIMATION_TYPE_BACKUP:
+  	  	  text  = "<~backup.wait>";
+  	  	  break;
+
+  	  case ANIMATION_TYPE_RESTORE:
+  	  	  text  = "<~restore.wait>";
+  	  	  break;
+
+  	  default:
+  		  text  = "<~update.wait>";
+  		  break;
+  }
   byte imgE       = 0;
   int  imgA       = 0;
   int  imgW       = 0;
@@ -476,7 +493,7 @@ void dd_init_progress_animation(
 	  ai_prog_h = ai_prog_oh-((hlfdp*2)+2);
 	  ai_prog_w = ai_prog_ow-((hlfdp*2)+2);
 	  ai_prog_r = ai_prog_or-(1+hlfdp);
-	  snprintf(ai_progress_text,63,"<b><~progress.installing.info></b>");
+	  snprintf(ai_progress_text,63,"<b><~progress.running.info></b>");
 	  snprintf(ai_progress_info,100,"");
 	  pthread_mutex_unlock(&ai_progress_mutex);
 	  return ;
@@ -588,13 +605,14 @@ int dd_start_progress_animation(
   int cx, int cy, int cw, int ch,
   int px, int py, int pw, int ph,
   CANVAS * cvf, int chkFX, int chkFY, int chkFH,
-  int echo
+  int echo, int type
 ){
   int ai_return_status = 0;
   //-- Save Canvases
   ai_bg = bg;
 
   ddProgress_reset_progress();
+  ddProgress_set_op_type(type);
   ai_canvas_lock_progress();
   dd_init_progress_animation(bg,cx,cy,cw,ch,px,py,pw,ph);
   AWINDOWP hWin     = aw(bg);
@@ -647,6 +665,7 @@ int dd_start_progress_animation(
 
   if (ai_return_status == -1 || 1 == echo)
   {
+	  printf("auto operation get return status: %d, or echo: %d\n", ai_return_status, echo);
 	  ai_animation = 0;
       int pad = agdp() * 4;
       ai_canvas_lock_progress();
@@ -756,6 +775,14 @@ void ddProgress_set_text(char *str)
     actext_appendtxt(ai_buftxt, str);
     ai_canvas_unlock_progress();
     return ;
+}
+
+int ddProgress_set_op_type(int type)
+{
+	pthread_mutex_lock(&ai_progress_mutex);
+	ai_an_type = type;
+	pthread_mutex_unlock(&ai_progress_mutex);
+	return ai_an_type;
 }
 
 int ddProgress_set_pause(int status)

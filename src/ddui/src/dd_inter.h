@@ -526,7 +526,7 @@ int dd_start_progress_animation(
   int cx, int cy, int cw, int ch,
   int px, int py, int pw, int ph,
   CANVAS * cvf, int chkFX, int chkFY, int chkFH,
-  int echo
+  int echo, int type
 );
 
 //

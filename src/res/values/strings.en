@@ -24,6 +24,8 @@ default.desc=Are you sure to do this?
 default.wait=Running now, please wait...
 default.wipe.wait=Wiping, please wait...
 update.wait=Updating, please wait...
+backup.wait=Backing up, please wait...
+restore.wait=Restoring, please wait
 global.done=DONE
 
 alert.result=Error
@@ -53,6 +55,7 @@ sd.install.name=choose zip from /sdcard
 sdint.install.name=choose zip from internal /sdcard
 cache.install.name=choose zip from /cache
 signature.setting.name=package signature checking
+sd.install.title=Install zip
 
 sd.mount.error=sdcard not found
 sd.install.alert=Are you sure to install it?
@@ -206,7 +209,7 @@ progress.savelog.button=Save Logs
 progress.success.info=Done
 progress.fail.info=Failed
 progress.running.info=Running, please wait...
-progress.installing.info=Installer running, please wait...
+progress.installing.info=Program is running, please wait...
 progress.savelog.tip=Logs will be save at:
 progress.savelog.alert=Are you sure to save the logs?
 progress.savelog.success=Save done
