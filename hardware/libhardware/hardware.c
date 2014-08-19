@@ -30,6 +30,7 @@
 /** Base path of the hal modules */
 #define HAL_LIBRARY_PATH1 "/system/lib/hw"
 #define HAL_LIBRARY_PATH2 "/vendor/lib/hw"
+#define HAL_LIBRARY_PATH3 "/system/lib"
 
 /**
  * There are a set of variant filename for modules. The form of the filename
@@ -45,6 +46,7 @@
 static const char *variant_keys[] = {
     "ro.hardware",  /* This goes first so that it can pick up a different
                        file on the emulator. */
+    "ro.mtk.hardware",  /* This goes second for chip name */
     "ro.product.board",
     "ro.board.platform",
     "ro.arch"
@@ -74,7 +76,7 @@ static int load(const char *id,
     handle = dlopen(path, RTLD_NOW);
     if (handle == NULL) {
         char const *err_str = dlerror();
-        LOGE("load: module=%s\n%s", path, err_str?err_str:"unknown");
+        ALOGE("load: module=%s\n%s", path, err_str?err_str:"unknown");
         status = -EINVAL;
         goto done;
     }
@@ -83,14 +85,14 @@ static int load(const char *id,
     const char *sym = HAL_MODULE_INFO_SYM_AS_STR;
     hmi = (struct hw_module_t *)dlsym(handle, sym);
     if (hmi == NULL) {
-        LOGE("load: couldn't find symbol %s", sym);
+        ALOGE("load: couldn't find symbol %s", sym);
         status = -EINVAL;
         goto done;
     }
 
     /* Check that the id matches */
     if (strcmp(id, hmi->id) != 0) {
-        LOGE("load: id=%s != hmi->id=%s", id, hmi->id);
+        ALOGE("load: id=%s != hmi->id=%s", id, hmi->id);
         status = -EINVAL;
         goto done;
     }
@@ -108,7 +110,7 @@ static int load(const char *id,
             handle = NULL;
         }
     } else {
-        LOGV("loaded HAL id=%s path=%s hmi=%p handle=%p",
+        ALOGV("loaded HAL id=%s path=%s hmi=%p handle=%p",
                 id, path, *pHmi, handle);
     }
 
@@ -152,9 +154,17 @@ int hw_get_module_by_class(const char *class_id, const char *inst,
             snprintf(path, sizeof(path), "%s/%s.%s.so",
                      HAL_LIBRARY_PATH1, name, prop);
             if (access(path, R_OK) == 0) break;
+
+            snprintf(path, sizeof(path), "%s/%s.%s.so",
+                     HAL_LIBRARY_PATH3, name, prop);
+            if (access(path, R_OK) == 0) break;
         } else {
             snprintf(path, sizeof(path), "%s/%s.default.so",
                      HAL_LIBRARY_PATH1, name);
+            if (access(path, R_OK) == 0) break;
+
+            snprintf(path, sizeof(path), "%s/%s.default.so",
+                     HAL_LIBRARY_PATH3, name);
             if (access(path, R_OK) == 0) break;
         }
     }

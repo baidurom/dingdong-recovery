@@ -15,65 +15,40 @@
 ** limitations under the License.
 */
 
-#ifndef __utility_h
-#define __utility_h
+#ifndef _DEBUGGERD_UTILITY_H
+#define _DEBUGGERD_UTILITY_H
 
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "symbol_table.h"
+typedef struct {
+    /* tombstone file descriptor */
+    int tfd;
+    /* if true, does not log anything to the Android logcat */
+    bool quiet;
+} log_t;
 
-#ifndef PT_ARM_EXIDX
-#define PT_ARM_EXIDX    0x70000001      /* .ARM.exidx segment */
-#endif
+/* Log information onto the tombstone. */
+void _LOG(log_t* log, bool in_tombstone_only, const char *fmt, ...)
+        __attribute__ ((format(printf, 3, 4)));
 
-#define STACK_CONTENT_DEPTH 32
-
-typedef struct mapinfo {
-    struct mapinfo *next;
-    unsigned start;
-    unsigned end;
-    unsigned exidx_start;
-    unsigned exidx_end;
-    struct symbol_table *symbols;
-    bool isExecutable;
-    char name[];
-} mapinfo;
-
-/* Get a word from pid using ptrace. The result is the return value. */
-extern int get_remote_word(int pid, void *src);
-
-/* Handy routine to read aggregated data from pid using ptrace. The read 
- * values are written to the dest locations directly. 
- */
-extern void get_remote_struct(int pid, void *src, void *dst, size_t size);
-
-/* Find the containing map for the pc */
-const mapinfo *pc_to_mapinfo (mapinfo *mi, unsigned pc, unsigned *rel_pc);
-
-/* Map a pc address to the name of the containing ELF file */
-const char *map_to_name(mapinfo *mi, unsigned pc, const char* def);
-
-/* Log information onto the tombstone */
-extern void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...);
-
-/* Determine whether si_addr is valid for this signal */
-bool signal_has_address(int sig);
-
-#define LOG(fmt...) _LOG(-1, 0, fmt)
+#define LOG(fmt...) _LOG(NULL, 0, fmt)
 
 /* Set to 1 for normal debug traces */
 #if 0
-#define XLOG(fmt...) _LOG(-1, 0, fmt)
+#define XLOG(fmt...) _LOG(NULL, 0, fmt)
 #else
 #define XLOG(fmt...) do {} while(0)
 #endif
 
 /* Set to 1 for chatty debug traces. Includes all resolved dynamic symbols */
 #if 0
-#define XLOG2(fmt...) _LOG(-1, 0, fmt)
+#define XLOG2(fmt...) _LOG(NULL, 0, fmt)
 #else
 #define XLOG2(fmt...) do {} while(0)
 #endif
 
-#endif
+int wait_for_signal(pid_t tid, int* total_sleep_time_usec);
+void wait_for_stop(pid_t tid, int* total_sleep_time_usec);
+
+#endif // _DEBUGGERD_UTILITY_H

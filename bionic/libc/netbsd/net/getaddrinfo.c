@@ -130,6 +130,9 @@ static const char in6_loopback[] = {
 };
 #endif
 
+// This should be synchronized to ResponseCode.h
+static const int DnsProxyQueryResult = 222;
+
 static const struct afd {
 	int a_af;
 	int a_addrlen;
@@ -208,6 +211,8 @@ struct res_target {
 	int anslen;		/* size of answer buffer */
 	int n;			/* result length */
 };
+
+extern char * __progname;
 
 static int str2number(const char *);
 static int explore_fqdn(const struct addrinfo *, const char *,
@@ -429,8 +434,9 @@ android_getaddrinfo_proxy(
 	// accomodate these apps, though.
 	char propname[PROP_NAME_MAX];
 	char propvalue[PROP_VALUE_MAX];
-	snprintf(propname, sizeof(propname), "net.dns1.%d", getpid());
+	snprintf(propname, sizeof(propname), "net.dns1.%s", __progname);
 	if (__system_property_get(propname, propvalue) > 0) {
+		debug_log("getaddrinfo: dnsproxy private dns: %s >>\n", propname);
 		return -1;
 	}
 
@@ -439,6 +445,7 @@ android_getaddrinfo_proxy(
 	     strcspn(hostname, " \n\r\t^'\"") != strlen(hostname)) ||
 	    (servname != NULL &&
 	     strcspn(servname, " \n\r\t^'\"") != strlen(servname))) {
+	    debug_log("getaddrinfo: dnsproxy bogus hostname >>\n");
 		return -1;
 	}
 
@@ -476,12 +483,15 @@ android_getaddrinfo_proxy(
 		goto exit;
 	}
 
-	int remote_rv;
-	if (fread(&remote_rv, sizeof(int), 1, proxy) != 1) {
+	char buf[4];
+	// read result code for gethostbyaddr
+	if (fread(buf, 1, sizeof(buf), proxy) != sizeof(buf)) {
 		goto exit;
 	}
 
-	if (remote_rv != 0) {
+	int result_code = (int)strtol(buf, NULL, 10);
+	// verify the code itself
+	if (result_code != DnsProxyQueryResult ) {
 		goto exit;
 	}
 
@@ -734,7 +744,10 @@ getaddrinfo(const char *hostname, const char *servname,
          * BEGIN ANDROID CHANGES; proxying to the cache
          */
         if (android_getaddrinfo_proxy(hostname, servname, hints, res) == 0) {
+            debug_log("getaddrinfo: %s get result from proxy >>\n",hostname);
             return 0;
+        } else {
+            debug_log("getaddrinfo: %s NO result from proxy \n",hostname);
         }
 
 	/*
@@ -1867,6 +1880,20 @@ error:
 	free(elems);
 }
 
+static int _using_alt_dns()
+{
+	char propname[PROP_NAME_MAX];
+	char propvalue[PROP_VALUE_MAX];
+
+	propvalue[0] = 0;
+	snprintf(propname, sizeof(propname), "net.dns1.%s", __progname);
+	if (__system_property_get(propname, propvalue) > 0 ) {
+		debug_log("getaddrinfo: dnsproxy private dns: %s \n", propname);
+		return 1;
+	}
+	return 0;
+}
+
 /*ARGSUSED*/
 static int
 _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
@@ -1909,14 +1936,12 @@ _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
 		q.anslen = sizeof(buf->buf);
 		int query_ipv6 = 1, query_ipv4 = 1;
 		if (pai->ai_flags & AI_ADDRCONFIG) {
-			query_ipv6 = _have_ipv6();
-			query_ipv4 = _have_ipv4();
-			if (query_ipv6 == 0 && query_ipv4 == 0) {
-				// Both our IPv4 and IPv6 connectivity probes failed, which indicates
-				// that we have neither an IPv4 or an IPv6 default route (and thus no
-				// global IPv4 or IPv6 connectivity). We might be in a walled garden.
-				// Throw up our arms and ask for both A and AAAA.
-				query_ipv6 = query_ipv4 = 1;
+			// Only implement AI_ADDRCONFIG if the application is not
+			// using its own DNS servers, since our implementation
+			// only works on the default connection.
+			if (!_using_alt_dns()) {
+				query_ipv6 = _have_ipv6();
+				query_ipv4 = _have_ipv4();
 			}
 		}
 		if (query_ipv6) {
@@ -2167,6 +2192,8 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 			printf(";; res_nquery(%s, %d, %d)\n", name, class, type);
 #endif
 
+        debug_log("res_queryN name = %s, class = %d, type = %d", name, class, type);
+
 		n = res_nmkquery(res, QUERY, name, class, type, NULL, 0, NULL,
 		    buf, sizeof(buf));
 #ifdef RES_USE_EDNS0
@@ -2228,6 +2255,8 @@ res_queryN(const char *name, /* domain name */ struct res_target *target,
 		}
 		return -1;
 	}
+
+    debug_log("res_queryN name = %s succeed", name);
 	return ancount;
 }
 

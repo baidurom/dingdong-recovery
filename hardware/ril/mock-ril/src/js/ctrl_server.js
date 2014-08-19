@@ -179,10 +179,6 @@ ctrlServerDispatchTable[CTRL_CMD_ADD_DIALING_CALL] = { // 1006
     'components' : [simulatedRadioWorker],
     'schemaName' : 'CtrlReqAddDialingCall',
 };
-ctrlServerDispatchTable[CTRL_CMD_SET_NEW_SMS] = { //1007
-    'components' : [simulatedRadioWorker],
-    'schemaName' : 'CtrlReqNewSMS',
-};
 
 /**
  * Optional tests

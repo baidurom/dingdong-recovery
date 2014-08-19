@@ -152,7 +152,9 @@ inv_error_t inv_dmp_open(void)
         LOG_RESULT_LOCATION(result);
         return result;
     }
-    result = inv_apply_endian_accel();
+    if (NULL != mldl_cfg->accel){
+        result = inv_apply_endian_accel();
+    }
 
     return result;
 }

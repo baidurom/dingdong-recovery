@@ -79,24 +79,6 @@ extern struct tm*  gmtime_r(const time_t *timep, struct tm *result);
 extern char*       strptime(const char *buf, const char *fmt, struct tm *tm);
 extern size_t      strftime(char *s, size_t max, const char *format, const struct tm *tm);
 
-/* ANDROID-BEGIN */
-struct strftime_locale {
-    const char *  mon[12];
-    const char *  month[12];
-    const char *  standalone_month[12];
-    const char *  wday[7];
-    const char *  weekday[7];
-    const char *  X_fmt;
-    const char *  x_fmt;
-    const char *  c_fmt;
-    const char *  am;
-    const char *  pm;
-    const char *  date_fmt;
-};
-
-extern size_t      strftime_tz(char *s, size_t max, const char *format, const struct tm *tm, const struct strftime_locale*  lc);
-/* ANDROID-END */
-
 extern char *ctime(const time_t *timep);
 extern char *ctime_r(const time_t *timep, char *buf);
 
@@ -121,6 +103,7 @@ extern int clock_gettime(int, struct timespec *);
 #define CLOCK_THREAD_CPUTIME_ID    3
 #define CLOCK_REALTIME_HR          4
 #define CLOCK_MONOTONIC_HR         5
+#define CLOCK_BOOTTIME             7
 
 extern int  timer_create(int, struct sigevent*, timer_t*);
 extern int  timer_delete(timer_t);

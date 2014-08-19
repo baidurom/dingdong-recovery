@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -19,7 +19,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -55,7 +55,7 @@ struct usb_handle
     int success;
     ifc_match_func callback;
     usb_ifc_info info;
-    
+
     UInt8 bulkIn;
     UInt8 bulkOut;
     IOUSBInterfaceInterface190 **interface;
@@ -132,7 +132,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
             // continue so we can try the next interface
             continue;
         }
-        
+
         /*
          * Now open the interface. This will cause the pipes
          * associated with the endpoints in the interface descriptor
@@ -149,7 +149,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
          * use the interface. Maybe something needs to be done about
          * this situation.
          */
-        
+
         kr = (*interface)->USBInterfaceOpen(interface);
 
         if (kr != 0) {
@@ -158,7 +158,7 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
             // continue so we can try the next interface
             continue;
         }
-        
+
         // Get the number of endpoints associated with this interface.
         kr = (*interface)->GetNumEndpoints(interface, &interfaceNumEndpoints);
 
@@ -242,10 +242,10 @@ static int try_interfaces(IOUSBDeviceInterface182 **dev, usb_handle *handle) {
                     ERR("could not clear output pipe; result %x, ignoring....\n", kr);
                 }
             }
-            
+
             return 0;
         }
-        
+
 next_interface:
         (*interface)->USBInterfaceClose(interface);
         (*interface)->Release(interface);
@@ -264,6 +264,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
     SInt32 score;
     HRESULT result;
     UInt8 serialIndex;
+    UInt32 locationId;
 
     // Create an intermediate plugin.
     kr = IOCreatePlugInInterfaceForService(device,
@@ -284,7 +285,7 @@ static int try_device(io_service_t device, usb_handle *handle) {
         goto error;
     }
 
-    /* 
+    /*
      * We don't need the intermediate interface after the device interface
      * is created.
      */
@@ -322,6 +323,13 @@ static int try_device(io_service_t device, usb_handle *handle) {
         goto error;
     }
 
+    kr = (*dev)->GetLocationID(dev, &locationId);
+    if (kr != 0) {
+        ERR("GetLocationId");
+        goto error;
+    }
+    snprintf(handle->info.device_path, sizeof(handle->info.device_path), "usb:%lX", locationId);
+
     kr = (*dev)->USBGetSerialNumberStringIndex(dev, &serialIndex);
 
     if (serialIndex > 0) {
@@ -331,14 +339,15 @@ static int try_device(io_service_t device, usb_handle *handle) {
         req.bmRequestType = USBmakebmRequestType(kUSBIn, kUSBStandard, kUSBDevice);
         req.bRequest = kUSBRqGetDescriptor;
         req.wValue = (kUSBStringDesc << 8) | serialIndex;
-        req.wIndex = 0;
+        //language ID (en-us) for serial number string
+        req.wIndex = 0x0409;
         req.pData = buffer;
         req.wLength = sizeof(buffer);
         kr = (*dev)->DeviceRequest(dev, &req);
 
         if (kr == kIOReturnSuccess && req.wLenDone > 0) {
             int i, count;
-            
+
             // skip first word, and copy the rest to the serial string, changing shorts to bytes.
             count = (req.wLenDone - 1) / 2;
             for (i = 0; i < count; i++)
@@ -363,8 +372,8 @@ static int try_device(io_service_t device, usb_handle *handle) {
     if (dev != NULL) {
         (*dev)->Release(dev);
     }
-    
-    return -1;    
+
+    return -1;
 }
 
 
@@ -398,7 +407,7 @@ static int init_usb(ifc_match_func callback, usb_handle **handle) {
         ERR("Could not create iterator.");
         return -1;
     }
-    
+
     for (;;) {
         if (! IOIteratorIsValid(iterator)) {
             /*
@@ -408,7 +417,7 @@ static int init_usb(ifc_match_func callback, usb_handle **handle) {
             IOIteratorReset(iterator);
             continue;
         }
-                
+
         io_service_t device = IOIteratorNext(iterator);
 
         if (device == 0) {

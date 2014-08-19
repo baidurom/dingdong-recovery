@@ -1,7 +1,7 @@
 /*
  * From FreeBSD 2.2.7: Fundamental constants relating to ethernet.
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: ethernet.h,v 9.56 2009-10-15 22:54:58 Exp $
+ * $Id: ethernet.h 309193 2012-01-19 00:03:57Z $
  */
 
 
@@ -59,15 +59,17 @@
 #define	ETHER_TYPE_IP		0x0800
 #define ETHER_TYPE_ARP		0x0806
 #define ETHER_TYPE_8021Q	0x8100
-#define	ETHER_TYPE_BRCM		0x886c
-#define	ETHER_TYPE_802_1X	0x888e
-#define	ETHER_TYPE_802_1X_PREAUTH 0x88c7
-#define ETHER_TYPE_WAI		0x88b4
+#define	ETHER_TYPE_IPV6		0x86dd		
+#define	ETHER_TYPE_BRCM		0x886c		
+#define	ETHER_TYPE_802_1X	0x888e		
+#define	ETHER_TYPE_802_1X_PREAUTH 0x88c7	
+#define ETHER_TYPE_WAI		0x88b4		
+#define ETHER_TYPE_89_0D	0x890d		
+
+#define ETHER_TYPE_IPV6		0x86dd		
 
 
-
-#define	ETHER_BRCM_SUBTYPE_LEN	4
-#define	ETHER_BRCM_CRAM		1
+#define	ETHER_BRCM_SUBTYPE_LEN	4	
 
 
 #define ETHER_DEST_OFFSET	(0 * ETHER_ADDR_LEN)
@@ -104,7 +106,7 @@ BWL_PRE_PACKED_STRUCT struct	ether_addr {
 
 #define ETHER_SET_LOCALADDR(ea)	(((uint8 *)(ea))[0] = (((uint8 *)(ea))[0] | 2))
 #define ETHER_IS_LOCALADDR(ea) 	(((uint8 *)(ea))[0] & 2)
-#define ETHER_CLR_LOCALADDR(ea)	(((uint8 *)(ea))[0] = (((uint8 *)(ea))[0] & 0xd))
+#define ETHER_CLR_LOCALADDR(ea)	(((uint8 *)(ea))[0] = (((uint8 *)(ea))[0] & 0xfd))
 #define ETHER_TOGGLE_LOCALADDR(ea)	(((uint8 *)(ea))[0] = (((uint8 *)(ea))[0] ^ 2))
 
 
@@ -115,15 +117,15 @@ BWL_PRE_PACKED_STRUCT struct	ether_addr {
 
 
 
-#define	ether_cmp(a, b)	(!(((short*)a)[0] == ((short*)b)[0]) | \
-			 !(((short*)a)[1] == ((short*)b)[1]) | \
-			 !(((short*)a)[2] == ((short*)b)[2]))
+#define	ether_cmp(a, b)	(!(((short*)(a))[0] == ((short*)(b))[0]) | \
+			 !(((short*)(a))[1] == ((short*)(b))[1]) | \
+			 !(((short*)(a))[2] == ((short*)(b))[2]))
 
 
 #define	ether_copy(s, d) { \
-		((short*)d)[0] = ((short*)s)[0]; \
-		((short*)d)[1] = ((short*)s)[1]; \
-		((short*)d)[2] = ((short*)s)[2]; }
+		((short*)(d))[0] = ((const short*)(s))[0]; \
+		((short*)(d))[1] = ((const short*)(s))[1]; \
+		((short*)(d))[2] = ((const short*)(s))[2]; }
 
 
 static const struct ether_addr ether_bcast = {{255, 255, 255, 255, 255, 255}};

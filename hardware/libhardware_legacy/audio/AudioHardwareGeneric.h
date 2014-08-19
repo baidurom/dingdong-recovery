@@ -92,6 +92,10 @@ public:
     virtual status_t    setParameters(const String8& keyValuePairs);
     virtual String8     getParameters(const String8& keys);
     virtual unsigned int  getInputFramesLost() const { return 0; }
+    #ifndef ANDROID_DEFAULT_CODE
+    virtual status_t    addAudioEffect(effect_handle_t effect) { return NO_ERROR; }
+    virtual status_t    removeAudioEffect(effect_handle_t effect) { return NO_ERROR; }
+    #endif
 
 private:
     AudioHardwareGeneric *mAudioHardware;
@@ -113,7 +117,37 @@ public:
     // mic mute
     virtual status_t    setMicMute(bool state);
     virtual status_t    getMicMute(bool* state);
+#ifndef ANDROID_DEFAULT_CODE
+    virtual status_t SetEMParameter(void *ptr , int len);
+    virtual status_t GetEMParameter(void *ptr , int len);
+    virtual status_t SetAudioCommand(int par1, int par2);
+    virtual status_t GetAudioCommand(int par1);
+    virtual status_t SetAudioData(int par1,size_t len,void *ptr);
+    virtual status_t GetAudioData(int par1,size_t len,void *ptr);
 
+    virtual status_t SetACFPreviewParameter(void *ptr , int len);
+    virtual status_t SetHCFPreviewParameter(void *ptr , int len);
+
+    /////////////////////////////////////////////////////////////////////////
+    //    for PCMxWay Interface API ...   
+    /////////////////////////////////////////////////////////////////////////
+    virtual int xWayPlay_Start(int sample_rate);
+    virtual int xWayPlay_Stop(void);
+    virtual int xWayPlay_Write(void *buffer, int size_bytes);
+    virtual int xWayPlay_GetFreeBufferCount(void);
+    virtual int xWayRec_Start(int sample_rate);
+    virtual int xWayRec_Stop(void);
+    virtual int xWayRec_Read(void *buffer, int size_bytes);
+    //add by wendy
+    virtual int ReadRefFromRing(void*buf, uint32_t datasz,void* DLtime) ;
+    virtual int GetVoiceUnlockULTime(void* DLtime);
+    virtual int SetVoiceUnlockSRC(uint outSR, uint outChannel) ;
+    virtual bool startVoiceUnlockDL();
+    virtual bool stopVoiceUnlockDL() ;
+    virtual void freeVoiceUnlockDLInstance() ;
+    virtual int GetVoiceUnlockDLLatency() ;
+    virtual bool getVoiceUnlockDLInstance() ;
+#endif
     // create I/O streams
     virtual AudioStreamOut* openOutputStream(
             uint32_t devices,

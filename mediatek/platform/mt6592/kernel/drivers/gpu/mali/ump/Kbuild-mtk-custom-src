@@ -1,0 +1,11 @@
+#clouds:this is mtk custom port
+
+#Move user ump include to kernel source code
+ccflags-y += -I$(DRIVER_DIR)/../ump_include/ump
+
+
+
+#Add function trace functionality
+#ccflags-y += -finstrument-functions
+#SRC += platform/$(TARGET_PLATFORM)/mtk_ptrace.c
+

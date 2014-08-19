@@ -78,7 +78,7 @@ LOCAL_SHARED_LIBRARIES := \
 	libc \
 	libOMX_Core \
 	liblog \
-	libion \
+	libion_ti \
 	libdomx
 
 LOCAL_CFLAGS += -DTMS32060 -D_DB_TIOMAP -DSYSLINK_USE_SYSMGR -DSYSLINK_USE_LOADER
@@ -105,6 +105,7 @@ LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/../../hwc \
 	$(HARDWARE_TI_OMAP4_BASE)/camera/inc \
 	frameworks/base/include/media/stagefright \
+	frameworks/native/include/media/hardware
 
 LOCAL_SHARED_LIBRARIES := \
 	libmm_osal \
@@ -140,6 +141,7 @@ LOCAL_C_INCLUDES += \
 	$(LOCAL_PATH)/../../hwc \
 	$(HARDWARE_TI_OMAP4_BASE)/camera/inc \
 	frameworks/base/include/media/stagefright \
+	frameworks/native/include/media/hardware
 
 LOCAL_SHARED_LIBRARIES := \
 	libmm_osal \

@@ -258,8 +258,6 @@ void BaseCameraAdapter::returnFrame(void* frameBuf, CameraFrame::FrameType frame
     size_t subscriberCount = 0;
     int refCount = -1;
 
-    Mutex::Autolock lock(mReturnFrameLock);
-
     if ( NULL == frameBuf )
         {
         CAMHAL_LOGEA("Invalid frameBuf");
@@ -268,6 +266,7 @@ void BaseCameraAdapter::returnFrame(void* frameBuf, CameraFrame::FrameType frame
 
     if ( NO_ERROR == res)
         {
+        Mutex::Autolock lock(mReturnFrameLock);
 
         refCount = getFrameRefCount(frameBuf,  frameType);
 
@@ -314,8 +313,8 @@ void BaseCameraAdapter::returnFrame(void* frameBuf, CameraFrame::FrameType frame
 #ifdef DEBUG_LOG
             if(mBuffersWithDucati.indexOfKey((int)frameBuf)>=0)
                 {
-                LOGE("Buffer already with Ducati!! 0x%x", frameBuf);
-                for(int i=0;i<mBuffersWithDucati.size();i++) LOGE("0x%x", mBuffersWithDucati.keyAt(i));
+                ALOGE("Buffer already with Ducati!! 0x%x", frameBuf);
+                for(int i=0;i<mBuffersWithDucati.size();i++) ALOGE("0x%x", mBuffersWithDucati.keyAt(i));
                 }
             mBuffersWithDucati.add((int)frameBuf,1);
 #endif
@@ -985,7 +984,7 @@ status_t BaseCameraAdapter::sendCommand(CameraCommands operation, int value1, in
     return ret;
 }
 
-status_t BaseCameraAdapter::notifyFocusSubscribers(bool status)
+status_t BaseCameraAdapter::notifyFocusSubscribers(CameraHalEvent::FocusStatus status)
 {
     event_callback eventCb;
     CameraHalEvent focusEvent;
@@ -999,10 +998,12 @@ status_t BaseCameraAdapter::notifyFocusSubscribers(bool status)
     }
 
 #if PPM_INSTRUMENTATION || PPM_INSTRUMENTATION_ABS
-
-     //dump the AF latency
-     CameraHal::PPM("Focus finished in: ", &mStartFocus);
-
+     if (status == CameraHalEvent::FOCUS_STATUS_PENDING) {
+        gettimeofday(&mStartFocus, NULL);
+     } else {
+        //dump the AF latency
+        CameraHal::PPM("Focus finished in: ", &mStartFocus);
+    }
 #endif
 
     focusEvent.mEventData = new CameraHalEvent::CameraHalEventData();
@@ -1011,8 +1012,7 @@ status_t BaseCameraAdapter::notifyFocusSubscribers(bool status)
     }
 
     focusEvent.mEventType = CameraHalEvent::EVENT_FOCUS_LOCKED;
-    focusEvent.mEventData->focusEvent.focusLocked = status;
-    focusEvent.mEventData->focusEvent.focusError = !status;
+    focusEvent.mEventData->focusEvent.focusStatus = status;
 
     for (unsigned int i = 0 ; i < mFocusSubscribers.size(); i++ )
         {
@@ -1054,7 +1054,7 @@ status_t BaseCameraAdapter::notifyShutterSubscribers()
         shutterEvent.mCookie = ( void * ) mShutterSubscribers.keyAt(i);
         eventCb = ( event_callback ) mShutterSubscribers.valueAt(i);
 
-        CAMHAL_LOGEA("Sending shutter callback");
+        CAMHAL_LOGDA("Sending shutter callback");
 
         eventCb ( &shutterEvent );
     }
@@ -1421,6 +1421,8 @@ status_t BaseCameraAdapter::startVideoCapture()
     if ( NO_ERROR == ret )
         {
 
+        mVideoBuffersAvailable.clear();
+
         for ( unsigned int i = 0 ; i < mPreviewBuffersAvailable.size() ; i++ )
             {
             mVideoBuffersAvailable.add(mPreviewBuffersAvailable.keyAt(i), 0);
@@ -1455,8 +1457,6 @@ status_t BaseCameraAdapter::stopVideoCapture()
                 returnFrame(frameBuf, CameraFrame::VIDEO_FRAME_SYNC);
                 }
             }
-
-        mVideoBuffersAvailable.clear();
 
         mRecording = false;
         }
@@ -1518,7 +1518,7 @@ status_t BaseCameraAdapter::autoFocus()
 
     LOG_FUNCTION_NAME;
 
-    notifyFocusSubscribers(false);
+    notifyFocusSubscribers(CameraHalEvent::FOCUS_STATUS_FAIL);
 
     LOG_FUNCTION_NAME_EXIT;
 
@@ -1696,6 +1696,12 @@ status_t BaseCameraAdapter::setState(CameraCommands operation)
                     mNextState = INTIALIZED_STATE;
                     break;
 
+                case CAMERA_CANCEL_AUTOFOCUS:
+                case CAMERA_STOP_BRACKET_CAPTURE:
+                case CAMERA_STOP_IMAGE_CAPTURE:
+                    ret = INVALID_OPERATION;
+                    break;
+
                 default:
                     CAMHAL_LOGEB("Adapter state switch INTIALIZED_STATE Invalid Op! event = 0x%x",
                                  operation);
@@ -1715,6 +1721,12 @@ status_t BaseCameraAdapter::setState(CameraCommands operation)
                     CAMHAL_LOGDB("Adapter state switch LOADED_PREVIEW_STATE->PREVIEW_STATE event = 0x%x",
                                  operation);
                     mNextState = PREVIEW_STATE;
+                    break;
+
+                case CAMERA_STOP_PREVIEW:
+                    CAMHAL_LOGDB("Adapter state switch LOADED_PREVIEW_STATE->INTIALIZED_STATE event = 0x%x",
+                                 operation);
+                    mNextState = INTIALIZED_STATE;
                     break;
 
                 //These events don't change the current state

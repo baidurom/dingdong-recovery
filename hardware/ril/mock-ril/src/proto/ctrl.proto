@@ -18,7 +18,6 @@ enum CtrlCmd {
   CTRL_CMD_SET_CALL_ALERT           = 1004;
   CTRL_CMD_SET_CALL_ACTIVE          = 1005;
   CTRL_CMD_ADD_DIALING_CALL         = 1006;  // this command is for testing
-  CTRL_CMD_SET_NEW_SMS              = 1007;
 }
 
 enum CtrlStatus {
@@ -56,8 +55,4 @@ message CtrlSetCallTransitionFlag {
 // 1006: Add a dialing call
 message CtrlReqAddDialingCall {
   required string phone_number          = 1; // phone number
-}
-
-message CtrlReqNewSMS {
-  optional string ackPDU              = 1;
 }

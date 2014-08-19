@@ -1,0 +1,105 @@
+ro.wifi.channels=
+ro.board.platform=
+ro.build.flavor=
+
+# end mediatek build properties
+#
+# system.prop for generic sdk
+#
+
+rild.libpath=/system/lib/mtk-ril.so
+rild.libargs=-d /dev/ttyC0
+
+
+# MTK, Infinity, 20090720 {
+wifi.interface=wlan0
+# MTK, Infinity, 20090720 }
+
+# MTK, mtk03034, 20101210 {
+ro.mediatek.wlan.wsc=1
+# MTK, mtk03034 20101210}
+# MTK, mtk03034, 20110318 {
+ro.mediatek.wlan.p2p=1
+# MTK, mtk03034 20110318}
+
+# MTK, mtk03034, 20101213 {
+mediatek.wlan.ctia=0
+# MTK, mtk03034 20101213}
+
+
+#
+wifi.tethering.interface=ap0
+#
+
+ro.opengles.version=131072
+
+wifi.direct.interface=p2p0
+dalvik.vm.heapgrowthlimit=96m
+dalvik.vm.heapsize=128m
+
+# USB MTP WHQL
+ro.sys.usb.mtp.whql.enable=0
+
+# Power off opt in IPO
+sys.ipo.pwrdncap=2
+
+ro.sys.usb.storage.type=mtp,mass_storage
+
+# Begin 2012.11.29 , lenovo-sw caijh close bicr support
+# USB BICR function
+#ro.sys.usb.bicr=yes
+ro.sys.usb.bicr=no
+# End 2012.11.29 , lenovo-sw caijh close bicr support
+
+# USB Charge only function
+ro.sys.usb.charging.only=yes
+
+# audio
+ro.camera.sound.forced=0
+ro.audio.silent=0
+
+ro.zygote.preload.enable=0
+# lenovo-sw caijh add 2012.8.22 begin
+persist.sys.ipo_enabled=1
+# lenovo-sw caijh add 2012.8.22 end
+
+#
+# ADDITIONAL_BUILD_PROPERTIES
+#
+ril.specific.sm_cause=0
+gps.solution.combo.chip=1
+ril.external.md=0
+fmradio.driver.chip=3
+persist.mtk.wcn.combo.chipid=-1
+ro.sf.hwrotation=0
+ril.current.share_modem=2
+launcherplus.allappsgrid=2d
+launcher2.allappsgrid=3d_20
+curlockscreen=1
+ro.mediatek.gemini_support=true
+ro.operator.optr=OP02
+ro.operator.spec=SPEC0200
+ro.operator.seg=SEGA
+persist.radio.fd.counter=15
+persist.radio.fd.off.counter=5
+persist.radio.fd.r8.counter=15
+persist.radio.fd.off.r8.counter=5
+drm.service.enabled=true
+fmradio.driver.enable=1
+ril.first.md=1
+ril.flightmode.poweroffMD=1
+ril.telephony.mode=1
+dalvik.vm.mtk-stack-trace-file=/data/anr/mtk_traces.txt
+mediatek.wlan.chip=MT6628
+mediatek.wlan.module.postfix=_mt6628
+ro.com.google.clientidbase=android-lenovo
+ro.com.lenovo.smart.config=7
+
+# wangzirui@baidu.com add
+# switcher of default write in Settings
+ro.baidu.default_write.settable=true
+# this property should be "false" if device don't support change mountpoints
+# also, service "ext_sd_primary" and "int_sd_primary" must be set proper in init.rc
+# before this property be set "true"
+ro.baidu.mountpoint.settable=true
+persist.baidu.sdcard.type=4

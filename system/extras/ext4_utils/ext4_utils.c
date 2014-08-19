@@ -15,19 +15,24 @@
  */
 
 #include "ext4_utils.h"
-#include "output_file.h"
-#include "backed_block.h"
 #include "uuid.h"
 #include "allocate.h"
 #include "indirect.h"
 #include "extent.h"
 
+#include <sparse/sparse.h>
+
 #include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <string.h>
+
+#ifdef USE_MINGW
+#include <winsock2.h>
+#else
+#include <arpa/inet.h>
+#include <sys/ioctl.h>
+#endif
 
 #if defined(__linux__)
 #include <linux/fs.h>
@@ -75,83 +80,10 @@ int ext4_bg_has_super_block(int bg)
 	return 0;
 }
 
-struct count_chunks {
-	u32 chunks;
-	u64 cur_ptr;
-};
-
-void count_data_block(void *priv, u64 off, u8 *data, int len)
-{
-	struct count_chunks *count_chunks = priv;
-	if (off > count_chunks->cur_ptr)
-		count_chunks->chunks++;
-	count_chunks->cur_ptr = off + ALIGN(len, info.block_size);
-	count_chunks->chunks++;
-}
-
-void count_fill_block(void *priv, u64 off, u32 fill_val, int len)
-{
-	struct count_chunks *count_chunks = priv;
-	if (off > count_chunks->cur_ptr)
-		count_chunks->chunks++;
-	count_chunks->cur_ptr = off + ALIGN(len, info.block_size);
-	count_chunks->chunks++;
-}
-
-void count_file_block(void *priv, u64 off, const char *file,
-		off64_t offset, int len)
-{
-	struct count_chunks *count_chunks = priv;
-	if (off > count_chunks->cur_ptr)
-		count_chunks->chunks++;
-	count_chunks->cur_ptr = off + ALIGN(len, info.block_size);
-	count_chunks->chunks++;
-}
-
-int count_sparse_chunks()
-{
-	struct count_chunks count_chunks = {0, 0};
-
-	for_each_data_block(count_data_block, count_file_block, count_fill_block, &count_chunks);
-
-	if (count_chunks.cur_ptr != (u64) info.len)
-		count_chunks.chunks++;
-
-	return count_chunks.chunks;
-}
-
-static void ext4_write_data_block(void *priv, u64 off, u8 *data, int len)
-{
-	write_data_block(priv, off, data, len);
-}
-
-static void ext4_write_fill_block(void *priv, u64 off, u32 fill_val, int len)
-{
-	write_fill_block(priv, off, fill_val, len);
-}
-
-static void ext4_write_data_file(void *priv, u64 off, const char *file,
-		off64_t offset, int len)
-{
-	write_data_file(priv, off, file, offset, len);
-}
-
 /* Write the filesystem image to a file */
-void write_ext4_image(const char *filename, int gz, int sparse, int crc,
-		int wipe)
+void write_ext4_image(int fd, int gz, int sparse, int crc)
 {
-	int ret = 0;
-	struct output_file *out = open_output_file(filename, gz, sparse,
-	        count_sparse_chunks(), crc, wipe);
-
-	if (!out)
-		return;
-
-	for_each_data_block(ext4_write_data_block, ext4_write_data_file, ext4_write_fill_block, out);
-
-	pad_output_file(out, info.len);
-
-	close_output_file(out);
+	sparse_file_write(info.sparse_file, fd, gz, sparse, crc);
 }
 
 /* Compute the rest of the parameters of the filesystem from the basic info */
@@ -294,10 +226,10 @@ void ext4_fill_in_sb()
 				memcpy(aux_info.backup_sb[i], sb, info.block_size);
 				/* Update the block group nr of this backup superblock */
 				aux_info.backup_sb[i]->s_block_group_nr = i;
-				queue_data_block((u8 *)aux_info.backup_sb[i],
+				sparse_file_add_data(info.sparse_file, aux_info.backup_sb[i],
                                                   info.block_size, group_start_block);
 			}
-			queue_data_block((u8 *)aux_info.bg_desc,
+			sparse_file_add_data(info.sparse_file, aux_info.bg_desc,
 				aux_info.bg_desc_blocks * info.block_size,
 				group_start_block + 1);
 			header_size = 1 + aux_info.bg_desc_blocks + info.bg_desc_reserve_blocks;
@@ -323,9 +255,9 @@ void ext4_queue_sb(void)
 	if (info.block_size > 1024) {
 		u8 *buf = calloc(info.block_size, 1);
 		memcpy(buf + 1024, (u8*)aux_info.sb, 1024);
-		queue_data_block(buf, info.block_size, 0);
+		sparse_file_add_data(info.sparse_file, buf, info.block_size, 0);
 	} else {
-		queue_data_block((u8*)aux_info.sb, 1024, 1);
+		sparse_file_add_data(info.sparse_file, aux_info.sb, 1024, 1);
 	}
 }
 
@@ -446,24 +378,19 @@ void ext4_update_free()
 	}
 }
 
-static u64 get_block_device_size(const char *filename)
+static u64 get_block_device_size(int fd)
 {
-	int fd = open(filename, O_RDONLY);
 	u64 size = 0;
 	int ret;
-
-	if (fd < 0)
-		return 0;
 
 #if defined(__linux__)
 	ret = ioctl(fd, BLKGETSIZE64, &size);
 #elif defined(__APPLE__) && defined(__MACH__)
 	ret = ioctl(fd, DKIOCGETBLOCKCOUNT, &size);
 #else
+	close(fd);
 	return 0;
 #endif
-
-	close(fd);
 
 	if (ret)
 		return 0;
@@ -471,14 +398,16 @@ static u64 get_block_device_size(const char *filename)
 	return size;
 }
 
-u64 get_file_size(const char *filename)
+u64 get_file_size(int fd)
 {
 	struct stat buf;
 	int ret;
-	u64 reserve_len = 0;
+    /* 8/9/2012 MTK  {*/
+	u64 reserve_len = 1 * 1024 * 1024;     /* change reserve_len value to 1MB, for work with cryptfs.c */
+    /* 8/9/2012 MTK  }*/  
 	s64 computed_size;
 
-	ret = stat(filename, &buf);
+	ret = fstat(fd, &buf);
 	if (ret)
 		return 0;
 
@@ -488,7 +417,7 @@ u64 get_file_size(const char *filename)
 	if (S_ISREG(buf.st_mode))
 		computed_size = buf.st_size - reserve_len;
 	else if (S_ISBLK(buf.st_mode))
-		computed_size = get_block_device_size(filename) - reserve_len;
+		computed_size = get_block_device_size(fd) - reserve_len;
 	else
 		computed_size = 0;
 
@@ -513,4 +442,3 @@ u64 parse_num(const char *arg)
 
 	return num;
 }
-

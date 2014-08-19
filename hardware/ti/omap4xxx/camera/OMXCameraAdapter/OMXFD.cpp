@@ -62,16 +62,9 @@ status_t OMXCameraAdapter::startFaceDetection()
         goto out;
     }
 
-    if ( mFaceDetectionRunning )
-        {
-        //Disable region priority and enable face priority for AF
-        setAlgoPriority(REGION_PRIORITY, FOCUS_ALGO, false);
-        setAlgoPriority(FACE_PRIORITY, FOCUS_ALGO , true);
-
-        //Disable Region priority and enable Face priority
-        setAlgoPriority(REGION_PRIORITY, EXPOSURE_ALGO, false);
-        setAlgoPriority(FACE_PRIORITY, EXPOSURE_ALGO, true);
-        }
+    if ( mFaceDetectionRunning ) {
+        mFDSwitchAlgoPriority = true;
+    }
 
     // Note: White balance will not be face prioritized, since
     // the algorithm needs full frame statistics, and not face
@@ -125,7 +118,6 @@ status_t OMXCameraAdapter::setFaceDetection(bool enable, OMX_U32 orientation)
 {
     status_t ret = NO_ERROR;
     OMX_ERRORTYPE eError = OMX_ErrorNone;
-    OMX_CONFIG_EXTRADATATYPE extraDataControl;
     OMX_CONFIG_OBJDETECTIONTYPE objDetection;
 
     LOG_FUNCTION_NAME;
@@ -170,27 +162,11 @@ status_t OMXCameraAdapter::setFaceDetection(bool enable, OMX_U32 orientation)
 
     if ( NO_ERROR == ret )
         {
-        OMX_INIT_STRUCT_PTR (&extraDataControl, OMX_CONFIG_EXTRADATATYPE);
-        extraDataControl.nPortIndex = mCameraAdapterParameters.mPrevPortIndex;
-        extraDataControl.eExtraDataType = OMX_FaceDetection;
-        extraDataControl.eCameraView = OMX_2D;
-        if  ( enable )
-            {
-            extraDataControl.bEnable = OMX_TRUE;
-            }
-        else
-            {
-            extraDataControl.bEnable = OMX_FALSE;
-            }
+        ret = setExtraData(enable, mCameraAdapterParameters.mPrevPortIndex, OMX_FaceDetection);
 
-        eError =  OMX_SetConfig(mCameraAdapterParameters.mHandleComp,
-                                ( OMX_INDEXTYPE ) OMX_IndexConfigOtherExtraDataControl,
-                                &extraDataControl);
-        if ( OMX_ErrorNone != eError )
+        if ( NO_ERROR != ret )
             {
-            CAMHAL_LOGEB("Error while configuring face detection extra data 0x%x",
-                         eError);
-            ret = -1;
+            CAMHAL_LOGEA("Error while configuring face detection extra data");
             }
         else
             {
@@ -245,19 +221,19 @@ status_t OMXCameraAdapter::detectFaces(OMX_BUFFERHEADERTYPE* pBuffHeader,
                          platformPrivate->pMetaDataBuffer,
                          platformPrivate->nMetaDataSize);
         } else {
-            CAMHAL_LOGEB("OMX_TI_PLATFORMPRIVATE size mismatch: expected = %d, received = %d",
+            CAMHAL_LOGDB("OMX_TI_PLATFORMPRIVATE size mismatch: expected = %d, received = %d",
                          ( unsigned int ) sizeof(OMX_TI_PLATFORMPRIVATE),
                          ( unsigned int ) platformPrivate->nSize);
-            ret = -EINVAL;
+            return -EINVAL;
         }
     }  else {
-        CAMHAL_LOGEA("Invalid OMX_TI_PLATFORMPRIVATE");
+        CAMHAL_LOGDA("Invalid OMX_TI_PLATFORMPRIVATE");
         return-EINVAL;
     }
 
 
     if ( 0 >= platformPrivate->nMetaDataSize ) {
-        CAMHAL_LOGEB("OMX_TI_PLATFORMPRIVATE nMetaDataSize is size is %d",
+        CAMHAL_LOGDB("OMX_TI_PLATFORMPRIVATE nMetaDataSize is size is %d",
                      ( unsigned int ) platformPrivate->nMetaDataSize);
         return -EINVAL;
     }
@@ -274,7 +250,7 @@ status_t OMXCameraAdapter::detectFaces(OMX_BUFFERHEADERTYPE* pBuffHeader,
                      extraData->nPortIndex,
                      extraData->nVersion);
     } else {
-        CAMHAL_LOGEA("Invalid OMX_OTHER_EXTRADATATYPE");
+        CAMHAL_LOGDA("Invalid OMX_OTHER_EXTRADATATYPE");
         return -EINVAL;
     }
 
@@ -289,7 +265,7 @@ status_t OMXCameraAdapter::detectFaces(OMX_BUFFERHEADERTYPE* pBuffHeader,
                          faceData->nPortIndex,
                          faceData->nVersion);
         } else {
-            CAMHAL_LOGEB("OMX_FACEDETECTIONTYPE size mismatch: expected = %d, received = %d",
+            CAMHAL_LOGDB("OMX_FACEDETECTIONTYPE size mismatch: expected = %d, received = %d",
                          ( unsigned int ) sizeof(OMX_FACEDETECTIONTYPE),
                          ( unsigned int ) faceData->nSize);
             return -EINVAL;

@@ -37,7 +37,7 @@ def  cleanupFile( path, original_path):
         src_path = src_path[1:]
 
     if len(src_path) == 0:
-        panic( "oops, internal error, can't extract correct relative path" )
+        panic( "oops, internal error, can't extract correct relative path\n" )
 
     # convert into destination path, extracting architecture if needed
     # and the corresponding list of known static functions
@@ -62,8 +62,11 @@ def  cleanupFile( path, original_path):
         sys.stderr.write( "error: can't parse '%s'" % path )
         sys.exit(1)
 
+    macros = kernel_known_macros.copy()
+    if arch and arch in kernel_default_arch_macros:
+        macros.update(kernel_default_arch_macros[arch])
 
-    blocks.optimizeMacros( kernel_known_macros )
+    blocks.optimizeMacros( macros )
     blocks.optimizeIf01()
     blocks.removeVarsAndFuncs( statics )
     blocks.replaceTokens( kernel_token_replacements )

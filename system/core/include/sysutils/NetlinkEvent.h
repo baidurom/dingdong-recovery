@@ -34,7 +34,9 @@ public:
     const static int NlActionChange;
     const static int NlActionLinkDown;
     const static int NlActionLinkUp;
-
+    const static int NlActionIPv6Enable;
+    const static int NlActionIPv6Disable;
+    
     NetlinkEvent();
     virtual ~NetlinkEvent();
 

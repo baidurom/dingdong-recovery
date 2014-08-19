@@ -282,7 +282,7 @@ OMX_ERRORTYPE OMX_ComponentInit (OMX_HANDLETYPE hComponent)
 #endif
 #ifdef ANDROID
     /* print to logcat to verify that we are running a TI OMX codec*/
-    LOGI("TI Video Decoder \n");
+    ALOGI("TI Video Decoder \n");
 #endif
 
     OMX_CONF_CHECK_CMD(hComponent, OMX_TRUE, OMX_TRUE);
@@ -635,7 +635,7 @@ static OMX_ERRORTYPE VIDDEC_SendCommand (OMX_HANDLETYPE hComponent,
 
     switch (Cmd) {
         case OMX_CommandStateSet:
-            LOGD("VIDDEC_SendCommand: Received request from omx client to change state to %d", nParam1);
+            ALOGD("VIDDEC_SendCommand: Received request from omx client to change state to %d", nParam1);
             /* Add a pending transition */
             if(AddStateTransition(pComponentPrivate) != OMX_ErrorNone) {
                 return OMX_ErrorUndefined;
@@ -890,17 +890,17 @@ static OMX_ERRORTYPE VIDDEC_GetParameter (OMX_IN OMX_HANDLETYPE hComponent,
         {
            OMX_VIDEO_PARAM_PROFILELEVELTYPE *pParamProfileLevel = (OMX_VIDEO_PARAM_PROFILELEVELTYPE *)ComponentParameterStructure;
            if (pComponentPrivate->pInPortDef->format.video.eCompressionFormat == OMX_VIDEO_CodingAVC) {
-           LOGW("Getparameter OMX_IndexParamVideoProfileLevelCurrent AVC");
+           ALOGW("Getparameter OMX_IndexParamVideoProfileLevelCurrent AVC");
            pParamProfileLevel->eProfile = pComponentPrivate->pH264->eProfile;
            pParamProfileLevel->eLevel = pComponentPrivate->pH264->eLevel;
         }
         else if (pComponentPrivate->pInPortDef->format.video.eCompressionFormat == OMX_VIDEO_CodingMPEG4) {
-           LOGW("Getparameter OMX_IndexParamVideoProfileLevelCurrent MPEG4");
+           ALOGW("Getparameter OMX_IndexParamVideoProfileLevelCurrent MPEG4");
            pParamProfileLevel->eProfile = pComponentPrivate->pMpeg4->eProfile;
            pParamProfileLevel->eLevel = pComponentPrivate->pMpeg4->eLevel;
         }
         else if (pComponentPrivate->pInPortDef->format.video.eCompressionFormat == OMX_VIDEO_CodingH263) {
-           LOGW("Getparameter OMX_IndexParamVideoProfileLevelCurrent H.263");
+           ALOGW("Getparameter OMX_IndexParamVideoProfileLevelCurrent H.263");
            pParamProfileLevel->eProfile = pComponentPrivate->pH263->eProfile;
            pParamProfileLevel->eLevel = pComponentPrivate->pH263->eLevel;
         }
@@ -909,7 +909,7 @@ static OMX_ERRORTYPE VIDDEC_GetParameter (OMX_IN OMX_HANDLETYPE hComponent,
            pParamProfileLevel->eLevel = pComponentPrivate->pMpeg2->eLevel;
         }
         else {
-           LOGD("Error in Getparameter OMX_IndexParamVideoProfileLevelCurrent");
+           ALOGD("Error in Getparameter OMX_IndexParamVideoProfileLevelCurrent");
            eError = OMX_ErrorBadParameter;
          }
       }
@@ -1537,7 +1537,7 @@ static OMX_ERRORTYPE VIDDEC_SetParameter (OMX_HANDLETYPE hComp,
             char value[PROPERTY_VALUE_MAX];
             property_get("debug.video.showfps", value, "0");
             mDebugFps = atoi(value);
-            LOGD_IF(mDebugFps, "Not setting deblocking to measure fps");
+            ALOGD_IF(mDebugFps, "Not setting deblocking to measure fps");
             if (mDebugFps == OMX_FALSE) {
                 if (pComponentPrivate->pInPortDef->format.video.eCompressionFormat == OMX_VIDEO_CodingMPEG4 ||
                         pComponentPrivate->pInPortDef->format.video.eCompressionFormat == OMX_VIDEO_CodingH263){
@@ -2384,7 +2384,7 @@ static OMX_ERRORTYPE VIDDEC_EmptyThisBuffer (OMX_HANDLETYPE pComponent,
     bIsInputFlushPending = pComponentPrivate->bIsInputFlushPending;
     VIDDEC_PTHREAD_MUTEX_UNLOCK(pComponentPrivate->inputFlushCompletionMutex);
     if (bIsInputFlushPending) {
-        LOGE("Unable to process any OMX_EmptyThisBuffer requsts with input flush pending");
+        ALOGE("Unable to process any OMX_EmptyThisBuffer requsts with input flush pending");
         return OMX_ErrorIncorrectStateOperation;
     }
 #ifdef __PERF_INSTRUMENTATION__
@@ -2478,7 +2478,7 @@ static OMX_ERRORTYPE VIDDEC_FillThisBuffer (OMX_HANDLETYPE pComponent,
     bIsOutputFlushPending = pComponentPrivate->bIsOutputFlushPending;
     VIDDEC_PTHREAD_MUTEX_UNLOCK(pComponentPrivate->outputFlushCompletionMutex);
     if (bIsOutputFlushPending) {
-        LOGE("Unable to process any OMX_FillThisBuffer requsts with flush pending");
+        ALOGE("Unable to process any OMX_FillThisBuffer requsts with flush pending");
         return OMX_ErrorIncorrectStateOperation;
     }
 

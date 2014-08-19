@@ -537,6 +537,7 @@ ETxnStatus sdioAdapt_TransactBytes (unsigned int  uFuncId,
 
 	if ((bMore == 1) || (lastMore == bMore))
 	{
+		sdioDrv_cancel_inact_timer();
 		sdioDrv_clk_enable();
 	}
 
@@ -552,7 +553,7 @@ ETxnStatus sdioAdapt_TransactBytes (unsigned int  uFuncId,
 
 	if (bMore == 0)
 	{
-		sdioDrv_clk_disable();
+		sdioDrv_start_inact_timer();
 	}
 	lastMore = bMore;
 

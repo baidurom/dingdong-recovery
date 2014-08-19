@@ -30,33 +30,22 @@
 
 namespace android_audio_legacy {
 
-audio_io_handle_t AudioPolicyCompatClient::openOutput(uint32_t *pDevices,
-                                uint32_t *pSamplingRate,
-                                uint32_t *pFormat,
-                                uint32_t *pChannels,
-                                uint32_t *pLatencyMs,
-                                AudioSystem::output_flags flags)
+audio_module_handle_t AudioPolicyCompatClient::loadHwModule(const char *moduleName)
 {
-    return mServiceOps->open_output(mService, pDevices, pSamplingRate, pFormat,
-                                    pChannels, pLatencyMs,
-                                    (audio_policy_output_flags_t)flags);
+    return mServiceOps->load_hw_module(mService, moduleName);
 }
 
-
-audio_io_handle_t AudioPolicyCompatClient::openSession(uint32_t *pDevices,
-                                uint32_t *pFormat,
-                                AudioSystem::output_flags flags,
-                                int32_t  streamType,
-                                int32_t  sessionId)
+audio_io_handle_t AudioPolicyCompatClient::openOutput(audio_module_handle_t module,
+                                                      audio_devices_t *pDevices,
+                                                      uint32_t *pSamplingRate,
+                                                      audio_format_t *pFormat,
+                                                      audio_channel_mask_t *pChannelMask,
+                                                      uint32_t *pLatencyMs,
+                                                      audio_output_flags_t flags)
 {
-    return mServiceOps->open_session(mService,pDevices,pFormat,
-                                     (audio_policy_output_flags_t)flags,
-                                     streamType,sessionId);
-}
-
-audio_io_handle_t AudioPolicyCompatClient::closeSession(audio_io_handle_t output)
-{
-    return mServiceOps->close_session(mService,output);
+    return mServiceOps->open_output_on_module(mService, module, pDevices, pSamplingRate,
+                                              pFormat, pChannelMask, pLatencyMs,
+                                              flags);
 }
 
 audio_io_handle_t AudioPolicyCompatClient::openDuplicateOutput(audio_io_handle_t output1,
@@ -80,14 +69,14 @@ status_t AudioPolicyCompatClient::restoreOutput(audio_io_handle_t output)
     return mServiceOps->restore_output(mService, output);
 }
 
-audio_io_handle_t AudioPolicyCompatClient::openInput(uint32_t *pDevices,
-                                uint32_t *pSamplingRate,
-                                uint32_t *pFormat,
-                                uint32_t *pChannels,
-                                uint32_t acoustics)
+audio_io_handle_t AudioPolicyCompatClient::openInput(audio_module_handle_t module,
+                                                     audio_devices_t *pDevices,
+                                                     uint32_t *pSamplingRate,
+                                                     audio_format_t *pFormat,
+                                                     audio_channel_mask_t *pChannelMask)
 {
-    return mServiceOps->open_input(mService, pDevices, pSamplingRate, pFormat,
-                                   pChannels, acoustics);
+    return mServiceOps->open_input_on_module(mService, module, pDevices,
+                                             pSamplingRate, pFormat, pChannelMask);
 }
 
 status_t AudioPolicyCompatClient::closeInput(audio_io_handle_t input)
@@ -136,12 +125,6 @@ status_t AudioPolicyCompatClient::setStreamVolume(
 {
     return mServiceOps->set_stream_volume(mService, (audio_stream_type_t)stream,
                                           volume, output, delayMs);
-}
-
-status_t AudioPolicyCompatClient::setFmVolume(float volume,
-                                              int delayMs)
-{
-    return mServiceOps->set_fm_volume(mService, volume, delayMs);
 }
 
 status_t AudioPolicyCompatClient::startTone(ToneGenerator::tone_type tone,

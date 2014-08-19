@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2007 The Android Open Source Project
 #
@@ -16,15 +47,15 @@
 
 PRODUCT_POLICY := android.policy_phone
 PRODUCT_PROPERTY_OVERRIDES :=
-
+# Remove PinyinIME because it has some problems with Mediatek customized emulator,
+# Furthermore, it also exists on Android Market, user can download it from
+# Market directly.
 PRODUCT_PACKAGES := \
 	Calculator \
-	Camera \
 	DeskClock \
-	Email \
-	Exchange \
-	Gallery \
-	Music \
+	Email2 \
+	Exchange2 \
+	FusedLocation \
 	Mms \
 	OpenWnn \
 	libWnnEngDic \
@@ -35,21 +66,23 @@ PRODUCT_PACKAGES := \
 	Protips \
 	SoftKeyboard \
 	SystemUI \
-	Launcher2 \
+	HomePro \
 	Development \
+	DevelopmentSettings \
 	DrmProvider \
 	Fallback \
 	Settings \
 	SdkSetup \
 	CustomLocale \
 	sqlite3 \
+	InputDevices \
 	LatinIME \
 	CertInstaller \
 	LiveWallpapersPicker \
 	ApiDemos \
 	GestureBuilder \
 	CubeLiveWallpapers \
-	QuickSearchBox \
+	BaiduVoiceSearch \
 	WidgetPreview \
 	monkeyrunner \
 	guavalib \
@@ -60,87 +93,46 @@ PRODUCT_PACKAGES := \
 	ConnectivityTest \
 	GpsLocationTest \
 	CalendarProvider \
-	Calendar
+	Calendar \
+	SmokeTest \
+	SmokeTestApp \
+	rild \
+	LegacyCamera
 
+ifneq ($(strip $(MTK_EMULATOR_SUPPORT)),yes)
+  PRODUCT_PACKAGES += Gallery
+endif
 
-# Host tools that are parts of the SDK.
-# See development/build/sdk.atree
-PRODUCT_PACKAGES += \
-	adb \
-	dmtracedump \
-	etc1tool \
-	hprof-conv \
-	mksdcard \
-	emulator \
-	bios.bin \
-	vgabios-cirrus.bin \
-	ddms \
-	hierarchyviewer \
-	draw9patch \
-	layoutopt \
-	traceview \
-	android \
-	dexdump \
-	lint \
-	monkeyrunner
+ifeq ($(strip $(MTK_CAMERA_APP)),yes)
+  PRODUCT_PACKAGES += CameraOpen
+else
+  PRODUCT_PACKAGES += Camera
+endif
 
-# Native host Java libraries that are parts of the SDK.
-# See development/build/sdk.atree
-PRODUCT_PACKAGES += \
-	androidprefs \
-	sdkstats \
-	archquery \
-	ddms \
-	ddmlib \
-	ddmuilib \
-	draw9patch \
-	hierarchyviewer \
-	layoutopt \
-	uix \
-	traceview \
-	anttasks \
-	sdklib \
-	sdkuilib \
-	sdkmanager \
-	swtmenubar \
-	swing-worker-1.1 \
-	groovy-all-1.7.0 \
-	commons-compress-1.0 \
-	emmalib \
-	jcommon-1.0.12 \
-	jfreechart-1.0.9 \
-	jfreechart-1.0.9-swt \
-	org.eclipse.core.commands_3.4.0.I20080509-2000 \
-	org.eclipse.equinox.common_3.4.0.v20080421-2006 \
-	org.eclipse.jface_3.4.2.M20090107-0800 \
-	osgi \
-	layoutlib \
-	lint \
-	monkeyrunner \
-	guavalib \
-	jsr305lib \
-	jython \
-	ddmlib-tests \
-	ninepatch-tests \
-	common-tests \
-	sdklib-tests \
-	sdkuilib-tests \
-	layoutlib-tests
+# Define the host tools and libs that are parts of the SDK.
+-include sdk/build/product_sdk.mk
+-include development/build/product_sdk.mk
 
 # audio libraries.
 PRODUCT_PACKAGES += \
 	audio.primary.goldfish \
-	audio_policy.default
+	audio_policy.default \
+	local_time.default
 
 PRODUCT_PACKAGE_OVERLAYS := development/sdk_overlay
 
 PRODUCT_COPY_FILES := \
+	device/generic/goldfish/data/etc/apns-conf.xml:system/etc/apns-conf.xml \
 	system/core/rootdir/etc/vold.fstab:system/etc/vold.fstab \
 	frameworks/base/data/sounds/effects/camera_click.ogg:system/media/audio/ui/camera_click.ogg \
 	frameworks/base/data/sounds/effects/VideoRecord.ogg:system/media/audio/ui/VideoRecord.ogg \
-	frameworks/base/data/etc/handheld_core_hardware.xml:system/etc/permissions/handheld_core_hardware.xml \
-	frameworks/base/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
-	frameworks/base/data/etc/android.hardware.camera.autofocus.xml:system/etc/permissions/android.hardware.camera.autofocus.xml
+	frameworks/native/data/etc/handheld_core_hardware.xml:system/etc/permissions/handheld_core_hardware.xml \
+	development/tools/emulator/system/camera/media_profiles.xml:system/etc/media_profiles.xml \
+	development/tools/emulator/system/camera/media_codecs.xml:system/etc/media_codecs.xml \
+	frameworks/native/data/etc/android.hardware.touchscreen.multitouch.jazzhand.xml:system/etc/permissions/android.hardware.touchscreen.multitouch.jazzhand.xml \
+	frameworks/native/data/etc/android.hardware.camera.autofocus.xml:system/etc/permissions/android.hardware.camera.autofocus.xml \
+	frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf \
+	hardware/libhardware_legacy/audio/audio_policy.conf:system/etc/audio_policy.conf
 
 $(call inherit-product-if-exists, frameworks/base/data/fonts/fonts.mk)
 $(call inherit-product-if-exists, frameworks/base/data/keyboards/keyboards.mk)

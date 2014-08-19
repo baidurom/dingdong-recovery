@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<toolkit>
+    <tool type="COMMON">
+        <unpack>common/unpack.sh</unpack>
+        <pack>common/pack.sh</pack>
+    </tool>
+    <tool type="MTK">
+        <unpack>mtk/unpack.sh</unpack>
+        <pack>mtk/pack.sh</pack>
+    </tool>
+    <tool type="SONY">
+        <unpack>sony/unpack.sh</unpack>
+        <pack>sony/pack.sh</pack>
+    </tool>
+</toolkit>

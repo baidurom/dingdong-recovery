@@ -38,8 +38,6 @@ static void settime(char *s) {
     ts.tv_sec = t;
     ts.tv_nsec = 0;
     ioctl(fd, ANDROID_ALARM_SET_RTC, &ts);
-
-    close(fd);
 }
 
 int date_main(int argc, char *argv[])
@@ -122,7 +120,6 @@ int date_main(int argc, char *argv[])
         ts.tv_nsec = tv.tv_usec * 1000;
         res = ioctl(fd, ANDROID_ALARM_SET_RTC, &ts);
         //res = settimeofday(&tv, NULL);
-        close(fd);
         if(res < 0) {
             fprintf(stderr,"settimeofday failed %s\n", strerror(errno));
             return 1;

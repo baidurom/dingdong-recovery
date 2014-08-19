@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2006 The Android Open Source Project
 #
@@ -22,10 +53,22 @@ ifeq ($(strip $(TARGET_ARCH_VARIANT)),)
 TARGET_ARCH_VARIANT := x86
 endif
 
+# Include the arch-variant-specific configuration file.
+# Its role is to define various ARCH_X86_HAVE_XXX feature macros,
+# plus initial values for TARGET_GLOBAL_CFLAGS
+#
+TARGET_ARCH_SPECIFIC_MAKEFILE := $(BUILD_COMBOS)/arch/$(TARGET_ARCH)/$(TARGET_ARCH_VARIANT).mk
+ifeq ($(strip $(wildcard $(TARGET_ARCH_SPECIFIC_MAKEFILE))),)
+$(error Unknown $(TARGET_ARCH) architecture version: $(TARGET_ARCH_VARIANT))
+endif
+
+include $(TARGET_ARCH_SPECIFIC_MAKEFILE)
+
+
 # You can set TARGET_TOOLS_PREFIX to get gcc from somewhere else
 ifeq ($(strip $(TARGET_TOOLS_PREFIX)),)
-TARGET_TOOLS_PREFIX := \
-	prebuilt/$(HOST_PREBUILT_TAG)/toolchain/i686-android-linux-4.4.3/bin/i686-android-linux-
+TARGET_TOOLCHAIN_ROOT := prebuilts/gcc/$(HOST_PREBUILT_TAG)/x86/i686-linux-android-4.6
+TARGET_TOOLS_PREFIX := $(TARGET_TOOLCHAIN_ROOT)/bin/i686-linux-android-
 endif
 
 TARGET_CC := $(TARGET_TOOLS_PREFIX)gcc$(HOST_EXECUTABLE_SUFFIX)
@@ -73,7 +116,7 @@ TARGET_GLOBAL_CFLAGS += \
 			-Wa,--noexecstack \
 			-Werror=format-security \
 			-Wstrict-aliasing=2 \
-			-fPIC \
+			-fPIC -fPIE \
 			-ffunction-sections \
 			-finline-functions \
 			-finline-limit=300 \
@@ -82,30 +125,56 @@ TARGET_GLOBAL_CFLAGS += \
 			-fstrict-aliasing \
 			-funswitch-loops \
 			-funwind-tables \
-			-include $(call select-android-config-h,target_linux-x86)
+			-fstack-protector
 
-# Needs to be fixed later
-#TARGET_GLOBAL_CFLAGS += \
-#			-fstack-protector
+android_config_h := $(call select-android-config-h,target_linux-x86)
+TARGET_ANDROID_CONFIG_CFLAGS := -include $(android_config_h) -I $(dir $(android_config_h))
+TARGET_GLOBAL_CFLAGS += $(TARGET_ANDROID_CONFIG_CFLAGS)
 
-# Needs to be added for RELEASE
-#TARGET_GLOBAL_CFLAGS += \
-#			-DNDEBUG
-
+# XXX: Not sure this is still needed. Must check with our toolchains.
 TARGET_GLOBAL_CPPFLAGS += \
 			-fno-use-cxa-atexit
 
-ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
-    TARGET_GLOBAL_CFLAGS += -march=atom -mstackrealign -DUSE_SSSE3 -DUSE_SSE2 -mfpmath=sse
-else
-    TARGET_GLOBAL_CFLAGS += -march=i686
+# XXX: Our toolchain is normally configured to always set these flags by default
+# however, there have been reports that this is sometimes not the case. So make
+# them explicit here unless we have the time to carefully check it
+#
+TARGET_GLOBAL_CFLAGS += -mstackrealign -msse3 -mfpmath=sse -m32
+
+# XXX: These flags should not be defined here anymore. Instead, the Android.mk
+# of the modules that depend on these features should instead check the
+# corresponding macros (e.g. ARCH_X86_HAVE_SSE2 and ARCH_X86_HAVE_SSSE3)
+# Keep them here until this is all cleared up.
+#
+ifeq ($(ARCH_X86_HAVE_SSE2),true)
+TARGET_GLOBAL_CFLAGS += -DUSE_SSE2
 endif
 
+ifeq ($(ARCH_X86_HAVE_SSSE3),true)   # yes, really SSSE3, not SSE3!
+TARGET_GLOBAL_CFLAGS += -DUSE_SSSE3
+endif
+
+# XXX: This flag is probably redundant. I believe our toolchain always sets
+# it by default. Consider for removal.
+#
 TARGET_GLOBAL_CFLAGS += -mbionic
+
+# XXX: This flag is probably redundant. The macro should be defined by our
+# toolchain binaries automatically (as a compiler built-in).
+# Check with: $BINPREFIX-gcc -dM -E < /dev/null
+#
+# Consider for removal.
+#
 TARGET_GLOBAL_CFLAGS += -D__ANDROID__
 
+# XXX: This flag is probably redundant since our toolchain binaries already
+# generate 32-bit machine code. It probably dates back to the old days
+# where we were using the host toolchain on Linux to build the platform
+# images. Consider it for removal.
 TARGET_GLOBAL_LDFLAGS += -m32
+
 TARGET_GLOBAL_LDFLAGS += -Wl,-z,noexecstack
+TARGET_GLOBAL_LDFLAGS += -Wl,-z,relro -Wl,-z,now
 TARGET_GLOBAL_LDFLAGS += -Wl,--gc-sections
 
 TARGET_C_INCLUDES := \
@@ -117,12 +186,12 @@ TARGET_C_INCLUDES := \
 	$(libm_root)/include/i387 \
 	$(libthread_db_root)/include
 
-TARGET_CRTBEGIN_STATIC_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtbegin_static.o
-TARGET_CRTBEGIN_DYNAMIC_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtbegin_dynamic.o
-TARGET_CRTEND_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtend_android.o
+TARGET_CRTBEGIN_STATIC_O := $(TARGET_OUT_INTERMEDIATE_LIBRARIES)/crtbegin_static.o
+TARGET_CRTBEGIN_DYNAMIC_O := $(TARGET_OUT_INTERMEDIATE_LIBRARIES)/crtbegin_dynamic.o
+TARGET_CRTEND_O := $(TARGET_OUT_INTERMEDIATE_LIBRARIES)/crtend_android.o
 
-TARGET_CRTBEGIN_SO_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtbegin_so.o
-TARGET_CRTEND_SO_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtend_so.o
+TARGET_CRTBEGIN_SO_O := $(TARGET_OUT_INTERMEDIATE_LIBRARIES)/crtbegin_so.o
+TARGET_CRTEND_SO_O := $(TARGET_OUT_INTERMEDIATE_LIBRARIES)/crtend_so.o
 
 TARGET_STRIP_MODULE:=true
 
@@ -151,39 +220,63 @@ $(hide) $(PRIVATE_CXX) \
 	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(PRIVATE_TARGET_CRTEND_SO_O))
 endef
 
-
 define transform-o-to-executable-inner
 $(hide) $(PRIVATE_CXX) \
-	$(TARGET_GLOBAL_LDFLAGS) \
+	$(PRIVATE_TARGET_GLOBAL_LDFLAGS) \
 	-nostdlib -Bdynamic \
 	-Wl,-dynamic-linker,/system/bin/linker \
 	-Wl,-z,nocopyreloc \
+	-fPIE -pie \
 	-o $@ \
-	$(TARGET_GLOBAL_LD_DIRS) \
+	$(PRIVATE_TARGET_GLOBAL_LD_DIRS) \
 	-Wl,-rpath-link=$(TARGET_OUT_INTERMEDIATE_LIBRARIES) \
 	$(call normalize-target-libraries,$(PRIVATE_ALL_SHARED_LIBRARIES)) \
-	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(TARGET_CRTBEGIN_DYNAMIC_O)) \
+	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(PRIVATE_TARGET_CRTBEGIN_DYNAMIC_O)) \
 	$(PRIVATE_ALL_OBJECTS) \
+	-Wl,--whole-archive \
+	$(call normalize-target-libraries,$(PRIVATE_ALL_WHOLE_STATIC_LIBRARIES)) \
+	-Wl,--no-whole-archive \
 	$(if $(PRIVATE_GROUP_STATIC_LIBRARIES),-Wl$(comma)--start-group) \
 	$(call normalize-target-libraries,$(PRIVATE_ALL_STATIC_LIBRARIES)) \
 	$(if $(PRIVATE_GROUP_STATIC_LIBRARIES),-Wl$(comma)--end-group) \
 	$(PRIVATE_LDFLAGS) \
-	$(TARGET_LIBGCC) \
-	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(TARGET_CRTEND_O))
+	$(PRIVATE_TARGET_LIBGCC) \
+	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(PRIVATE_TARGET_CRTEND_O))
 endef
 
 define transform-o-to-static-executable-inner
 $(hide) $(PRIVATE_CXX) \
-	$(TARGET_GLOBAL_LDFLAGS) \
+	$(PRIVATE_TARGET_GLOBAL_LDFLAGS) \
 	-nostdlib -Bstatic \
 	-o $@ \
-	$(TARGET_GLOBAL_LD_DIRS) \
-	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(TARGET_CRTBEGIN_STATIC_O)) \
+	$(PRIVATE_TARGET_GLOBAL_LD_DIRS) \
+	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(PRIVATE_TARGET_CRTBEGIN_STATIC_O)) \
 	$(PRIVATE_LDFLAGS) \
 	$(PRIVATE_ALL_OBJECTS) \
+	-Wl,--whole-archive \
+	$(call normalize-target-libraries,$(PRIVATE_ALL_WHOLE_STATIC_LIBRARIES)) \
+	-Wl,--no-whole-archive \
 	-Wl,--start-group \
 	$(call normalize-target-libraries,$(PRIVATE_ALL_STATIC_LIBRARIES)) \
-	$(TARGET_LIBGCC) \
+	$(PRIVATE_TARGET_LIBGCC) \
 	-Wl,--end-group \
-	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(TARGET_CRTEND_O))
+	$(if $(filter true,$(PRIVATE_NO_CRT)),,$(PRIVATE_TARGET_CRTEND_O))
 endef
+
+# Special check for x86 NDK ABI compatibility.
+# The TARGET_CPU_ABI variable should be defined in BoardConfig.mk to 'x86'
+# *only* if the platform image is compatible with the NDK x86 ABI.
+#
+# We perform a small check here to ensure that nothing bad can happen.
+#
+ifeq ($(TARGET_CPU_ABI),x86)
+  ifneq (true-true-true-true,$(ARCH_X86_HAVE_MMX)-$(ARCH_X86_HAVE_SSE)-$(ARCH_X86_HAVE_SSE2)-$(ARCH_X86_HAVE_SSE3))
+    $(info ERROR: Your x86 platform image is not compatible with the NDK x86 ABI)
+    $(info As such, you should *not* define TARGET_CPU_ABI to 'x86' in your BoardConfig.mk)
+    $(info to ensure that your device will not be mistakenly listed as compatible by
+    $(info the Android Market. Also, it is likely that the image will fail the CTS tests)
+    $(info Please undefine TARGET_CPU_ABI in your BoardConfig.mk, or select the value 'none')
+    $(info The corresponding image will still be able to run Dalvik-based Android applications)
+    $(error Aborting build! Please fix your BoardConfig.mk)
+  endif
+endif

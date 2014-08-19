@@ -1,0 +1,20 @@
+sending incremental file list
+./
+host/
+host/linux-x86/bin/
+host/linux-x86/framework/
+host/linux-x86/obj/
+host/linux-x86/obj/STATIC_LIBRARIES/
+target/common/obj/
+target/product/
+target/product/a820/
+target/product/a820/obj/
+target/product/a820/obj/SHARED_LIBRARIES/
+target/product/a820/obj/STATIC_LIBRARIES/
+target/product/a820/obj/lib/
+target/product/a820/system/
+target/product/a820/system/bin/
+target/product/a820/system/lib/
+
+sent 24631 bytes  received 315 bytes  49892.00 bytes/sec
+total size is 104326068  speedup is 4182.08

@@ -83,7 +83,8 @@ typedef struct
 } cckm_assocInformation_t;
 
 #define ASSOC_RESP_FIXED_DATA_LEN 6
-#define MAX_BEACON_BODY_LENGTH    350
+/* 1500 is the recommended size by the Motorola Standard team. TI recommendation is 700 */
+#define MAX_BEACON_BODY_LENGTH    1500
 #define BEACON_HEADER_FIX_SIZE    12
 #define CCKM_START_EVENT_SIZE     23 /* cckm-start string + timestamp + bssid + null */
 #endif

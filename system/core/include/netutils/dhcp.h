@@ -30,10 +30,22 @@ extern int dhcp_do_request(const char *ifname,
                           char *dns1,
                           char *dns2,
                           char *server,
-                          uint32_t  *lease);
+                          uint32_t *lease,
+                          char *vendorInfo);
 extern int dhcp_stop(const char *ifname);
 extern int dhcp_release_lease(const char *ifname);
 extern char *dhcp_get_errmsg();
+extern char *dhcpv6_get_errmsg();
+
+extern int dhcpv6_do_request(const char *interface, char *ipaddr,
+		char *dns1,
+		char *dns2,
+		uint32_t *lease);
+extern int dhcpv6_stop(const char *interface);
+extern int dhcpv6_do_request_renew(const char *interface, char *ipaddr,
+		char *dns1,
+		char *dns2,
+		uint32_t *lease);
 
 __END_DECLS
 

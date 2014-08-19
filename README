@@ -2,11 +2,10 @@ Download dingdong recovery sourcecode, please using follow command':
 
 git clone https://github.com/baidurom/dingdong-recovery.git
 
-QCOM branch name: qcom
+MTK branch name: mtk
 
 1 the project is build android recovery only;
 2 Steps as following:
-    $ . build/envsetup.sh
-    $ make maguro
-  please see the out/patch_device/maguro/ , find recovery.img 
+    $ ./dingdongRec_make.sh a820 -p mt6589
+  please see the out/patch_device/a820/ , find recovery.img 
 

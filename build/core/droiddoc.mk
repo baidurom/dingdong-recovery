@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2008 The Android Open Source Project
 #
@@ -64,8 +95,26 @@ endif
 ifneq ($(LOCAL_IS_HOST_MODULE),true)
 
 ifeq ($(LOCAL_JAVA_LIBRARIES),)
-LOCAL_JAVA_LIBRARIES := core ext framework
+LOCAL_JAVA_LIBRARIES := core ext framework framework-yi secondary-framework
 endif
+ifneq ($(LOCAL_SDK_VERSION),)
+  ifeq ($(LOCAL_SDK_VERSION)$(TARGET_BUILD_APPS),current)
+    # Use android_stubs_current if LOCAL_SDK_VERSION is current and no TARGET_BUILD_APPS.
+    LOCAL_JAVA_LIBRARIES := android_stubs_current $(LOCAL_JAVA_LIBRARIES)
+  else
+    LOCAL_JAVA_LIBRARIES := sdk_v$(LOCAL_SDK_VERSION) $(LOCAL_JAVA_LIBRARIES)
+  endif
+else
+  LOCAL_JAVA_LIBRARIES := core ext framework $(LOCAL_JAVA_LIBRARIES)
+#  ifneq ($(filter mediatek-common,$(ALL_MODULES)),)
+    LOCAL_JAVA_LIBRARIES := mediatek-common $(LOCAL_JAVA_LIBRARIES)
+#  endif
+#  ifneq ($(filter secondary-framework,$(ALL_MODULES)),)
+    LOCAL_JAVA_LIBRARIES := secondary-framework $(LOCAL_JAVA_LIBRARIES)
+#  endif
+endif  # LOCAL_SDK_VERSION
+LOCAL_JAVA_LIBRARIES := $(sort $(LOCAL_JAVA_LIBRARIES))
+
 full_java_libs := $(call java-lib-files,$(LOCAL_JAVA_LIBRARIES),$(LOCAL_IS_HOST_MODULE))
 full_java_lib_deps := $(call java-lib-deps,$(LOCAL_JAVA_LIBRARIES),$(LOCAL_IS_HOST_MODULE))
 
@@ -76,8 +125,9 @@ full_java_libs += $(addprefix $(LOCAL_PATH)/,$(LOCAL_STATIC_JAVA_LIBRARIES)) $(L
 full_java_lib_deps += $(addprefix $(LOCAL_PATH)/,$(LOCAL_STATIC_JAVA_LIBRARIES)) $(LOCAL_CLASSPATH)
 endif
 
-empty :=
-space := $(empty) $(empty)
+full_java_libs += $(ARTIFACT_DIR)/cls
+full_java_libs_deps += $(ARTIFACT_DIR)/cls
+
 $(full_target): PRIVATE_CLASSPATH := $(subst $(space),:,$(full_java_libs))
 
 endif # !LOCAL_IS_HOST_MODULE

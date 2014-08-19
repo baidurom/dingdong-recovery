@@ -15,7 +15,7 @@
 #include <net/if_arp.h>
 #include <net/if.h>
 
-#include "wireless_copy.h"
+#include "linux_wext.h"
 #include "common.h"
 #include "driver.h"
 #include "eloop.h"
@@ -30,6 +30,9 @@
 #include "scan.h"
 
 #include "driver_cmd_wext.h"
+#ifdef ANDROID
+#include "android_drv.h"
+#endif /* ANDROID */
 
 /**
  * wpa_driver_wext_set_scan_timeout - Set scan timeout to report scan completion
@@ -73,7 +76,6 @@ int wpa_driver_wext_combo_scan(void *priv, struct wpa_driver_scan_params *params
 	struct iwreq iwr;
 	int ret, bp;
 	unsigned i;
-	struct wpa_supplicant *wpa_s = (struct wpa_supplicant *)(drv->ctx);
 
 	if (!drv->driver_is_started) {
 		wpa_printf(MSG_DEBUG, "%s: Driver stopped", __func__);

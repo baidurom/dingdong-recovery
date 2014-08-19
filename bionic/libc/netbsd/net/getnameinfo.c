@@ -53,7 +53,9 @@ __RCSID("$NetBSD: getnameinfo.c,v 1.43 2006/02/17 15:58:26 ginsbach Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <net/if.h>
+#if defined(ANDROID_CHANGES) && defined(AF_LINK)
 #include <net/if_dl.h>
+#endif
 #include <net/if_ieee1394.h>
 #include <net/if_types.h>
 #include <netinet/in.h>
@@ -96,6 +98,8 @@ struct sockinet {
 	u_short	si_port;
 };
 
+extern char * __progname;
+
 static int getnameinfo_inet __P((const struct sockaddr *, socklen_t, char *,
     socklen_t, char *, socklen_t, int));
 #ifdef INET6
@@ -104,9 +108,15 @@ static int ip6_parsenumeric __P((const struct sockaddr *, const char *, char *,
 static int ip6_sa2str __P((const struct sockaddr_in6 *, char *, size_t,
 				 int));
 #endif
+#if defined(ANDROID_CHANGES) && defined(AF_LINK)
 static int getnameinfo_link __P((const struct sockaddr *, socklen_t, char *,
     socklen_t, char *, socklen_t, int));
+#endif
 static int hexname __P((const u_int8_t *, size_t, char *, socklen_t));
+
+// This should be synchronized to ResponseCode.h
+static const int DnsProxyQueryResult = 222;
+
 
 /*
  * Top-level getnameinfo() code.  Look at the address family, and pick an
@@ -119,7 +129,7 @@ int getnameinfo(const struct sockaddr* sa, socklen_t salen, char* host, size_t h
 	case AF_INET6:
 		return getnameinfo_inet(sa, salen, host, hostlen,
 		    serv, servlen, flags);
-#if 0
+#if defined(ANDROID_CHANGES) && defined(AF_LINK)
 	case AF_LINK:
 		return getnameinfo_link(sa, salen, host, hostlen,
 		    serv, servlen, flags);
@@ -135,7 +145,7 @@ int getnameinfo(const struct sockaddr* sa, socklen_t salen, char* host, size_t h
  * the address. On failure -1 is returned in which case
  * normal execution flow shall continue. */
 static int
-android_gethostbyaddr_proxy(struct hostent* hp, const void *addr, socklen_t addrLen, int addrFamily) {
+android_gethostbyaddr_proxy(char* nameBuf, size_t nameBufLen, const void *addr, socklen_t addrLen, int addrFamily) {
 
 	int sock;
 	const int one = 1;
@@ -155,8 +165,9 @@ android_gethostbyaddr_proxy(struct hostent* hp, const void *addr, socklen_t addr
 	// accomodate these apps, though.
 	char propname[PROP_NAME_MAX];
 	char propvalue[PROP_VALUE_MAX];
-	snprintf(propname, sizeof(propname), "net.dns1.%d", getpid());
+	snprintf(propname, sizeof(propname), "net.dns1.%s", __progname);
 	if (__system_property_get(propname, propvalue) > 0) {
+		debug_log("getnameinfo: dnsproxy private dns: %s >>\n", propname);
 		return -1;
 	}
 	// create socket
@@ -183,7 +194,7 @@ android_gethostbyaddr_proxy(struct hostent* hp, const void *addr, socklen_t addr
 	}
 
 	char buf[INET6_ADDRSTRLEN]; // big enough for IPv4 and IPv6
-	const char* addrStr = inet_ntop(addrFamily, addr, &buf, sizeof(buf));
+	const char* addrStr = inet_ntop(addrFamily, addr, buf, sizeof(buf));
 	if (addrStr == NULL) {
 		goto exit;
 	}
@@ -197,17 +208,29 @@ android_gethostbyaddr_proxy(struct hostent* hp, const void *addr, socklen_t addr
 	}
 
 	result = 0;
+	char msg_buf[4];
+	// read result code for gethostbyaddr
+	if (fread(msg_buf, 1, sizeof(msg_buf), proxy) != sizeof(msg_buf)) {
+		goto exit;
+	}
+
+	int result_code = (int)strtol(msg_buf, NULL, 10);
+	// verify the code itself
+	if (result_code != DnsProxyQueryResult) {
+		goto exit;
+	}
+
 	uint32_t name_len;
 	if (fread(&name_len, sizeof(name_len), 1, proxy) != 1) {
 		goto exit;
 	}
 
 	name_len = ntohl(name_len);
-	if (name_len <= 0) {
+	if (name_len <= 0 || name_len >= nameBufLen) {
 		goto exit;
 	}
 
-	if (fread(hp->h_name, name_len, 1, proxy) != 1) {
+	if (fread(nameBuf, name_len, 1, proxy) != 1) {
 		goto exit;
 	}
 
@@ -376,12 +399,14 @@ getnameinfo_inet(sa, salen, host, hostlen, serv, servlen, flags)
 #ifdef ANDROID_CHANGES
 		struct hostent android_proxy_hostent;
 		char android_proxy_buf[MAXDNAME];
-		android_proxy_hostent.h_name = android_proxy_buf;
 
-		int hostnamelen = android_gethostbyaddr_proxy(&android_proxy_hostent,
-				addr, afd->a_addrlen, afd->a_af);
-		if (hostnamelen >= 0) {
-			hp = (hostnamelen > 0) ? &android_proxy_hostent : NULL;
+		int hostnamelen = android_gethostbyaddr_proxy(android_proxy_buf,
+				MAXDNAME, addr, afd->a_addrlen, afd->a_af);
+		if (hostnamelen > 0) {
+			hp = &android_proxy_hostent;
+			hp->h_name = android_proxy_buf;
+		} else if (!hostnamelen) {
+			hp = NULL;
 		} else {
 			hp = gethostbyaddr(addr, afd->a_addrlen, afd->a_af);
 		}
@@ -390,7 +415,7 @@ getnameinfo_inet(sa, salen, host, hostlen, serv, servlen, flags)
 #endif
 
 		if (hp) {
-#if 0
+#if defined(ANDROID_CHANGES) && defined(AF_LINK)
 			/*
 			 * commented out, since "for local host" is not
 			 * implemented here - see RFC2553 p30
@@ -528,6 +553,7 @@ ip6_sa2str(sa6, buf, bufsiz, flags)
 #endif /* INET6 */
 
 
+#if defined(ANDROID_CHANGES) && defined(AF_LINK)
 /*
  * getnameinfo_link():
  * Format a link-layer address into a printable format, paying attention to
@@ -605,6 +631,7 @@ getnameinfo_link(const struct sockaddr *sa, socklen_t salen,
 		    (size_t)sdl->sdl_alen, host, hostlen);
 	}
 }
+#endif
 
 static int
 hexname(cp, len, host, hostlen)

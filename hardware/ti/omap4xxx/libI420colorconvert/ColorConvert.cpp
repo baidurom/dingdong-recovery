@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "II420ColorConverter.h"
+#include <II420ColorConverter.h>
 #include <OMX_IVCommon.h>
 #include <string.h>
 

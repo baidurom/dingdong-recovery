@@ -229,7 +229,9 @@ TI_STATUS buildProbeReqTemplate(siteMgr_t *pSiteMgr, TSetTemplate *pTemplate, TS
 	TI_UINT32			 len = 0, ofdmIndex = 0;
 	TI_UINT32			 suppRatesLen, extSuppRatesLen;
 	TI_UINT8			 ratesBuf[DOT11_MAX_SUPPORTED_RATES];
+#ifndef SUPPL_WPS_SUPPORT
 	TI_UINT8             WSCOuiIe[DOT11_OUI_LEN] = { 0x00, 0x50, 0xf2, 0x04};
+#endif
 	TI_UINT32			 supportedRateMask,basicRateMask;	
 	TI_UINT16			 fc = DOT11_FC_PROBE_REQ;
 
@@ -351,6 +353,7 @@ TI_STATUS buildProbeReqTemplate(siteMgr_t *pSiteMgr, TSetTemplate *pTemplate, TS
     size += len;
     pBuf += len;
 
+#ifndef SUPPL_WPS_SUPPORT
     /* WiFi Simple Config */
     if (pSiteMgr->includeWSCinProbeReq && (pSiteMgr->siteMgrWSCCurrMode != TIWLN_SIMPLE_CONFIG_OFF))
     {
@@ -365,6 +368,7 @@ TI_STATUS buildProbeReqTemplate(siteMgr_t *pSiteMgr, TSetTemplate *pTemplate, TS
         size += sizeof(dot11_eleHdr_t) + pSiteMgr->uWscIeSize + DOT11_OUI_LEN;
         pBuf += sizeof(dot11_eleHdr_t) + pSiteMgr->uWscIeSize + DOT11_OUI_LEN;	
     }
+#endif /* SUPPL_WPS_SUPPORT */
 
 	pTemplate->len = size;
 	
@@ -869,7 +873,3 @@ TI_STATUS buildArpRspTemplate(siteMgr_t *pSiteMgr, TSetTemplate *pTemplate, TIpA
 
 	return TI_OK;
 }
-
-   
-   
-   

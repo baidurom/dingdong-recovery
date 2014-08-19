@@ -6,12 +6,12 @@
 # To prevent name conflict in incremental obfuscation.
 -useuniqueclassmembernames
 
-# Restoring stack trace with line numbers when obfuscation is enabled
--keepattributes SourceFile,LineNumberTable
-
 # dex does not like code run through proguard optimize and preverify steps.
 -dontoptimize
 -dontpreverify
+
+# Don't obfuscate. We only need dead code striping.
+-dontobfuscate
 
 # Add this flag in your package's own configuration if it's needed.
 #-flattenpackagehierarchy
@@ -70,4 +70,8 @@
 #  public static final android.os.Parcelable$Creator *;
 #}
 
-
+# The support library contains references to newer platform versions.
+# Don't warn about those in case this app is linking against an older
+# platform version.  We know about them, and they are safe.
+# See proguard-android.txt in the SDK package.
+-dontwarn android.support.**

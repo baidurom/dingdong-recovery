@@ -17,9 +17,15 @@
 #ifndef _EXT4_UTILS_H_
 #define _EXT4_UTILS_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #define _FILE_OFFSET_BITS 64
-#define _LARGEFILE64_SOURCE
+#define _LARGEFILE64_SOURCE 1
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -58,7 +64,9 @@ extern int force;
 #define EXT4_SUPER_MAGIC 0xEF53
 #define EXT4_JNL_BACKUP_BLOCKS 1
 
+#ifndef min /* already defined by windows.h */
 #define min(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 #define DIV_ROUND_UP(x, y) (((x) + (y) - 1)/(y))
 #define ALIGN(x, y) ((y) * DIV_ROUND_UP((x), (y)))
@@ -111,6 +119,8 @@ struct fs_info {
 	u32 bg_desc_reserve_blocks;
 	const char *label;
 	u8 no_journal;
+
+	struct sparse_file *sparse_file;
 };
 
 struct fs_aux_info {
@@ -145,8 +155,7 @@ static inline int log_2(int j)
 }
 
 int ext4_bg_has_super_block(int bg);
-void write_ext4_image(const char *filename, int gz, int sparse, int crc,
-		int wipe);
+void write_ext4_image(int fd, int gz, int sparse, int crc);
 void ext4_create_fs_aux_info(void);
 void ext4_free_fs_aux_info(void);
 void ext4_fill_in_sb(void);
@@ -154,8 +163,12 @@ void ext4_create_resize_inode(void);
 void ext4_create_journal_inode(void);
 void ext4_update_free(void);
 void ext4_queue_sb(void);
-u64 get_file_size(const char *filename);
+u64 get_file_size(int fd);
 u64 parse_num(const char *arg);
 void ext4_parse_sb(struct ext4_super_block *sb);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

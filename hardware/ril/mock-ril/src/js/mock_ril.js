@@ -269,9 +269,6 @@ dispatchTable[RIL_REQUEST_DATA_REGISTRATION_STATE] = { // 21
 dispatchTable[RIL_REQUEST_OPERATOR] = { // 22
     'components' : [simulatedIccWorker],
 };
-dispatchTable[RIL_REQUEST_SMS_ACKNOWLEDGE] = { //37
-    'components' : [simulatedRadioWorker],
-};
 dispatchTable[RIL_REQUEST_GET_IMEI] = { // 38
     'components' : [simulatedIccWorker],
 };

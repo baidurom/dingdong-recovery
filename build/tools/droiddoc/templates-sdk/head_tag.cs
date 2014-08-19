@@ -7,34 +7,26 @@
 <title><?cs 
   if:page.title ?><?cs 
     var:page.title ?> | <?cs
-  /if ?>Android Developers</title><?cs 
-if:guide||sdk||resources ?>
-<link href="<?cs var:toroot ?>assets/android-developer-docs-devguide.css" rel="stylesheet" type="text/css" /><?cs 
-else ?>
-<link href="<?cs var:toroot ?>assets/android-developer-docs.css" rel="stylesheet" type="text/css" /><?cs 
-/if ?>
-<script src="<?cs var:toroot ?>assets/search_autocomplete.js" type="text/javascript"></script>
-<script src="<?cs var:toroot ?>assets/jquery-resizable.min.js" type="text/javascript"></script>
-<script src="<?cs var:toroot ?>assets/android-developer-docs.js" type="text/javascript"></script>
-<script src="<?cs var:toroot ?>assets/prettify.js" type="text/javascript"></script>
+  /if ?>Android Developers</title>
+
+<!-- STYLESHEETS -->
+<link rel="stylesheet"
+href="<?cs if:android.whichdoc != 'online' ?>http:<?cs /if ?>//fonts.googleapis.com/css?family=Roboto:regular,medium,thin,italic,mediumitalic,bold" title="roboto">
+<link href="<?cs var:toroot ?>assets/css/default.css" rel="stylesheet" type="text/css">
+
+<?cs if:reference ?>
+<!-- FULLSCREEN STYLESHEET -->
+<link href="<?cs var:toroot ?>assets/css/fullscreen.css" rel="stylesheet" class="fullscreen"
+type="text/css">
+<?cs /if ?>
+
+<!-- JAVASCRIPT -->
+<script src="<?cs if:android.whichdoc != 'online' ?>http:<?cs /if ?>//www.google.com/jsapi" type="text/javascript"></script>
+<script src="<?cs var:toroot ?>assets/js/global-libraries-combined.js" type="text/javascript"></script>
 <script type="text/javascript">
-  setToRoot("<?cs var:toroot ?>");
-</script><?cs 
-if:reference ?>
-<script src="<?cs var:toroot ?>assets/android-developer-reference.js" type="text/javascript"></script>
-<script src="<?cs var:toroot ?>navtree_data.js" type="text/javascript"></script><?cs 
-/if ?><?cs 
-if:resources ?>
-<script src="<?cs var:toroot ?>resources/resources-data.js" type="text/javascript"></script><?cs 
-/if ?>
-<noscript>
-  <style type="text/css">
-    html,body{overflow:auto;}
-    #body-content{position:relative; top:0;}
-    #doc-content{overflow:visible;border-left:3px solid #666;}
-    #side-nav{padding:0;}
-    #side-nav .toggle-list ul {display:block;}
-    #resize-packages-nav{border-bottom:3px solid #666;}
-  </style>
-</noscript>
+  var toRoot = "<?cs var:toroot ?>";
+</script>
+<script src="<?cs var:toroot ?>assets/js/docs.js" type="text/javascript"></script>
+<script src="<?cs var:toroot ?>navtree_data.js" type="text/javascript"></script>
+
 </head>

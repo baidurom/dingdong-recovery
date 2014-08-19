@@ -357,6 +357,7 @@ inv_error_t inv_setup_dmp(void)
         return result;
     }
 
+    if (inv_accel_present())
     {
         struct ext_slave_config config;
         long odr;

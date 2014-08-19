@@ -33,10 +33,6 @@
 #ifndef MALLOC_DEBUG_COMMON_H
 #define MALLOC_DEBUG_COMMON_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define HASHTABLE_SIZE      1543
 #define BACKTRACE_SIZE      32
 /* flag definitions, currently sharing storage with "size" */
@@ -49,7 +45,6 @@ extern "C" {
 // Structures
 // =============================================================================
 
-typedef struct HashEntry HashEntry;
 struct HashEntry {
     size_t slot;
     HashEntry* prev;
@@ -61,39 +56,63 @@ struct HashEntry {
     intptr_t backtrace[0];
 };
 
-typedef struct HashTable HashTable;
 struct HashTable {
     size_t count;
     HashEntry* slots[HASHTABLE_SIZE];
 };
 
 /* Entry in malloc dispatch table. */
-typedef struct MallocDebug MallocDebug;
+typedef void* (*MallocDebugMalloc)(size_t);
+typedef void (*MallocDebugFree)(void*);
+typedef void* (*MallocDebugCalloc)(size_t, size_t);
+typedef void* (*MallocDebugRealloc)(void*, size_t);
+typedef void* (*MallocDebugMemalign)(size_t, size_t);
 struct MallocDebug {
-    /* Address of the actual malloc routine. */
-    void* (*malloc)(size_t bytes);
-    /* Address of the actual free routine. */
-    void  (*free)(void* mem);
-    /* Address of the actual calloc routine. */
-    void* (*calloc)(size_t n_elements, size_t elem_size);
-    /* Address of the actual realloc routine. */
-    void* (*realloc)(void* oldMem, size_t bytes);
-    /* Address of the actual memalign routine. */
-    void* (*memalign)(size_t alignment, size_t bytes);
+  MallocDebugMalloc malloc;
+  MallocDebugFree free;
+  MallocDebugCalloc calloc;
+  MallocDebugRealloc realloc;
+  MallocDebugMemalign memalign;
 };
 
-/* Malloc debugging initialization routine.
- * This routine must be implemented in .so modules that implement malloc
- * debugging. This routine is called once per process from malloc_init_impl
- * routine implemented in bionic/libc/bionic/malloc_debug_common.c when malloc
+/* Malloc debugging initialization and finalization routines.
+ *
+ * These routines must be implemented in .so modules that implement malloc
+ * debugging. The are is called once per process from malloc_init_impl and
+ * malloc_fini_impl respectively.
+ *
+ * They are implemented in bionic/libc/bionic/malloc_debug_common.c when malloc
  * debugging gets initialized for the process.
- * Return:
- *  0 on success, -1 on failure.
+ *
+ * MallocDebugInit returns:
+ *    0 on success, -1 on failure.
  */
-typedef int (*MallocDebugInit)(void);
+typedef int (*MallocDebugInit)();
+typedef void (*MallocDebugFini)();
 
-#ifdef __cplusplus
-};  /* end of extern "C" */
-#endif
+// =============================================================================
+// log functions
+// =============================================================================
+
+#define debug_log(format, ...)  \
+    __libc_android_log_print(ANDROID_LOG_DEBUG, "malloc_leak_check", (format), ##__VA_ARGS__ )
+#define error_log(format, ...)  \
+    __libc_android_log_print(ANDROID_LOG_ERROR, "malloc_leak_check", (format), ##__VA_ARGS__ )
+#define info_log(format, ...)  \
+    __libc_android_log_print(ANDROID_LOG_INFO, "malloc_leak_check", (format), ##__VA_ARGS__ )
+
+class ScopedPthreadMutexLocker {
+ public:
+  explicit ScopedPthreadMutexLocker(pthread_mutex_t* mu) : mu_(mu) {
+    pthread_mutex_lock(mu_);
+  }
+
+  ~ScopedPthreadMutexLocker() {
+    pthread_mutex_unlock(mu_);
+  }
+
+ private:
+  pthread_mutex_t* mu_;
+};
 
 #endif  // MALLOC_DEBUG_COMMON_H

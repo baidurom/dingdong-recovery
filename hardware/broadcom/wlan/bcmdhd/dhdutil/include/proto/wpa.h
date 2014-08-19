@@ -1,7 +1,7 @@
 /*
  * Fundamental types and constants relating to WPA
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: wpa.h,v 1.19 2009-07-13 08:29:58 Exp $
+ * $Id: wpa.h 261155 2011-05-23 23:51:32Z $
  */
 
 
@@ -108,14 +108,23 @@ typedef BWL_PRE_PACKED_STRUCT struct
 #define WPA_CIPHER_AES_OCB	3
 #define WPA_CIPHER_AES_CCM	4
 #define WPA_CIPHER_WEP_104	5
+#define WPA_CIPHER_BIP		6	
+#define WPA_CIPHER_TPK		7	
 
+#ifdef BCMWAPI_WAI
+#define WAPI_CIPHER_NONE	WPA_CIPHER_NONE
+#define WAPI_CIPHER_SMS4	11
+
+#define WAPI_CSE_WPI_SMS4	1
+#endif 
 
 #define IS_WPA_CIPHER(cipher)	((cipher) == WPA_CIPHER_NONE || \
 				 (cipher) == WPA_CIPHER_WEP_40 || \
 				 (cipher) == WPA_CIPHER_WEP_104 || \
 				 (cipher) == WPA_CIPHER_TKIP || \
 				 (cipher) == WPA_CIPHER_AES_OCB || \
-				 (cipher) == WPA_CIPHER_AES_CCM)
+				 (cipher) == WPA_CIPHER_AES_CCM || \
+				 (cipher) == WPA_CIPHER_TPK)
 
 
 #define WPA_TKIP_CM_DETECT	60

@@ -29,6 +29,10 @@
 #include <cutils/logd.h>
 #include <cutils/logprint.h>
 
+int g_log_ts = 0;
+
+extern int ale_b64_encode(unsigned char const *src, int srclength, char *target, int targsize);
+
 typedef struct FilterInfo_t {
     char *mTag;
     android_LogPriority mPri;
@@ -350,11 +354,37 @@ static inline char * strip_end(char *str)
 int android_log_processLogBuffer(struct logger_entry *buf,
                                  AndroidLogEntry *entry)
 {
+    size_t tag_len;
     entry->tv_sec = buf->sec;
     entry->tv_nsec = buf->nsec;
+    entry->priority = (buf->msg[0] & (~LOGGER_ALE_MASK));
+    entry->msg_type = (buf->msg[0] & LOGGER_ALE_MASK);
     entry->pid = buf->pid;
     entry->tid = buf->tid;
 
+    switch (entry->msg_type) {
+    case LOGGER_ALE_MSG_K:
+        entry->tag = "ALEK";
+        tag_len = 3;
+	entry->messageLen = buf->len - 1;
+	entry->message = buf->msg + 1;
+        break;
+
+    case LOGGER_ALE_MSG_J:
+        entry->tag = "ALEJ";
+        tag_len = 3;
+	entry->messageLen = buf->len - 1;
+	entry->message = buf->msg + 1;
+        break;
+
+    case LOGGER_ALE_MSG_N:
+        entry->tag = "ALEN";
+        tag_len = 3;
+	entry->messageLen = buf->len - 1;
+	entry->message = buf->msg + 1;
+        break;
+
+    default: {
     /*
      * format: <priority:1><tag:N>\0<message:N>\0
      *
@@ -398,11 +428,14 @@ int android_log_processLogBuffer(struct logger_entry *buf,
         buf->msg[msgEnd] = '\0';
     }
 
-    entry->priority = buf->msg[0];
+		    //entry->priority = buf->msg[0];
     entry->tag = buf->msg + 1;
     entry->message = buf->msg + msgStart;
-    entry->messageLen = msgEnd - msgStart;
+		    entry->messageLen = msgEnd - msgStart + 1;
+        break;
+    }
 
+    }
     return 0;
 }
 
@@ -604,6 +637,7 @@ int android_log_processBinaryLogBuffer(struct logger_entry *buf,
     unsigned int tagIndex;
     const unsigned char* eventData;
 
+    entry->msg_type = LOGGER_ALE_MSG_RAW;
     entry->tv_sec = buf->sec;
     entry->tv_nsec = buf->nsec;
     entry->priority = ANDROID_LOG_INFO;
@@ -673,16 +707,16 @@ int android_log_processBinaryLogBuffer(struct logger_entry *buf,
 
     if (inCount != 0) {
         fprintf(stderr,
-            "Warning: leftover binary log data (%d bytes)\n", inCount);
+            "Warning: leftover binary log data (%zu bytes)\n", inCount);
     }
 
     /*
      * Terminate the buffer.  The NUL byte does not count as part of
      * entry->messageLen.
      */
-    *outBuf = '\0';
+    *outBuf++ = '\0';
     entry->messageLen = outBuf - messageBuf;
-    assert(entry->messageLen == (messageBufLen-1) - outRemaining);
+    assert(entry->messageLen == messageBufLen - outRemaining);
 
     entry->message = messageBuf;
 
@@ -717,6 +751,9 @@ char *android_log_formatLogLine (
 
     priChar = filterPriToChar(entry->priority);
 
+/* make android log timestamp same with printk { */
+	char time_suffix_buf[16];
+
     /*
      * Get the current date/time in pretty form
      *
@@ -726,6 +763,7 @@ char *android_log_formatLogLine (
      * in the time stamp.  Don't use forward slashes, parenthesis,
      * brackets, asterisks, or other special chars here.
      */
+     if(g_log_ts == 0) {
 #if defined(HAVE_LOCALTIME_R)
     ptm = localtime_r(&(entry->tv_sec), &tmBuf);
 #else
@@ -733,7 +771,13 @@ char *android_log_formatLogLine (
 #endif
     //strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", ptm);
     strftime(timeBuf, sizeof(timeBuf), "%m-%d %H:%M:%S", ptm);
+	 	sprintf(time_suffix_buf, ".%03ld", entry->tv_nsec / 1000000);
+	 } else if(g_log_ts == 1) {
+	 	sprintf(timeBuf, "%5lu.%06lu", entry->tv_sec, entry->tv_nsec / 1000);
+		time_suffix_buf[0] = 0;
+	 }
 
+/* } */
     /*
      * Construct a buffer containing the log header and log message.
      */
@@ -753,7 +797,7 @@ char *android_log_formatLogLine (
             break;
         case FORMAT_THREAD:
             prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-                "%c(%5d:%p) ", priChar, entry->pid, (void*)entry->tid);
+                "%c(%5d:%5d) ", priChar, entry->pid, entry->tid);
             strcpy(suffixBuf, "\n");
             suffixLen = 1;
             break;
@@ -765,23 +809,23 @@ char *android_log_formatLogLine (
             break;
         case FORMAT_TIME:
             prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-                "%s.%03ld %c/%-8s(%5d): ", timeBuf, entry->tv_nsec / 1000000,
+                "%s%s %c/%-8.64s(%5d): ", timeBuf, time_suffix_buf,
                 priChar, entry->tag, entry->pid);
             strcpy(suffixBuf, "\n");
             suffixLen = 1;
             break;
         case FORMAT_THREADTIME:
             prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-                "%s.%03ld %5d %5d %c %-8s: ", timeBuf, entry->tv_nsec / 1000000,
-                (int)entry->pid, (int)entry->tid, priChar, entry->tag);
+                "%s%s %5d %5d %c %-8.64s: ", timeBuf, time_suffix_buf,
+                entry->pid, entry->tid, priChar, entry->tag);
             strcpy(suffixBuf, "\n");
             suffixLen = 1;
             break;
         case FORMAT_LONG:
             prefixLen = snprintf(prefixBuf, sizeof(prefixBuf),
-                "[ %s.%03ld %5d:%p %c/%-8s ]\n",
-                timeBuf, entry->tv_nsec / 1000000, entry->pid,
-                (void*)entry->tid, priChar, entry->tag);
+                "[ %s%s %5d:%p %c/%-8.64s ]\n",
+                timeBuf, time_suffix_buf, entry->pid,
+                entry->tid, priChar, entry->tag);
             strcpy(suffixBuf, "\n\n");
             suffixLen = 2;
             prefixSuffixIsHeaderFooter = 1;
@@ -805,6 +849,31 @@ char *android_log_formatLogLine (
     if(suffixLen >= sizeof(suffixBuf))
         suffixLen = sizeof(suffixBuf) - 1;
 
+    /* Process ALE message type */
+    const char *msg = NULL;
+    size_t msg_len = 0;
+    char msg_buf[LOGGER_ALE_MSG_SIZE * 2];
+
+    switch (entry->msg_type) {
+    case LOGGER_ALE_MSG_RAW:
+        msg = entry->message;
+        msg_len = entry->messageLen - 1;
+        break;
+
+    case LOGGER_ALE_MSG_K:
+    case LOGGER_ALE_MSG_J:
+    case LOGGER_ALE_MSG_N:
+        msg = msg_buf;
+	msg_len = ale_b64_encode((u_char *)entry->message, entry->messageLen, msg_buf, sizeof(msg_buf));
+        break;
+
+    default:
+        strcpy(msg_buf, "Bug, Unknown message type");
+        msg = msg_buf;
+        msg_len = strlen(msg_buf);
+        break;
+    }
+
     /* the following code is tragically unreadable */
 
     size_t numLines;
@@ -817,21 +886,21 @@ char *android_log_formatLogLine (
         // we're just wrapping message with a header/footer
         numLines = 1;
     } else {
-        pm = entry->message;
+        pm = msg;
         numLines = 0;
 
         // The line-end finding here must match the line-end finding
         // in for ( ... numLines...) loop below
-        while (pm < (entry->message + entry->messageLen)) {
+        while (pm < (msg + msg_len)) {
             if (*pm++ == '\n') numLines++;
         }
         // plus one line for anything not newline-terminated at the end
-        if (pm > entry->message && *(pm-1) != '\n') numLines++;
+        if (pm > msg && *(pm-1) != '\n') numLines++;
     }
 
     // this is an upper bound--newlines in message may be counted
     // extraneously
-    bufferSize = (numLines * (prefixLen + suffixLen)) + entry->messageLen + 1;
+    bufferSize = (numLines * (prefixLen + suffixLen)) + msg_len + 1;
 
     if (defaultBufferSize >= bufferSize) {
         ret = defaultBuffer;
@@ -846,23 +915,23 @@ char *android_log_formatLogLine (
     ret[0] = '\0';       /* to start strcat off */
 
     p = ret;
-    pm = entry->message;
+    pm = msg;
 
     if (prefixSuffixIsHeaderFooter) {
         strcat(p, prefixBuf);
         p += prefixLen;
-        strncat(p, entry->message, entry->messageLen);
-        p += entry->messageLen;
+        strncat(p, msg, msg_len);
+        p += msg_len;
         strcat(p, suffixBuf);
         p += suffixLen;
     } else {
-        while(pm < (entry->message + entry->messageLen)) {
+        while(pm < (msg + msg_len)) {
             const char *lineStart;
             size_t lineLen;
             lineStart = pm;
 
             // Find the next end-of-line in message
-            while (pm < (entry->message + entry->messageLen)
+            while (pm < (msg + msg_len)
                     && *pm != '\n') pm++;
             lineLen = pm - lineStart;
 

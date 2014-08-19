@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2008 The Android Open Source Project
 #
@@ -181,17 +212,57 @@ include $(BUILD_SYSTEM)/product.mk
 include $(BUILD_SYSTEM)/device.mk
 
 ifneq ($(strip $(TARGET_BUILD_APPS)),)
-  # An unbundled app build needs only the core product makefiles.
-  $(call import-products,$(call get-product-makefiles,\
-      $(SRC_TARGET_DIR)/product/AndroidProducts.mk))
+# An unbundled app build needs only the core product makefiles.
+all_product_configs := $(call get-product-makefiles,\
+    $(SRC_TARGET_DIR)/product/AndroidProducts.mk)
 else
-  # Read in all of the product definitions specified by the AndroidProducts.mk
-  # files in the tree.
-  #
-  #TODO: when we start allowing direct pointers to product files,
-  #    guarantee that they're in this list.
-  $(call import-products, $(get-all-product-makefiles))
-endif # TARGET_BUILD_APPS
+# Read in all of the product definitions specified by the AndroidProducts.mk
+# files in the tree.
+all_product_configs := $(get-all-product-makefiles)
+endif
+
+# Find the product config makefile for the current product.
+# all_product_configs consists items like:
+# <product_name>:<path_to_the_product_makefile>
+# or just <path_to_the_product_makefile> in case the product name is the
+# same as the base filename of the product config makefile.
+current_product_makefile :=
+all_product_makefiles :=
+
+$(foreach f, $(all_product_configs),\
+    $(eval _cpm_words := $(subst :,$(space),$(f)))\
+    $(eval _cpm_word1 := $(word 1,$(_cpm_words)))\
+    $(eval _cpm_word2 := $(word 2,$(_cpm_words)))\
+    $(if $(_cpm_word2),\
+        $(eval all_product_makefiles += $(_cpm_word2))\
+        $(if $(filter $(TARGET_PRODUCT),$(_cpm_word1)),\
+            $(eval current_product_makefile += $(_cpm_word2)),),\
+        $(eval all_product_makefiles += $(f))\
+        $(if $(filter $(TARGET_PRODUCT),$(basename $(notdir $(f)))),\
+            $(eval current_product_makefile += $(f)),)))
+_cpm_words :=
+_cpm_word1 :=
+_cpm_word2 :=
+current_product_makefile := $(strip $(current_product_makefile))
+all_product_makefiles := $(strip $(all_product_makefiles))
+
+#ifneq (,$(filter product-graph dump-products, $(MAKECMDGOALS)))
+ifeq (0,0)
+# Import all product makefiles.
+$(call import-products, $(all_product_makefiles))
+else
+
+# Import just the current product.
+ifndef current_product_makefile
+$(error Cannot locate config makefile for product "$(TARGET_PRODUCT)")
+endif
+ifneq (1,$(words $(current_product_makefile)))
+$(error Product "$(TARGET_PRODUCT)" ambiguous: matches $(current_product_makefile))
+endif
+$(call import-products, $(current_product_makefile))
+endif  # Import all or just the current product makefile
+
+# Sanity check
 $(check-all-products)
 
 ifneq ($(filter dump-products, $(MAKECMDGOALS)),)
@@ -203,7 +274,12 @@ endif
 # file defining that product.
 #
 INTERNAL_PRODUCT := $(call resolve-short-product-name, $(TARGET_PRODUCT))
-#$(error TARGET_PRODUCT $(TARGET_PRODUCT) --> $(INTERNAL_PRODUCT))
+#ifneq ($(current_product_makefile),$(INTERNAL_PRODUCT))
+#$(error PRODUCT_NAME inconsistent in $(current_product_makefile) and $(INTERNAL_PRODUCT))
+#endif
+current_product_makefile :=
+all_product_makefiles :=
+all_product_configs :=
 
 # Find the device that this product maps to.
 TARGET_DEVICE := $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_DEVICE)
@@ -234,7 +310,7 @@ PRODUCT_AAPT_PREF_CONFIG := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_AAPT_
 # (Can be overridden in the device config, e.g.: PRODUCT_AAPT_CONFIG += hdpi)
 PRODUCT_AAPT_CONFIG := $(strip \
     $(PRODUCT_AAPT_CONFIG) \
-    $(if $(filter %dpi,$(PRODUCT_AAPT_CONFIG)),,mdpi))
+    $(if $(filter %dpi,$(PRODUCT_AAPT_CONFIG)),,mdpi hdpi ldpi xhdpi))
 PRODUCT_AAPT_PREF_CONFIG := $(strip $(PRODUCT_AAPT_PREF_CONFIG))
 
 # Everyone gets nodpi assets which are density-independent.
@@ -278,11 +354,12 @@ ifneq (1,$(words $(PRODUCT_DEFAULT_DEV_CERTIFICATE)))
 endif
 endif
 
-# A list of words like <source path>:<destination path>.  The file at
-# the source path should be copied to the destination path when building
-# this product.  <destination path> is relative to $(PRODUCT_OUT), so
-# it should look like, e.g., "system/etc/file.xml".  The rules
-# for these copy steps are defined in config/Makefile.
+# A list of words like <source path>:<destination path>[:<owner>].
+# The file at the source path should be copied to the destination path
+# when building  this product.  <destination path> is relative to
+# $(PRODUCT_OUT), so it should look like, e.g., "system/etc/file.xml".
+# The rules for these copy steps are defined in build/core/Makefile.
+# The optional :<owner> is used to indicate the owner of a vendor file.
 PRODUCT_COPY_FILES := \
     $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_COPY_FILES))
 
@@ -305,6 +382,10 @@ DEVICE_PACKAGE_OVERLAYS := \
 
 # An list of whitespace-separated words.
 PRODUCT_TAGS := $(strip $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_TAGS))
+
+# The list of product-specific kernel header dirs
+PRODUCT_VENDOR_KERNEL_HEADERS := \
+    $(PRODUCTS.$(INTERNAL_PRODUCT).PRODUCT_VENDOR_KERNEL_HEADERS)
 
 # Add the product-defined properties to the build properties.
 ADDITIONAL_BUILD_PROPERTIES := \

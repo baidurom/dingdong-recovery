@@ -1,7 +1,7 @@
 /*
  * Common code for DHD command-line utility
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: dhdu.c,v 1.88.2.19 2011-01-19 23:47:10 Exp $
+ * $Id: dhdu.c 355225 2012-09-05 22:35:10Z $
  */
 
 /* For backwards compatibility, the absence of the define 'BWL_NO_FILESYSTEM_SUPPORT'
@@ -25,7 +25,9 @@
 #define BWL_FILESYSTEM_SUPPORT
 #endif
 
+#ifndef PROP_TXSTATUS
 #define PROP_TXSTATUS
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,17 +44,24 @@
 #include <bcmendian.h>
 #include "dhdu.h"
 #include "miniopt.h"
+/* #include <usbrdl.h> */
 #include <proto/bcmip.h>
 #define IPV4_ADDR_LEN 4
+#ifdef WLBTAMP
 #include <proto/bt_amp_hci.h>
+#endif
 
 #include <errno.h>
 
 #include <trxhdr.h>
+/* #include "ucode_download.h"  Greg */
 
 #define stricmp strcasecmp
 #define strnicmp strncasecmp
 
+#ifndef RDL_CHUNK
+#define RDL_CHUNK	1500
+#endif
 
 static cmd_func_t dhd_var_void;
 static cmd_func_t dhd_varint, dhd_varstr;
@@ -72,6 +81,8 @@ static cmd_func_t dhd_membytes, dhd_download, dhd_dldn,
 	dhd_upload, dhd_vars, dhd_idleclock, dhd_idletime;
 static cmd_func_t dhd_logstamp;
 
+static cmd_func_t dhd_hostreorder_flows;
+
 #ifdef PROP_TXSTATUS
 static cmd_func_t dhd_proptxstatusenable;
 static cmd_func_t dhd_proptxstatusmode;
@@ -89,8 +100,10 @@ static int file_size(char *fname);
 static int read_vars(char *fname, char *buf, int buf_maxlen);
 #endif
 
+#ifdef WLBTAMP
 static cmd_func_t wl_HCI_cmd;
 static cmd_func_t wl_HCI_ACL_data;
+#endif
 
 /* dword align allocation */
 static union {
@@ -167,16 +180,17 @@ cmd_t dhd_cmds[] = {
 	{ "memsize", dhd_varint, DHD_GET_VAR, -1,
 	"display size of onchip SOCRAM"},
 	{ "membytes", dhd_membytes, DHD_GET_VAR, DHD_SET_VAR,
-	"membytes [-h | -r | -i] <address> <length> [<bytes>]\n"
+	"membytes [-h | -r | -i] <address> <length> [<data>]\n"
 	"\tread or write data in the dongle ram\n"
-	"\t-h   <bytes> is a sequence of hex digits, else a char string\n"
-	"\t-r   output as a raw write rather than hexdump display\n"},
+	"\t-h   <data> is a sequence of hex digits rather than a char string\n"
+	"\t-r   output binary to stdout rather hex\n"},
 	{ "download", dhd_download, -1, DHD_SET_VAR,
-	"download [-a <address>] [--noreset] [--norun] <binfile> [<varsfile>]\n"
+	"download [-a <address>] [--noreset] [--norun] [--verify] <binfile> [<varsfile>]\n"
 	"\tdownload file to specified dongle ram address and start CPU\n"
 	"\toptional vars file will replace vars parsed from the CIS\n"
 	"\t--noreset    do not reset SOCRAM core before download\n"
 	"\t--norun      do not start dongle CPU after download\n"
+	"\t--verify     do readback verify \n"
 	"\tdefault <address> is 0\n"},
 	{ "dldn", dhd_dldn, -1, DHD_SET_VAR,
 	"download <binfile>\n"
@@ -197,6 +211,12 @@ cmd_t dhd_cmds[] = {
 	"\t  -c means write regardless of crc"},
 	{ "sleep", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
 	"enter/exit simulated host sleep (bus powerdown w/OOB wakeup)"},
+	{ "kso", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
+	"keep sdio on"},
+	{ "devcap", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
+	"brcm device capabilities"},
+	{ "devsleep", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
+	"Sleep CMD14"},
 #ifdef SDTEST
 	{ "extloop", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
 	"external loopback: convert all tx data to echo test frames"},
@@ -271,12 +291,14 @@ cmd_t dhd_cmds[] = {
 	"Move device into or out of reset state (1/reset, or 0/operational)"},
 	{ "ioctl_timeout", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
 	"IOCTL response timeout (milliseconds)."},
+#ifdef WLBTAMP
 	{ "HCI_cmd", wl_HCI_cmd, -1, DHD_SET_VAR,
 	"carries HCI commands to the driver\n"
 	"\tusage: dhd HCI_cmd <command> <args>\n" },
 	{ "HCI_ACL_data", wl_HCI_ACL_data, -1, DHD_SET_VAR,
 	"carries HCI ACL data packet to the driver\n"
 	"\tusage: dhd HCI_ACL_data <logical link handle> <data>\n" },
+#endif
 #ifdef PROP_TXSTATUS
 	{ "proptx", dhd_proptxstatusenable, DHD_GET_VAR, DHD_SET_VAR,
 	"enable/disable the proptxtstatus feature\n"
@@ -290,17 +312,12 @@ cmd_t dhd_cmds[] = {
 #endif
 	{ "sd_uhsimode", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
 	"g/set UHSI Mode"},
-#ifdef WLMEDIA_HTSF
-	{ "pktdlystatsz", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
-	"Specify the size of the delay statistics buffer\n"
-	"0 - disable"},
-#endif
-	{ "hsicsleep", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
-	"sleep/wake HSIC bus"},
-	{ "changemtu", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
-	"change the size of the mtu during runtime <1500-1752> Bytes\n"},
-	{ "hsicautosleep", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
-	"Enable/Disable HSIC bus automatic sleep/resume feature"},
+	{ "host_reorder_flows", dhd_hostreorder_flows, DHD_GET_VAR, -1,
+	"get host reorder flows "},
+	{ "txglomsize", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
+	"max glom size for sdio tx\n"},
+	{ "txglommode", dhd_varint, DHD_GET_VAR, DHD_SET_VAR,
+	"glom mode for sdio tx 0- copy, 1- multidescriptor\n"},
 	{ NULL, NULL, 0, 0, NULL }
 };
 
@@ -963,17 +980,18 @@ dhd_membytes(void *dhd, cmd_t *cmd, char **argv)
 	/* arg count */
 	for (argc = 0; argv[argc]; argc++);
 
-	/* required args: address size [<bytes>]] */
+	/* required args: address size [<data>]] */
 	if (argc < 2) {
-		fprintf(stderr, "required args: address size [<bytes>]\n");
+		fprintf(stderr, "required args: address size [<data>]\n");
 		return USAGE_ERROR;
 	}
+
 	if (argc < 3 && hexin) {
-		fprintf(stderr, "missing <bytes> arg implies by -h\n");
+		fprintf(stderr, "missing <data> required by -h\n");
 		return USAGE_ERROR;
 	}
 	if ((argc > 2) && (rawout)) {
-		fprintf(stderr, "can't have input <bytes> arg with -r or -i\n");
+		fprintf(stderr, "can't have <data> arg with -r\n");
 		return USAGE_ERROR;
 	}
 
@@ -999,10 +1017,12 @@ dhd_membytes(void *dhd, cmd_t *cmd, char **argv)
 
 	/* get can just use utility function, set must copy custom buffer */
 	if (argc == 2) {
+		/* Read */
 		uint chunk = DHD_IOCTL_MAXLEN;
 		for (addr -= align, len += align; len; addr += chunk, len -= chunk, align = 0) {
 			chunk = MIN(chunk, len);
-			params[0] = addr; params[1] = ROUNDUP(chunk, 4);
+			params[0] = addr;
+			params[1] = ROUNDUP(chunk, 4);
 			ret = dhd_var_getbuf(dhd, "membytes",
 			                     params, (2 * sizeof(int)), (void**)&ptr);
 			if (ret < 0)
@@ -1015,6 +1035,7 @@ dhd_membytes(void *dhd, cmd_t *cmd, char **argv)
 			}
 		}
 	} else {
+		/* Write */
 		uint patlen = strlen(argv[2]);
 		uint chunk, maxchunk;
 		char *sptr;
@@ -1487,7 +1508,39 @@ dhd_vars(void *dhd, cmd_t *cmd, char **argv)
 
 #if defined(BWL_FILESYSTEM_SUPPORT)
 static int
-dhd_load_file_bytes(void *dhd, cmd_t *cmd, FILE *fp, int fsize, int start)
+dhd_verify_file_bytes(void *dhd, uint8 *memblock, int start, uint len)
+{
+	int ret = 0;
+	uint i = 0;
+	char *ptr;
+	int params[2];
+	uint8 *src, *dst;
+
+	params[0] = start;
+	params[1] = len;
+	ret = dhd_var_getbuf(dhd, "membytes", params, 2 * sizeof(int), (void**)&ptr);
+	if (ret) {
+		fprintf(stderr, "%s: failed reading %d membytes from 0x%08x\n",
+		__FUNCTION__, len, start);
+		return -1;
+	}
+
+	src = (uint8 *)memblock;
+	dst = (uint8 *)ptr;
+	while (i < len) {
+		if (src[i] != dst[i]) {
+			fprintf(stderr, "   0x%x: exp[0x%02X] != got[0x%02X]\n",
+				start+i, src[i], dst[i]);
+			ret = -1;
+		}
+		i++;
+	}
+
+	return ret;
+}
+
+static int
+dhd_load_file_bytes(void *dhd, cmd_t *cmd, FILE *fp, int fsize, int start, uint blk_sz, bool verify)
 {
 	int tot_len = 0;
 	uint read_len;
@@ -1495,19 +1548,32 @@ dhd_load_file_bytes(void *dhd, cmd_t *cmd, FILE *fp, int fsize, int start)
 	uint len;
 	uint8 memblock[MEMBLOCK];
 	int ret;
+	int retry;
 
 	UNUSED_PARAMETER(cmd);
 
+	if (!fsize || !fp)
+		return -1;
+
+	assert(blk_sz <= MEMBLOCK);
+
 	while (tot_len < fsize) {
 		read_len = fsize - tot_len;
-		if (read_len >= MEMBLOCK)
-			read_len = MEMBLOCK;
+		if (read_len >= blk_sz) {
+			read_len = blk_sz;
+
+			if (!ISALIGNED(start, MEMBLOCK))
+				read_len = ROUNDUP(start, MEMBLOCK) - start;
+		}
+
 		len = fread(memblock, sizeof(uint8), read_len, fp);
 		if ((len < read_len) && !feof(fp)) {
 			fprintf(stderr, "%s: error reading file\n", __FUNCTION__);
 			return -1;
 
 		}
+		retry = 0;
+failed_retry:
 
 		bufp = buf;
 		memset(bufp, 0, DHD_IOCTL_MAXLEN);
@@ -1526,6 +1592,21 @@ dhd_load_file_bytes(void *dhd, cmd_t *cmd, FILE *fp, int fsize, int start)
 			        __FUNCTION__, ret, len, start);
 			return -1;
 		}
+
+		if (verify == TRUE) {
+			if (len & 1)
+				len = ROUNDUP(len, 2);
+
+			if (dhd_verify_file_bytes(dhd, memblock, start, len) != 0) {
+				if (retry++ < 5000)
+				{
+					fprintf(stderr, "%s: verify failed %d membytes "
+						"from 0x%08x\n", __FUNCTION__, len, start);
+					goto failed_retry;
+				}
+			}
+		}
+
 		start += len;
 		tot_len += len;
 	}
@@ -1575,21 +1656,29 @@ dhd_download(void *dhd, cmd_t *cmd, char **argv)
 #else
 	bool reset = TRUE;
 	bool run = TRUE;
+	bool verify = FALSE;
 	char *fname = NULL;
 	char *vname = NULL;
 	uint32 start = 0;
 	int ret = 0;
 	int fsize;
+	uint32 bustype;
+	long filepos;
+
 	FILE *fp = NULL;
 	uint32 memsize;
 	char *memszargs[] = { "memsize", NULL };
+
 	char *bufp;
+
 	miniopt_t opts;
 	int opt_err;
 	uint nvram_len;
 	struct trx_header trx_hdr;
+	uint32 trx_hdr_len;
 	bool trx_file = FALSE;
-	bool overlays = FALSE;
+	uint memblock_sz = MEMBLOCK;
+	bool embedded_ucode = FALSE;
 
 	UNUSED_PARAMETER(cmd);
 
@@ -1628,6 +1717,8 @@ dhd_download(void *dhd, cmd_t *cmd, char **argv)
 				reset = FALSE;
 			} else if (!strcmp(opts.key, "norun")) {
 				run = FALSE;
+			} else if (!strcmp(opts.key, "verify")) {
+				verify = TRUE;
 			} else {
 				fprintf(stderr, "unrecognized option %s\n", opts.valstr);
 				ret = -1;
@@ -1662,18 +1753,13 @@ dhd_download(void *dhd, cmd_t *cmd, char **argv)
 	/* Verify the file is a regular bin file or trx file */
 	{
 		uint32 tmp_len;
-		uint32 trx_hdr_len = sizeof(struct trx_header);
+		trx_hdr_len = sizeof(struct trx_header);
 		tmp_len = fread(&trx_hdr, sizeof(uint8), trx_hdr_len, fp);
 		if (tmp_len == trx_hdr_len) {
 			if (trx_hdr.magic == TRX_MAGIC) {
 				trx_file = TRUE;
-				if (trx_hdr.flag_version & TRX_OVERLAYS) {
-					fprintf(stderr, "Image contains overlays but overlays "
-					        "not supported by this command\n");
-					ret = BCME_UNSUPPORTED;
-					goto exit;
-				} else {
-				}
+				if (trx_hdr.flag_version & TRX_EMBED_UCODE)
+					embedded_ucode = TRUE;
 			}
 			else
 				fseek(fp, 0, SEEK_SET);
@@ -1682,37 +1768,63 @@ dhd_download(void *dhd, cmd_t *cmd, char **argv)
 			fseek(fp, 0, SEEK_SET);
 	}
 
-	if ((ret = dhd_var_get(dhd, NULL, memszargs))) {
-		fprintf(stderr, "%s: error obtaining memsize\n", __FUNCTION__);
-		goto exit;
+	/* Check on which bus the dhd driver is sitting. Downloading methodology differs from
+	 * USB to SDIO.
+	 */
+	{
+		char* bustype_args[] = {"bustype", NULL};
+
+		/* Read the bus type the DHD driver is associated to */
+		if ((ret = dhd_var_get(dhd, NULL, bustype_args))) {
+			fprintf(stderr, "%s: error obtaining bustype\n", __FUNCTION__);
+			goto exit;
+		}
+
+		bustype = *(uint32*)buf;
 	}
 
-	memsize = *(uint32*)buf;
+	if (trx_file)
+		fsize = (int)(trx_hdr.offsets[0]);
 
-#ifdef PART_OF_RAM_AS_ROMSIM
-	/* only useful for cases where you want to sim some RAM as ROM */
-	if (memsize && ((uint32)fsize > memsize)) {
-		fprintf(stderr, "%s: file %s too large (%d > %d)\n",
-		        __FUNCTION__, fname, fsize, memsize);
-		ret = -1;
-		goto exit;
+	if (bustype == BUS_TYPE_SDIO) {
+		if ((ret = dhd_var_get(dhd, NULL, memszargs))) {
+			fprintf(stderr, "%s: error obtaining memsize\n", __FUNCTION__);
+			goto exit;
+		}
+		memsize = *(uint32*)buf;
 	}
-#endif /* PART_OF_RAM_AS_ROMSIM */
+
+
+	BCM_REFERENCE(memsize);
 
 	/* do the download reset if not suppressed */
 	if (reset) {
-		if ((ret = dhd_iovar_setint(dhd, "download", TRUE))) {
+		if ((ret = dhd_iovar_setint(dhd, "dwnldstate", TRUE))) {
 			fprintf(stderr, "%s: failed to put dongle in download mode\n",
 			        __FUNCTION__);
 			goto exit;
 		}
 	}
 
-	if (trx_file)
-		fsize = trx_hdr.offsets[0];
+	if (BUS_TYPE_USB == bustype) {
+		/* store the cur pos pointing to base image which should be written */
+		filepos = ftell(fp);
+		if (filepos == -1) {
+			fprintf(stderr, "%s: ftell failed.\n", __FUNCTION__);
+		}
+
+		/* In case of USB, we need to write header information also to dongle. */
+		fseek(fp, 0, SEEK_SET);
+
+		/* The file size is "base_image + TRX_Header_size" */
+		fsize = (int)(trx_hdr.offsets[0] + sizeof(struct trx_header));
+
+		memblock_sz = RDL_CHUNK;
+	}
+
 
 	/* Load the ram image */
-	if (dhd_load_file_bytes(dhd, cmd, fp, fsize, start)) {
+	if (dhd_load_file_bytes(dhd, cmd, fp, fsize, start, memblock_sz, verify)) {
 		fprintf(stderr, "%s: error loading the ramimage at addr 0x%x\n",
 		        __FUNCTION__, start);
 		ret = -1;
@@ -1720,8 +1832,14 @@ dhd_download(void *dhd, cmd_t *cmd, char **argv)
 	}
 
 	if (trx_file) {
-		if (overlays) {
-		} else {
+
+		filepos = ftell(fp);
+		if (filepos == -1) {
+			fprintf(stderr, "%s: ftell failed.\n", __FUNCTION__);
+		}
+
+		if (BUS_TYPE_SDIO == bustype) {
+
 		}
 	}
 
@@ -1754,17 +1872,29 @@ dhd_download(void *dhd, cmd_t *cmd, char **argv)
 
 	/* start running the downloaded code if not suppressed */
 	if (run) {
-		if ((ret = dhd_iovar_setint(dhd, "download", FALSE))) {
+		if ((ret = dhd_iovar_setint(dhd, "dwnldstate", FALSE))) {
+
 			fprintf(stderr, "%s: failed to take dongle out of download mode\n",
 			        __FUNCTION__);
+			/* USB Error return values */
+			if (BUS_TYPE_USB == bustype) {
+				if (ret == -1)
+					fprintf(stderr, "%s: CPU is not in RUNNABLE State\n",
+						__FUNCTION__);
+				else
+					fprintf(stderr, "%s: Error in setting CPU to RUN mode.\n",
+						__FUNCTION__);
+			}
 			goto exit;
 		}
+	}
+	if (embedded_ucode) {
+/* GREG remove */	
 	}
 
 exit:
 	if (fp)
 		fclose(fp);
-
 
 	return ret;
 #endif /* BWL_FILESYSTEM_SUPPORT */
@@ -2140,6 +2270,9 @@ static dbg_msg_t dhd_msgs[] = {
 	{DHD_GLOM_VAL,	"glom"},
 	{DHD_EVENT_VAL,	"event"},
 	{DHD_BTA_VAL,	"bta"},
+	{DHD_ISCAN_VAL,	"iscan"},
+	{DHD_ARPOE_VAL,	"arpoe"},
+	{DHD_REORDER_VAL, "reorder"},
 	{0,		NULL}
 };
 
@@ -2531,6 +2664,33 @@ dhd_varstr(void *dhd, cmd_t *cmd, char **argv)
 }
 
 
+static int
+dhd_hostreorder_flows(void *dhd, cmd_t *cmd, char **argv)
+{
+	int ret, count, i = 0;
+	void *ptr;
+	uint8 *flow_id;
+
+
+	if ((ret = dhd_var_getbuf(dhd, cmd->name, NULL, 0, &ptr)) < 0) {
+		printf("error getting reorder flows from the host\n");
+		return ret;
+	}
+	flow_id = (uint8 *)ptr;
+	count = *flow_id;
+	if (!count)
+		printf("there are no active flows\n");
+	else {
+		printf("flows(%d): \t", count);
+		while (i++ < count)
+			printf("%d  ", *flow_id++);
+		printf("\n");
+	}
+	return 0;
+}
+
+
+#ifdef WLBTAMP
 
 #define MATCH_OP(op, opstr)	(strlen(op) == strlen(opstr) && strncmp(op, opstr, strlen(op)) == 0)
 
@@ -2627,16 +2787,18 @@ wl_HCI_cmd(void *wl, cmd_t *cmd, char **argv)
 	return dhd_var_setbuf(wl, cmd->name, cpkt, HCI_CMD_PREAMBLE_SIZE + plen);
 }
 
+typedef union {
+	uint8 buf[HCI_ACL_DATA_PREAMBLE_SIZE + 2048];
+	uint32 alignme;
+} g_hci_dbuf_t;
+
 static int
 wl_HCI_ACL_data(void *wl, cmd_t *cmd, char **argv)
 {
 	/* Align struct. Also declare static so that large array isn't allocated
 	 * from the stack.
 	 */
-	static union {
-		uint8 buf[HCI_ACL_DATA_PREAMBLE_SIZE + 2048];
-		uint32 alignme;
-	} g_hci_dbuf;
+	static g_hci_dbuf_t g_hci_dbuf;
 
 	amp_hci_ACL_data_t *dpkt = (amp_hci_ACL_data_t *)&g_hci_dbuf.buf[0];
 	uint16 dlen;
@@ -2657,6 +2819,7 @@ wl_HCI_ACL_data(void *wl, cmd_t *cmd, char **argv)
 
 	return dhd_var_setbuf(wl, cmd->name, dpkt, HCI_ACL_DATA_PREAMBLE_SIZE + dlen);
 }
+#endif /* WLBTAMP */
 
 /* These two utility functions are used by dhdu_linux.c
  * The code is taken from wlu.c.

@@ -65,7 +65,7 @@ static int out_set_sample_rate(struct audio_stream *stream, uint32_t rate)
     struct legacy_stream_out *out =
         reinterpret_cast<struct legacy_stream_out *>(stream);
 
-    LOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
+    ALOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
     /* TODO: implement this */
     return 0;
 }
@@ -84,18 +84,19 @@ static uint32_t out_get_channels(const struct audio_stream *stream)
     return out->legacy_out->channels();
 }
 
-static int out_get_format(const struct audio_stream *stream)
+static audio_format_t out_get_format(const struct audio_stream *stream)
 {
     const struct legacy_stream_out *out =
         reinterpret_cast<const struct legacy_stream_out *>(stream);
-    return out->legacy_out->format();
+    // legacy API, don't change return type
+    return (audio_format_t) out->legacy_out->format();
 }
 
-static int out_set_format(struct audio_stream *stream, int format)
+static int out_set_format(struct audio_stream *stream, audio_format_t format)
 {
     struct legacy_stream_out *out =
         reinterpret_cast<struct legacy_stream_out *>(stream);
-    LOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
+    ALOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
     /* TODO: implement me */
     return 0;
 }
@@ -162,6 +163,14 @@ static int out_get_render_position(const struct audio_stream_out *stream,
     return out->legacy_out->getRenderPosition(dsp_frames);
 }
 
+static int out_get_next_write_timestamp(const struct audio_stream_out *stream,
+                                        int64_t *timestamp)
+{
+    const struct legacy_stream_out *out =
+        reinterpret_cast<const struct legacy_stream_out *>(stream);
+    return out->legacy_out->getNextWriteTimestamp(timestamp);
+}
+
 static int out_add_audio_effect(const struct audio_stream *stream, effect_handle_t effect)
 {
     return 0;
@@ -185,7 +194,7 @@ static int in_set_sample_rate(struct audio_stream *stream, uint32_t rate)
     struct legacy_stream_in *in =
         reinterpret_cast<struct legacy_stream_in *>(stream);
 
-    LOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
+    ALOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
     /* TODO: implement this */
     return 0;
 }
@@ -204,18 +213,19 @@ static uint32_t in_get_channels(const struct audio_stream *stream)
     return in->legacy_in->channels();
 }
 
-static int in_get_format(const struct audio_stream *stream)
+static audio_format_t in_get_format(const struct audio_stream *stream)
 {
     const struct legacy_stream_in *in =
         reinterpret_cast<const struct legacy_stream_in *>(stream);
-    return in->legacy_in->format();
+    // legacy API, don't change return type
+    return (audio_format_t) in->legacy_in->format();
 }
 
-static int in_set_format(struct audio_stream *stream, int format)
+static int in_set_format(struct audio_stream *stream, audio_format_t format)
 {
     struct legacy_stream_in *in =
         reinterpret_cast<struct legacy_stream_in *>(stream);
-    LOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
+    ALOGE("(%s:%d) %s: Implement me!", __FILE__, __LINE__, __func__);
     /* TODO: implement me */
     return 0;
 }
@@ -315,6 +325,7 @@ static uint32_t adev_get_supported_devices(const struct audio_hw_device *dev)
             AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET |
             AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
             AUDIO_DEVICE_OUT_ALL_SCO |
+            AUDIO_DEVICE_OUT_FM_TX |   // not ANDROID_DEFAULT_CODE
             AUDIO_DEVICE_OUT_DEFAULT |
             /* IN */
             AUDIO_DEVICE_IN_COMMUNICATION |
@@ -322,8 +333,10 @@ static uint32_t adev_get_supported_devices(const struct audio_hw_device *dev)
             AUDIO_DEVICE_IN_BUILTIN_MIC |
             AUDIO_DEVICE_IN_WIRED_HEADSET |
             AUDIO_DEVICE_IN_AUX_DIGITAL |
+            AUDIO_DEVICE_IN_VOICE_CALL | // not ANDROID_DEFAULT_CODE
             AUDIO_DEVICE_IN_BACK_MIC |
             AUDIO_DEVICE_IN_ALL_SCO |
+            AUDIO_DEVICE_IN_FM | // not ANDROID_DEFAULT_CODE
             AUDIO_DEVICE_IN_DEFAULT);
 }
 
@@ -346,10 +359,17 @@ static int adev_set_master_volume(struct audio_hw_device *dev, float volume)
     return ladev->hwif->setMasterVolume(volume);
 }
 
-static int adev_set_mode(struct audio_hw_device *dev, int mode)
+static int adev_get_master_volume(struct audio_hw_device *dev, float* volume)
 {
     struct legacy_audio_device *ladev = to_ladev(dev);
-    return ladev->hwif->setMode(mode);
+    return ladev->hwif->getMasterVolume(volume);
+}
+
+static int adev_set_mode(struct audio_hw_device *dev, audio_mode_t mode)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    // as this is the legacy API, don't change it to use audio_mode_t instead of int
+    return ladev->hwif->setMode((int) mode);
 }
 
 static int adev_set_mic_mute(struct audio_hw_device *dev, bool state)
@@ -381,18 +401,18 @@ static char * adev_get_parameters(const struct audio_hw_device *dev,
 }
 
 static size_t adev_get_input_buffer_size(const struct audio_hw_device *dev,
-                                         uint32_t sample_rate, int format,
-                                         int channel_count)
+                                         const struct audio_config *config)
 {
     const struct legacy_audio_device *ladev = to_cladev(dev);
-    return ladev->hwif->getInputBufferSize(sample_rate, format, channel_count);
+    return ladev->hwif->getInputBufferSize(config->sample_rate, (int) config->format,
+                                           popcount(config->channel_mask));
 }
 
 static int adev_open_output_stream(struct audio_hw_device *dev,
-                                   uint32_t devices,
-                                   int *format,
-                                   uint32_t *channels,
-                                   uint32_t *sample_rate,
+                                   audio_io_handle_t handle,
+                                   audio_devices_t devices,
+                                   audio_output_flags_t flags,
+                                   struct audio_config *config,
                                    struct audio_stream_out **stream_out)
 {
     struct legacy_audio_device *ladev = to_ladev(dev);
@@ -404,8 +424,9 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     if (!out)
         return -ENOMEM;
 
-    out->legacy_out = ladev->hwif->openOutputStream(devices, format, channels,
-                                                    sample_rate, &status);
+    out->legacy_out = ladev->hwif->openOutputStream(devices, (int *) &config->format,
+                                                    &config->channel_mask,
+                                                    &config->sample_rate, &status);
     if (!out->legacy_out) {
         ret = status;
         goto err_open;
@@ -427,6 +448,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     out->stream.set_volume = out_set_volume;
     out->stream.write = out_write;
     out->stream.get_render_position = out_get_render_position;
+    out->stream.get_next_write_timestamp = out_get_next_write_timestamp;
 
     *stream_out = &out->stream;
     return 0;
@@ -449,9 +471,9 @@ static void adev_close_output_stream(struct audio_hw_device *dev,
 
 /** This method creates and opens the audio hardware input stream */
 static int adev_open_input_stream(struct audio_hw_device *dev,
-                                  uint32_t devices, int *format,
-                                  uint32_t *channels, uint32_t *sample_rate,
-                                  audio_in_acoustics_t acoustics,
+                                  audio_io_handle_t handle,
+                                  audio_devices_t devices,
+                                  struct audio_config *config,
                                   struct audio_stream_in **stream_in)
 {
     struct legacy_audio_device *ladev = to_ladev(dev);
@@ -463,9 +485,9 @@ static int adev_open_input_stream(struct audio_hw_device *dev,
     if (!in)
         return -ENOMEM;
 
-    in->legacy_in = ladev->hwif->openInputStream(devices, format, channels,
-                                    sample_rate, &status,
-                                    (AudioSystem::audio_in_acoustics)acoustics);
+    in->legacy_in = ladev->hwif->openInputStream(devices, (int *) &config->format,
+                                                 &config->channel_mask, &config->sample_rate,
+                                                 &status, (AudioSystem::audio_in_acoustics)0);
     if (!in->legacy_in) {
         ret = status;
         goto err_open;
@@ -495,6 +517,143 @@ err_open:
     *stream_in = NULL;
     return ret;
 }
+// not ANDROID_DEFAULT_CODE
+//-----------------------------------------------------------------
+static int adev_set_emparameter(struct audio_hw_device *dev,void *ptr , int len)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->SetEMParameter(ptr,len);
+}
+
+static int adev_get_emparameter(struct audio_hw_device *dev,void *ptr , int len)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->GetEMParameter(ptr,len);
+}
+
+static int adev_set_audiocommand(struct audio_hw_device *dev,int par1 , int par2)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->SetAudioCommand(par1,par2);
+}
+
+static int adev_get_audiocommand(struct audio_hw_device *dev,int par1)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->GetAudioCommand(par1);
+}
+
+static int adev_set_audiodata(struct audio_hw_device *dev,int par1,size_t len,void *ptr)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->SetAudioData(par1,len,ptr);
+}
+
+static int adev_get_audiodata(struct audio_hw_device *dev,int par1,size_t len,void *ptr)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->GetAudioData(par1,len,ptr);
+}
+
+static int adev_set_acf_previewparameter(struct audio_hw_device *dev,void *ptr , int len)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->SetACFPreviewParameter(ptr,len);
+}
+
+static int adev_set_hcf_previewparameter(struct audio_hw_device *dev,void *ptr , int len)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->SetHCFPreviewParameter(ptr,len);
+}
+
+static int adev_xway_play_start(struct audio_hw_device *dev,int sample_rate)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayPlay_Start(sample_rate);
+}
+
+static int adev_xway_play_stop(struct audio_hw_device *dev)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayPlay_Stop();
+}
+
+static int adev_xway_play_write(struct audio_hw_device *dev,void* buffer ,int size_bytes)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayPlay_Write(buffer,size_bytes);
+}
+
+static int adev_xway_getfreebuffercount(struct audio_hw_device *dev)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayPlay_GetFreeBufferCount();
+}
+
+static int adev_xway_rec_start(struct audio_hw_device *dev,int smple_rate)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayRec_Start(smple_rate);
+}
+
+static int adev_xway_rec_stop(struct audio_hw_device *dev)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayRec_Stop();
+}
+
+static int adev_xway_rec_read(struct audio_hw_device *dev,void* buffer , int size_bytes)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->xWayRec_Read(buffer,size_bytes);
+}
+
+//add by wendy
+static int adev_ReadRefFromRing(struct audio_hw_device *dev,void*buf, uint32_t datasz,void* DLtime)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->ReadRefFromRing(buf, datasz, DLtime);
+}
+static int adev_GetVoiceUnlockULTime(struct audio_hw_device *dev,void* DLtime)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->GetVoiceUnlockULTime( DLtime);
+}
+static int adev_SetVoiceUnlockSRC(struct audio_hw_device *dev,uint outSR, uint outChannel)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->SetVoiceUnlockSRC(outSR,outChannel);
+}
+static bool adev_startVoiceUnlockDL(struct audio_hw_device *dev)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->startVoiceUnlockDL();
+}
+static bool adev_stopVoiceUnlockDL(struct audio_hw_device *dev)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->stopVoiceUnlockDL();
+}
+
+static void adev_freeVoiceUnlockDLInstance(struct audio_hw_device *dev)
+{
+    struct legacy_audio_device *ladev = to_ladev(dev);
+    return ladev->hwif->freeVoiceUnlockDLInstance();
+}
+static int adev_GetVoiceUnlockDLLatency(struct audio_hw_device *dev)    
+{
+ struct legacy_audio_device *ladev = to_ladev(dev);
+ return ladev->hwif->GetVoiceUnlockDLLatency();
+
+}
+static bool adev_getVoiceUnlockDLInstance(struct audio_hw_device *dev)
+{
+struct legacy_audio_device *ladev = to_ladev(dev);
+return ladev->hwif->getVoiceUnlockDLInstance();
+}
+
+//-------------------------------------------------------------------------
 
 static void adev_close_input_stream(struct audio_hw_device *dev,
                                struct audio_stream_in *stream)
@@ -545,7 +704,7 @@ static int legacy_adev_open(const hw_module_t* module, const char* name,
         return -ENOMEM;
 
     ladev->device.common.tag = HARDWARE_DEVICE_TAG;
-    ladev->device.common.version = 0;
+    ladev->device.common.version = AUDIO_DEVICE_API_VERSION_2_0;
     ladev->device.common.module = const_cast<hw_module_t*>(module);
     ladev->device.common.close = legacy_adev_close;
 
@@ -553,6 +712,7 @@ static int legacy_adev_open(const hw_module_t* module, const char* name,
     ladev->device.init_check = adev_init_check;
     ladev->device.set_voice_volume = adev_set_voice_volume;
     ladev->device.set_master_volume = adev_set_master_volume;
+    ladev->device.get_master_volume = adev_get_master_volume;
     ladev->device.set_mode = adev_set_mode;
     ladev->device.set_mic_mute = adev_set_mic_mute;
     ladev->device.get_mic_mute = adev_get_mic_mute;
@@ -564,7 +724,32 @@ static int legacy_adev_open(const hw_module_t* module, const char* name,
     ladev->device.open_input_stream = adev_open_input_stream;
     ladev->device.close_input_stream = adev_close_input_stream;
     ladev->device.dump = adev_dump;
-
+// not ANDROID_DEFAULT_CODE
+    ladev->device.SetEMParameter = adev_set_emparameter;
+    ladev->device.GetEMParameter = adev_get_emparameter;
+    ladev->device.SetAudioCommand = adev_set_audiocommand;
+    ladev->device.GetAudioCommand = adev_get_audiocommand;
+    ladev->device.SetAudioData = adev_set_audiodata;
+    ladev->device.GetAudioData = adev_get_audiodata;
+    ladev->device.SetACFPreviewParameter = adev_set_acf_previewparameter;
+    ladev->device.SetHCFPreviewParameter = adev_set_hcf_previewparameter;
+    ladev->device.xWayPlay_Start = adev_xway_play_start;
+    ladev->device.xWayPlay_Stop = adev_xway_play_stop;
+    ladev->device.xWayPlay_Write = adev_xway_play_write;
+    ladev->device.xWayPlay_GetFreeBufferCount = adev_xway_getfreebuffercount;
+    ladev->device.xWayRec_Start = adev_xway_rec_start;
+    ladev->device.xWayRec_Stop = adev_xway_rec_stop;
+    ladev->device.xWayRec_Read = adev_xway_rec_read;
+    //added by wendy
+    ladev->device.ReadRefFromRing = adev_ReadRefFromRing;
+    ladev->device.GetVoiceUnlockULTime = adev_GetVoiceUnlockULTime;
+    ladev->device.SetVoiceUnlockSRC = adev_SetVoiceUnlockSRC;
+    ladev->device.startVoiceUnlockDL = adev_startVoiceUnlockDL;
+    ladev->device.stopVoiceUnlockDL = adev_stopVoiceUnlockDL;
+    ladev->device.freeVoiceUnlockDLInstance = adev_freeVoiceUnlockDLInstance;
+    ladev->device.GetVoiceUnlockDLLatency = adev_GetVoiceUnlockDLLatency;
+    ladev->device.getVoiceUnlockDLInstance = adev_getVoiceUnlockDLInstance;
+// not ANDROID_DEFAULT_CODE
     ladev->hwif = createAudioHardware();
     if (!ladev->hwif) {
         ret = -EIO;
@@ -588,8 +773,8 @@ struct legacy_audio_module HAL_MODULE_INFO_SYM = {
     module: {
         common: {
             tag: HARDWARE_MODULE_TAG,
-            version_major: 1,
-            version_minor: 0,
+            module_api_version: AUDIO_MODULE_API_VERSION_0_1,
+            hal_api_version: HARDWARE_HAL_API_VERSION,
             id: AUDIO_HARDWARE_MODULE_ID,
             name: "LEGACY Audio HW HAL",
             author: "The Android Open Source Project",

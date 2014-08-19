@@ -1,8 +1,8 @@
 /*
- * Linux port of dhd command line utility.
+ * Linux port of dhd command line utility, hacked from wl utility.
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
- *
+ * Copyright (C) 1999-2012, Broadcom Corporation
+ * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: dhdu_linux.c,v 1.16.2.2 2010-12-16 08:12:11 Exp $
+ * $Id: dhdu_linux.c 308298 2012-01-14 01:35:34Z $
  */
 
 #include <stdio.h>
@@ -53,15 +53,24 @@ typedef u_int8_t u8;
 #include <wlioctl.h>
 #include <bcmcdc.h>
 #include <bcmutils.h>
+
+#if defined(RWL_WIFI) || defined(RWL_SOCKET) ||defined(RWL_SERIAL)
+#define RWL_ENABLE
+#endif 
+
 #include "dhdu.h"
+#ifdef RWL_ENABLE
+#include "wlu_remote.h"
+#include "wlu_client_shared.h"
+#include "wlu_pipe.h"
+#endif /* RWL_ENABLE */
 #include <netdb.h>
+#include <netinet/in.h>
 #include <dhdioctl.h>
 #include "dhdu_common.h"
 
-extern int wl_get(void *wl, int cmd, void *buf, int len);
-extern int wl_set(void *wl, int cmd, void *buf, int len);
-
 char *av0;
+static int rwl_os_type = LINUX_OS;
 /* Search the dhd_cmds table for a matching command name.
  * Return the matching command or NULL if no match found.
  */
@@ -84,7 +93,7 @@ syserr(char *s)
 	exit(errno);
 }
 
-/* This function is called by ioctl_setinformation_fe or ioctl_queryinformation_fe 
+/* This function is called by ioctl_setinformation_fe or ioctl_queryinformation_fe
  * for executing  remote commands or local commands
  */
 static int
@@ -95,8 +104,18 @@ dhd_ioctl(void *dhd, int cmd, void *buf, int len, bool set)
 	int ret = 0;
 	int s;
 	/* By default try to execute wl commands */
-	int driver_magic = DHD_IOCTL_MAGIC;
-	int get_magic = DHD_GET_MAGIC;
+	int driver_magic = WLC_IOCTL_MAGIC;
+	int get_magic = WLC_GET_MAGIC;
+
+	/* For local dhd commands execute dhd. For wifi transport we still
+	 * execute wl commands.
+	 */
+	if (remote_type == NO_REMOTE && strncmp (buf, RWL_WIFI_ACTION_CMD,
+		strlen(RWL_WIFI_ACTION_CMD)) && strncmp(buf, RWL_WIFI_GET_ACTION_CMD,
+		strlen(RWL_WIFI_GET_ACTION_CMD))) {
+		driver_magic = DHD_IOCTL_MAGIC;
+		get_magic = DHD_GET_MAGIC;
+	}
 
 	/* open socket to kernel */
 	if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -291,7 +310,17 @@ dhd_find(struct ifreq *ifr, char *type)
 static int
 ioctl_queryinformation_fe(void *wl, int cmd, void* input_buf, int *input_len)
 {
-	return dhd_ioctl(wl, cmd, input_buf, *input_len, FALSE);
+	if (remote_type == NO_REMOTE) {
+		return dhd_ioctl(wl, cmd, input_buf, *input_len, FALSE);
+	}
+#ifdef RWL_ENABLE
+	else {
+		return rwl_queryinformation_fe(wl, cmd, input_buf,
+			(unsigned long*)input_len, 0, RDHD_GET_IOCTL);
+	}
+#else /* RWL_ENABLE */
+	return IOCTL_ERROR;
+#endif /* RWL_ENABLE */
 }
 
 /* This function is called by wl_set to execute either local dhd command
@@ -300,17 +329,34 @@ ioctl_queryinformation_fe(void *wl, int cmd, void* input_buf, int *input_len)
 static int
 ioctl_setinformation_fe(void *wl, int cmd, void* buf, int *len)
 {
-	return dhd_ioctl(wl,  cmd, buf, *len, TRUE);
+	if (remote_type == NO_REMOTE) {
+		return dhd_ioctl(wl,  cmd, buf, *len, TRUE);
+	}
+#ifdef RWL_ENABLE
+	else {
+		return rwl_setinformation_fe(wl, cmd, buf, (unsigned long*)len, 0, RDHD_SET_IOCTL);
+
+	}
+#else /* RWL_ENABLE */
+	return IOCTL_ERROR;
+#endif /* RWL_ENABLE */
 }
 
-/* The function is replica of wl_get in wlu_linux.c. Optimize when we have some 
+/* The function is replica of wl_get in wlu_linux.c. Optimize when we have some
  * common code between wlu_linux.c and dhdu_linux.c
  */
 int
 wl_get(void *wl, int cmd, void *buf, int len)
 {
 	int error = BCME_OK;
-	error = (int)ioctl_queryinformation_fe(wl, cmd, buf, &len);
+	/* For RWL: When interfacing to a Windows client, need t add in OID_BASE */
+	if ((rwl_os_type == WIN32_OS) && (remote_type != NO_REMOTE)) {
+		error = (int)ioctl_queryinformation_fe(wl, WL_OID_BASE + cmd, buf, &len);
+	} else {
+		error = (int)ioctl_queryinformation_fe(wl, cmd, buf, &len);
+	}
+	if (error == SERIAL_PORT_ERR)
+		return SERIAL_PORT_ERR;
 
 	if (error != 0)
 		return IOCTL_ERROR;
@@ -318,7 +364,7 @@ wl_get(void *wl, int cmd, void *buf, int len)
 	return error;
 }
 
-/* The function is replica of wl_set in wlu_linux.c. Optimize when we have some 
+/* The function is replica of wl_set in wlu_linux.c. Optimize when we have some
  * common code between wlu_linux.c and dhdu_linux.c
  */
 int
@@ -326,13 +372,34 @@ wl_set(void *wl, int cmd, void *buf, int len)
 {
 	int error = BCME_OK;
 
-	error = (int)ioctl_setinformation_fe(wl, cmd, buf, &len);
+	/* For RWL: When interfacing to a Windows client, need t add in OID_BASE */
+	if ((rwl_os_type == WIN32_OS) && (remote_type != NO_REMOTE)) {
+		error = (int)ioctl_setinformation_fe(wl, WL_OID_BASE + cmd, buf, &len);
+	} else {
+		error = (int)ioctl_setinformation_fe(wl, cmd, buf, &len);
+	}
+
+	if (error == SERIAL_PORT_ERR)
+		return SERIAL_PORT_ERR;
 
 	if (error != 0) {
 		return IOCTL_ERROR;
 	}
 	return error;
 }
+
+int
+wl_validatedev(void *dev_handle)
+{
+	int retval = 1;
+	struct ifreq *ifr = (struct ifreq *)dev_handle;
+	/* validate the interface */
+	if (!ifr->ifr_name || wl_check((void *)ifr)) {
+		retval = 0;
+	}
+	return retval;
+}
+
 /* Main client function
  * The code is mostly from wlu_linux.c. This function takes care of executing remote dhd commands
  * along with the local dhd commands now.
@@ -345,9 +412,13 @@ main(int argc, char **argv)
 	int err = 0;
 	int help = 0;
 	int status = CMD_DHD;
+#ifdef RWL_SOCKET
+	struct ipv4_addr temp;
+#endif /* RWL_SOCKET */
+
 	UNUSED_PARAMETER(argc);
 
-	av0 = dhdu_av0 = argv[0];
+	av0 = argv[0];
 	memset(&ifr, 0, sizeof(ifr));
 	argv++;
 
@@ -355,8 +426,94 @@ main(int argc, char **argv)
 		if (ifname)
 			strncpy(ifr.ifr_name, ifname, IFNAMSIZ);
 	}
+	/* Linux client looking for a Win32 server */
+	if (*argv && strncmp (*argv, "--wince", strlen(*argv)) == 0) {
+		rwl_os_type = WIN32_OS;
+		argv++;
+	}
 
-	err = process_args(&ifr, argv);
+	/* RWL socket transport Usage: --socket ipaddr [port num] */
+	if (*argv && strncmp (*argv, "--socket", strlen(*argv)) == 0) {
+		argv++;
+
+		remote_type = REMOTE_SOCKET;
+#ifdef RWL_SOCKET
+		if (!(*argv)) {
+			rwl_usage(remote_type);
+			return err;
+		}
+
+		if (!dhd_atoip(*argv, &temp)) {
+			rwl_usage(remote_type);
+			return err;
+		}
+		g_rwl_servIP = *argv;
+		argv++;
+
+		g_rwl_servport = DEFAULT_SERVER_PORT;
+		if ((*argv) && isdigit(**argv)) {
+			g_rwl_servport = atoi(*argv);
+			argv++;
+		}
+#endif /* RWL_SOCKET */
+	}
+
+	/* RWL from system serial port on client to uart dongle port on server */
+	/* Usage: --dongle /dev/ttyS0 */
+	if (*argv && strncmp (*argv, "--dongle", strlen(*argv)) == 0) {
+		argv++;
+		remote_type = REMOTE_DONGLE;
+	}
+
+	/* RWL over wifi.  Usage: --wifi mac_address */
+	if (*argv && strncmp (*argv, "--wifi", strlen(*argv)) == 0) {
+		argv++;
+#ifdef RWL_WIFI
+		remote_type = NO_REMOTE;
+		if (!ifr.ifr_name[0])
+		{
+			dhd_find(&ifr, "wl");
+		}
+		/* validate the interface */
+		if (!ifr.ifr_name[0] || wl_check((void*)&ifr)) {
+			fprintf(stderr, "%s: wl driver adapter not found\n", av0);
+			exit(1);
+		}
+		remote_type = REMOTE_WIFI;
+
+		if (argc < 4) {
+			rwl_usage(remote_type);
+			return err;
+		}
+		/* copy server mac address to local buffer for later use by findserver cmd */
+		if (!dhd_ether_atoe(*argv, (struct ether_addr *)g_rwl_buf_mac)) {
+			fprintf(stderr,
+			        "could not parse as an ethernet MAC address\n");
+			return FAIL;
+		}
+		argv++;
+#else /* RWL_WIFI */
+		remote_type = REMOTE_WIFI;
+#endif /* RWL_WIFI */
+	}
+
+	/* Process for local dhd */
+	if (remote_type == NO_REMOTE) {
+		err = process_args(&ifr, argv);
+		return err;
+	}
+
+#ifdef RWL_ENABLE
+	if (*argv) {
+		err = process_args(&ifr, argv);
+		if ((err == SERIAL_PORT_ERR) && (remote_type == REMOTE_DONGLE)) {
+			DPRINT_ERR(ERR, "\n Retry again\n");
+			err = process_args((struct ifreq*)&ifr, argv);
+		}
+		return err;
+	}
+	rwl_usage(remote_type);
+#endif /* RWL_ENABLE */
 
 	return err;
 }
@@ -374,6 +531,21 @@ process_args(struct ifreq* ifr, char **argv)
 	int err = BCME_OK;
 	cmd_t *cmd = NULL;
 	while (*argv) {
+#ifdef RWL_ENABLE
+		if ((strcmp (*argv, "sh") == 0) && (remote_type != NO_REMOTE)) {
+			argv++; /* Get the shell command */
+			if (*argv) {
+				/* Register handler in case of shell command only */
+				signal(SIGINT, ctrlc_handler);
+				err = rwl_shell_cmd_proc((void*)ifr, argv, SHELL_CMD);
+			} else {
+				DPRINT_ERR(ERR,
+				"Enter the shell command (e.g ls(Linux) or dir(Win CE) \n");
+				err = BCME_ERROR;
+			}
+			return err;
+		}
+#endif /* RWL_ENABLE */
 		if ((status = dhd_option(&argv, &ifname, &help)) == CMD_OPT) {
 			if (help)
 				break;
@@ -385,17 +557,19 @@ process_args(struct ifreq* ifr, char **argv)
 		else if (status == CMD_ERR)
 		    break;
 
+		if (remote_type == NO_REMOTE) {
 		/* use default interface */
-		if (!ifr->ifr_name[0])
-			dhd_find(ifr, "dhd");
-		/* validate the interface */
-		if (!ifr->ifr_name[0] || dhd_check((void *)ifr)) {
-		if (strcmp("dldn", *argv) != 0) {
-			fprintf(stderr, "%s: dhd driver adapter not found\n", av0);
-			exit(BCME_ERROR);
+			if (!ifr->ifr_name[0])
+				dhd_find(ifr, "dhd");
+			/* validate the interface */
+			if (!ifr->ifr_name[0] || dhd_check((void *)ifr)) {
+			if (strcmp("dldn", *argv) != 0) {
+				fprintf(stderr, "%s: dhd driver adapter not found\n", av0);
+				exit(BCME_ERROR);
+				}
 			}
-		}
 
+		}
 		/* search for command */
 		cmd = dhd_find_cmd(*argv);
 		/* if not found, use default set_var and get_var commands */
@@ -414,7 +588,7 @@ process_args(struct ifreq* ifr, char **argv)
 		if (cmd) {
 			dhd_cmd_usage(cmd);
 		} else {
-			printf("%s: Unrecognized command \"%s\", type -h for help\n",
+			DPRINT_ERR(ERR, "%s: Unrecognized command \"%s\", type -h for help\n",
 			           av0, *argv);
 		}
 	} else if (!cmd)
@@ -440,3 +614,32 @@ rwl_shell_killproc(int pid)
 	kill(pid, SIGKILL);
 }
 
+#ifdef RWL_SOCKET
+/* validate hostname/ip given by the client */
+int
+validate_server_address()
+{
+	struct hostent *he;
+	struct ipv4_addr temp;
+
+	if (!dhd_atoip(g_rwl_servIP, &temp)) {
+	/* Wrong IP address format check for hostname */
+		if ((he = gethostbyname(g_rwl_servIP)) != NULL) {
+			if (!dhd_atoip(*he->h_addr_list, &temp)) {
+				g_rwl_servIP = inet_ntoa(*(struct in_addr *)*he->h_addr_list);
+				if (g_rwl_servIP == NULL) {
+					DPRINT_ERR(ERR, "Error at inet_ntoa \n");
+					return FAIL;
+				}
+			} else {
+				DPRINT_ERR(ERR, "Error in IP address \n");
+				return FAIL;
+			}
+		} else {
+			DPRINT_ERR(ERR, "Enter correct IP address/hostname format\n");
+			return FAIL;
+		}
+	}
+	return SUCCESS;
+}
+#endif /* RWL_SOCKET */

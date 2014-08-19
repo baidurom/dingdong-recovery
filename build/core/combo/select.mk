@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2006 The Android Open Source Project
 #
@@ -60,13 +91,33 @@ $(combo_target)STATIC_LIB_SUFFIX := .a
 include $(BUILD_COMBOS)/$(combo_target)$(combo_os_arch).mk
 
 ifneq ($(USE_CCACHE),)
+  # The default check uses size and modification time, causing false misses
+  # since the mtime depends when the repo was checked out
+  export CCACHE_COMPILERCHECK := content
+
+  # See man page, optimizations to get more cache hits
+  # implies that __DATE__ and __TIME__ are not critical for functionality.
+  # Ignore include file modification time since it will depend on when
+  # the repo was checked out
+  export CCACHE_SLOPPINESS := time_macros,include_file_mtime,file_macro
+
+  # Turn all preprocessor absolute paths into relative paths.
+  # Fixes absolute paths in preprocessed source due to use of -g.
+  # We don't really use system headers much so the rootdir is
+  # fine; ensures these paths are relative for all Android trees
+  # on a workstation.
+  export CCACHE_BASEDIR := /
+
   CCACHE_HOST_TAG := $(HOST_PREBUILT_TAG)
   # If we are cross-compiling Windows binaries on Linux
   # then use the linux ccache binary instead.
   ifeq ($(HOST_OS)-$(BUILD_OS),windows-linux)
     CCACHE_HOST_TAG := linux-$(BUILD_ARCH)
   endif
-  ccache := prebuilt/$(CCACHE_HOST_TAG)/ccache/ccache
+  ccache := prebuilts/misc/$(CCACHE_HOST_TAG)/ccache/ccache
+  ifneq ($(ANDROID_CCACHE),)
+     ccache := $(ANDROID_CCACHE)
+  endif
   # Check that the executable is here.
   ccache := $(strip $(wildcard $(ccache)))
   ifdef ccache

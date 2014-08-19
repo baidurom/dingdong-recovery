@@ -1,7 +1,7 @@
 /*
  * Misc system wide definitions
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: bcmdefs.h,v 13.68.2.8 2011-01-08 04:04:19 Exp $
+ * $Id: bcmdefs.h 316830 2012-02-23 20:29:22Z $
  */
 
 #ifndef	_bcmdefs_h_
@@ -23,22 +23,45 @@
 
 
 
+
+#define BCM_REFERENCE(data)	((void)(data))
+
+
+#define STATIC_ASSERT(expr) { \
+	 \
+	typedef enum { _STATIC_ASSERT_NOT_CONSTANT = (expr) } _static_assert_e; \
+	 \
+	typedef char STATIC_ASSERT_FAIL[(expr) ? 1 : -1]; \
+}
+
+
 #define bcmreclaimed 		0
 #define _data	_data
 #define _fn	_fn
+#define BCMPREATTACHDATA(_data)	_data
+#define BCMPREATTACHFN(_fn)	_fn
 #define _data	_data
 #define _fn		_fn
 #define _fn	_fn
+#define	BCMNMIATTACHFN(_fn)	_fn
+#define	BCMNMIATTACHDATA(_data)	_data
 #define CONST	const
+#ifndef BCMFASTPATH
 #define BCMFASTPATH
-
+#define BCMFASTPATH_HOST
+#endif 
 
 
 
 #define _data	_data
+#define BCMROMDAT_NAME(_data)	_data
 #define _fn		_fn
 #define _fn	_fn
 #define STATIC	static
+#define BCMROMDAT_ARYSIZ(data)	ARRAYSIZE(data)
+#define BCMROMDAT_SIZEOF(data)	sizeof(data)
+#define BCMROMDAT_APATCH(data)
+#define BCMROMDAT_SPATCH(data)
 
 
 #define	SI_BUS			0
@@ -153,11 +176,21 @@ typedef struct {
 #endif
 
 
+#ifndef SDALIGN
+#define SDALIGN	32
+#endif
+
+
 #define BCMDONGLEHDRSZ 12
 #define BCMDONGLEPADSZ 16
 
 #define BCMDONGLEOVERHEAD	(BCMDONGLEHDRSZ + BCMDONGLEPADSZ)
 
+
+#if defined(NO_BCMDBG_ASSERT)
+# undef BCMDBG_ASSERT
+# undef BCMASSERT_LOG
+#endif
 
 #if defined(BCMASSERT_LOG)
 #define BCMASSERT_SUPPORT
@@ -184,6 +217,15 @@ typedef struct {
 
 #define	MAXSZ_NVRAM_VARS	4096
 
-#define LOCATOR_EXTERN static
 
+#ifdef DL_NVRAM
+#define NVRAM_ARRAY_MAXSIZE	DL_NVRAM
+#else
+#define NVRAM_ARRAY_MAXSIZE	MAXSZ_NVRAM_VARS
+#endif 
+
+#ifdef BCMUSBDEV_ENABLED
+extern uint32 gFWID;
 #endif
+
+#endif 

@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2008 The Android Open Source Project
 #
@@ -19,6 +50,18 @@
 ifdef base-rules-hook
 $(if $(base-rules-hook),)
 endif
+
+_are_aidl := $(filter %.aidl,$(LOCAL_SRC_FILES))
+_not_aidl := $(filter-out %.aidl,$(LOCAL_SRC_FILES))
+_are_aidl := $(foreach item,\
+  $(wildcard $(foreach dummy,$(_are_aidl),$(LOCAL_PATH)/$(dummy))),\
+  $(patsubst $(LOCAL_PATH)/%,%,$(item)))
+
+
+LOCAL_SRC_FILES := $(strip $(_are_aidl) $(_not_aidl))
+
+LOCAL_CLASSPATH += $(ARTIFACT_DIR)/cls
+LOCAL_AIDL_INCLUDES += $(ARTIFACT_DIR)/cls
 
 ###########################################################
 ## Common instructions for a generic module.
@@ -50,57 +93,34 @@ endif
 #$(shell rm -f tag-list.csv)
 #tag-list-first-time := false
 #endif
-#comma := ,
-#empty :=
-#space := $(empty) $(empty)
 #$(shell echo $(lastword $(filter-out config/% out/%,$(MAKEFILE_LIST))),$(LOCAL_MODULE),$(strip $(LOCAL_MODULE_CLASS)),$(subst $(space),$(comma),$(sort $(LOCAL_MODULE_TAGS))) >> tag-list.csv)
 
+LOCAL_UNINSTALLABLE_MODULE := $(strip $(LOCAL_UNINSTALLABLE_MODULE))
 LOCAL_MODULE_TAGS := $(sort $(LOCAL_MODULE_TAGS))
 ifeq (,$(LOCAL_MODULE_TAGS))
-ifeq (true,$(LOCAL_UNINSTALLABLE_MODULE))
-LOCAL_MODULE_TAGS := optional
-else
-# Installable modules without tags fall back to user (which is changed to user eng below)
-LOCAL_MODULE_TAGS := user
+  LOCAL_MODULE_TAGS := optional
 endif
-#$(warning default tags: $(lastword $(filter-out config/% out/%,$(MAKEFILE_LIST))))
+
+# User tags are not allowed anymore.  Fail early because it will not be installed
+# like it used to be.
+ifneq ($(filter $(LOCAL_MODULE_TAGS),user),)
+  $(warning *** Module name: $(LOCAL_MODULE))
+  $(warning *** Makefile location: $(LOCAL_MODULE_MAKEFILE))
+  $(warning * )
+  $(warning * Module is attempting to use the 'user' tag.  This)
+  $(warning * used to cause the module to be installed automatically.)
+  $(warning * Now, the module must be listed in the PRODUCT_PACKAGES)
+  $(warning * section of a product makefile to have it installed.)
+  $(warning * )
+  $(error user tag detected on module.)
+
 endif
 
 # Only the tags mentioned in this test are expected to be set by module
 # makefiles. Anything else is either a typo or a source of unexpected
 # behaviors.
-ifneq ($(filter-out user debug eng tests optional samples shell_ash shell_mksh,$(LOCAL_MODULE_TAGS)),)
+ifneq ($(filter-out debug eng tests optional samples shell_ash shell_mksh,$(LOCAL_MODULE_TAGS)),)
 $(warning unusual tags $(LOCAL_MODULE_TAGS) on $(LOCAL_MODULE) at $(LOCAL_PATH))
-endif
-
-ifneq ($(filter $(LOCAL_MODULE_TAGS),user),)
-  ifeq ($(filter $(GRANDFATHERED_USER_MODULES),$(LOCAL_MODULE)),)
-    $(warning *** Module name: $(LOCAL_MODULE))
-    $(warning *** Makefile location: $(LOCAL_PATH))
-    $(warning * )
-    $(warning * Each module must use a LOCAL_MODULE_TAGS in its)
-    $(warning * Android.mk. Possible tags declared by a module:)
-    $(warning * )
-    $(warning *     optional, debug, eng, tests, samples)
-    $(warning * )
-    $(warning * If the module is expected to be in all builds)
-    $(warning * of a product, then it should use the)
-    $(warning * "optional" tag: )
-    $(warning * )
-    $(warning *    Add "LOCAL_MODULE_TAGS := optional" in the)
-    $(warning *    Android.mk for the affected module, and add)
-    $(warning *    the LOCAL_MODULE value for that component)
-    $(warning *    into the PRODUCT_PACKAGES section of product)
-    $(warning *    makefile(s) where it's necessary, if)
-    $(warning *    appropriate.)
-    $(warning * )
-    $(warning * If the component should be in EVERY build of ALL)
-    $(warning * products, then add its LOCAL_MODULE value to the)
-    $(warning * PRODUCT_PACKAGES section of)
-    $(warning * build/target/product/core.mk)
-    $(warning * )
-    $(error user tag detected on new module - user tags are only supported on legacy modules)
-  endif
 endif
 
 # Add implicit tags.
@@ -110,18 +130,18 @@ endif
 # find files like MODULE_LICENSE_GPL_AND_AFL but exclude files like
 # MODULE_LICENSE_LGPL.
 #
-ifneq ($(call find-parent-file,$(LOCAL_PATH),MODULE_LICENSE*_GPL* MODULE_LICENSE*_MPL*),)
+gpl_license_file := $(call find-parent-file,$(LOCAL_PATH),MODULE_LICENSE*_GPL* MODULE_LICENSE*_MPL*)
+ifneq ($(gpl_license_file),)
   LOCAL_MODULE_TAGS += gnu
+  ALL_GPL_MODULE_LICENSE_FILES := $(sort $(ALL_GPL_MODULE_LICENSE_FILES) $(gpl_license_file))
 endif
 
-#
-# If this module is listed on CUSTOM_MODULES, promote it to "user"
-# so that it will be installed in $(TARGET_OUT).
-#
-ifneq (,$(filter $(LOCAL_MODULE),$(CUSTOM_MODULES)))
-  LOCAL_MODULE_TAGS := $(sort $(LOCAL_MODULE_TAGS) user)
+LOCAL_MODULE_CLASS := $(strip $(LOCAL_MODULE_CLASS))
+ifneq ($(words $(LOCAL_MODULE_CLASS)),1)
+  $(error $(LOCAL_PATH): LOCAL_MODULE_CLASS must contain exactly one word, not "$(LOCAL_MODULE_CLASS)")
 endif
 
+ifneq (true,$(LOCAL_UNINSTALLABLE_MODULE))
 ifdef LOCAL_IS_HOST_MODULE
   partition_tag :=
 else
@@ -134,19 +154,6 @@ else
 endif
 endif
 
-LOCAL_MODULE_CLASS := $(strip $(LOCAL_MODULE_CLASS))
-ifneq ($(words $(LOCAL_MODULE_CLASS)),1)
-  $(error $(LOCAL_PATH): LOCAL_MODULE_CLASS must contain exactly one word, not "$(LOCAL_MODULE_CLASS)")
-endif
-
-# Those used to be implicitly ignored, but aren't any more.
-# As of 20100110 there are no apps with the user tag.
-ifeq ($(LOCAL_MODULE_CLASS),APPS)
-  ifneq ($(filter $(LOCAL_MODULE_TAGS),user),)
-    $(warning user tag on app $(LOCAL_MODULE) at $(LOCAL_PATH) - add your app to core.mk instead)
-  endif
-endif
-
 LOCAL_MODULE_PATH := $(strip $(LOCAL_MODULE_PATH))
 ifeq ($(LOCAL_MODULE_PATH),)
   LOCAL_MODULE_PATH := $($(my_prefix)OUT$(partition_tag)_$(LOCAL_MODULE_CLASS))
@@ -154,9 +161,27 @@ ifeq ($(LOCAL_MODULE_PATH),)
     $(error $(LOCAL_PATH): unhandled LOCAL_MODULE_CLASS "$(LOCAL_MODULE_CLASS)")
   endif
 endif
+endif # not LOCAL_UNINSTALLABLE_MODULE
 
 ifneq ($(strip $(LOCAL_BUILT_MODULE)$(LOCAL_INSTALLED_MODULE)),)
   $(error $(LOCAL_PATH): LOCAL_BUILT_MODULE and LOCAL_INSTALLED_MODULE must not be defined by component makefiles)
+endif
+
+HAVE_ALE_FEATURE := $(strip $(HAVE_ALE_FEATURE))
+ifeq ($(HAVE_ALE_FEATURE),yes)
+ifndef LOCAL_ALE_ENABLED
+LOCAL_ALE_ENABLED := true
+endif
+
+LOCAL_ALE_ENABLED:=$(strip $(LOCAL_ALE_ENABLED))
+ifneq ($(LOCAL_ALE_ENABLED),true)
+ifneq ($(LOCAL_ALE_ENABLED),false)
+$(error $(LOCAL_MODULE) set invalid value for LOCAL_ALE_ENABLED[true,false]: $(LOCAL_ALE_ENABLED))
+endif
+endif
+
+else
+LOCAL_ALE_ENABLED := false
 endif
 
 # Make sure that this IS_HOST/CLASS/MODULE combination is unique.
@@ -224,7 +249,8 @@ endif
 aidl_preprocess_import :=
 LOCAL_SDK_VERSION:=$(strip $(LOCAL_SDK_VERSION))
 ifdef LOCAL_SDK_VERSION
-ifeq ($(LOCAL_SDK_VERSION),current)
+ifeq ($(LOCAL_SDK_VERSION)$(TARGET_BUILD_APPS),current)
+  # LOCAL_SDK_VERSION is current and no TARGET_BUILD_APPS
   aidl_preprocess_import := $(TARGET_OUT_COMMON_INTERMEDIATES)/framework.aidl
 else
   aidl_preprocess_import := $(HISTORICAL_SDK_VERSIONS_ROOT)/$(LOCAL_SDK_VERSION)/framework.aidl
@@ -381,7 +407,7 @@ endif # java_resource_file_groups
 
 ## PRIVATE java vars ######################################
 
-ifneq ($(strip $(all_java_sources)$(all_res_assets)),)
+ifneq ($(strip $(all_java_sources)$(all_res_assets))$(LOCAL_STATIC_JAVA_LIBRARIES),)
 
 full_static_java_libs := \
     $(foreach lib,$(LOCAL_STATIC_JAVA_LIBRARIES), \
@@ -397,7 +423,8 @@ ifeq ($(my_prefix),TARGET_)
 ifeq ($(LOCAL_SDK_VERSION),)
 $(LOCAL_INTERMEDIATE_TARGETS): PRIVATE_BOOTCLASSPATH := -bootclasspath $(call java-lib-files,core)
 else
-ifeq ($(LOCAL_SDK_VERSION),current)
+ifeq ($(LOCAL_SDK_VERSION)$(TARGET_BUILD_APPS),current)
+# LOCAL_SDK_VERSION is current and no TARGET_BUILD_APPS.
 $(LOCAL_INTERMEDIATE_TARGETS): PRIVATE_BOOTCLASSPATH := -bootclasspath $(call java-lib-files,android_stubs_current)
 else
 $(LOCAL_INTERMEDIATE_TARGETS): PRIVATE_BOOTCLASSPATH := -bootclasspath $(call java-lib-files,sdk_v$(LOCAL_SDK_VERSION))
@@ -482,9 +509,23 @@ $(cleantarget)::
 ## Common definitions for module.
 ###########################################################
 
+# aapt doesn't accept multiple --extra-packages flags.
+# We have to collapse them into a single --extra-packages flag here.
+LOCAL_AAPT_FLAGS := $(strip $(LOCAL_AAPT_FLAGS))
+ifdef LOCAL_AAPT_FLAGS
+ifeq ($(filter 0 1,$(words $(filter --extra-packages,$(LOCAL_AAPT_FLAGS)))),)
+aapt_flags := $(subst --extra-packages$(space),--extra-packages@,$(LOCAL_AAPT_FLAGS))
+aapt_flags_extra_packages := $(patsubst --extra-packages@%,%,$(filter --extra-packages@%,$(aapt_flags)))
+aapt_flags_extra_packages := $(sort $(subst :,$(space),$(aapt_flags_extra_packages)))
+LOCAL_AAPT_FLAGS := $(filter-out --extra-packages@%,$(aapt_flags)) \
+    --extra-packages $(subst $(space),:,$(aapt_flags_extra_packages))
+aapt_flags_extra_packages :=
+aapt_flags :=
+endif
+endif
+
 # Propagate local configuration options to this target.
 $(LOCAL_INTERMEDIATE_TARGETS) : PRIVATE_PATH:=$(LOCAL_PATH)
-$(LOCAL_INTERMEDIATE_TARGETS) : PRIVATE_POST_PROCESS_COMMAND:= $(LOCAL_POST_PROCESS_COMMAND)
 $(LOCAL_INTERMEDIATE_TARGETS) : PRIVATE_AAPT_FLAGS:= $(LOCAL_AAPT_FLAGS)
 $(LOCAL_INTERMEDIATE_TARGETS) : PRIVATE_JAVA_LIBRARIES:= $(LOCAL_JAVA_LIBRARIES)
 $(LOCAL_INTERMEDIATE_TARGETS) : PRIVATE_MANIFEST_PACKAGE_NAME:= $(LOCAL_MANIFEST_PACKAGE_NAME)
@@ -538,6 +579,16 @@ $(installed_odex) : $(built_odex) | $(ACP)
 $(LOCAL_INSTALLED_MODULE) : $(installed_odex)
 endif
 
+# All host modules that are not tagged with optional are automatically installed.
+# Save the installed files in ALL_HOST_INSTALLED_FILES.
+ifeq ($(LOCAL_IS_HOST_MODULE),true)
+  ALL_HOST_INSTALLED_FILES += $(LOCAL_INSTALLED_MODULE)
+  ifneq ($(filter debug eng tests, $(LOCAL_MODULE_TAGS)),)
+    $(warning $(LOCAL_MODULE_MAKEFILE): Module "$(LOCAL_MODULE)" has useless module tags: $(filter debug eng tests, $(LOCAL_MODULE_TAGS)). It will be installed anyway.)
+    LOCAL_MODULE_TAGS := $(filter-out debug eng tests, $(LOCAL_MODULE_TAGS))
+  endif
+endif
+
 endif # !LOCAL_UNINSTALLABLE_MODULE
 
 
@@ -580,13 +631,19 @@ ALL_MODULES.$(LOCAL_MODULE).CHECKED := \
 ALL_MODULES.$(LOCAL_MODULE).BUILT := \
     $(ALL_MODULES.$(LOCAL_MODULE).BUILT) $(LOCAL_BUILT_MODULE)
 ALL_MODULES.$(LOCAL_MODULE).INSTALLED := \
-    $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) $(LOCAL_INSTALLED_MODULE)
+    $(strip $(ALL_MODULES.$(LOCAL_MODULE).INSTALLED) $(LOCAL_INSTALLED_MODULE))
 ALL_MODULES.$(LOCAL_MODULE).REQUIRED := \
     $(ALL_MODULES.$(LOCAL_MODULE).REQUIRED) $(LOCAL_REQUIRED_MODULES)
 ALL_MODULES.$(LOCAL_MODULE).EVENT_LOG_TAGS := \
     $(ALL_MODULES.$(LOCAL_MODULE).EVENT_LOG_TAGS) $(event_log_tags)
 ALL_MODULES.$(LOCAL_MODULE).INTERMEDIATE_SOURCE_DIR := \
     $(ALL_MODULES.$(LOCAL_MODULE).INTERMEDIATE_SOURCE_DIR) $(LOCAL_INTERMEDIATE_SOURCE_DIR)
+ALL_MODULES.$(LOCAL_MODULE).MAKEFILE := \
+    $(ALL_MODULES.$(LOCAL_MODULE).MAKEFILE) $(LOCAL_MODULE_MAKEFILE)
+ifdef LOCAL_MODULE_OWNER
+ALL_MODULES.$(LOCAL_MODULE).OWNER := \
+    $(sort $(ALL_MODULES.$(LOCAL_MODULE).OWNER) $(LOCAL_MODULE_OWNER))
+endif
 
 INSTALLABLE_FILES.$(LOCAL_INSTALLED_MODULE).MODULE := $(LOCAL_MODULE)
 
@@ -616,3 +673,5 @@ $(foreach tag,$(LOCAL_MODULE_TAGS),\
 include $(BUILD_SYSTEM)/notice_files.mk
 
 #:vi noexpandtab
+
+include $(BUILD_SYSTEM_MTK_EXTENSION)/base_rules.mk

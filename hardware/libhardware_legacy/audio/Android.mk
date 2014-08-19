@@ -6,6 +6,12 @@
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(BOARD_USES_GENERIC_AUDIO)),true)
+  LOCAL_CFLAGS += -DGENERIC_AUDIO
+else
+  LOCAL_CFLAGS += -DMTK_AUDIO
+endif
+
 LOCAL_SRC_FILES := \
     AudioHardwareInterface.cpp \
     audio_hw_hal.cpp
@@ -21,6 +27,12 @@ LOCAL_STATIC_LIBRARIES := libmedia_helper
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
+
+ifeq ($(strip $(BOARD_USES_GENERIC_AUDIO)),true)
+  LOCAL_CFLAGS += -DGENERIC_AUDIO
+else
+  LOCAL_CFLAGS += -DMTK_AUDIO
+endif
 
 LOCAL_SRC_FILES := \
     AudioPolicyManagerBase.cpp \
@@ -45,6 +57,12 @@ include $(BUILD_STATIC_LIBRARY)
 # policy code
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(BOARD_USES_GENERIC_AUDIO)),true)
+  LOCAL_CFLAGS += -DGENERIC_AUDIO
+else
+  LOCAL_CFLAGS += -DMTK_AUDIO
+endif
+
 LOCAL_SRC_FILES := \
     AudioPolicyManagerDefault.cpp
 
@@ -58,8 +76,14 @@ LOCAL_STATIC_LIBRARIES := \
 
 LOCAL_WHOLE_STATIC_LIBRARIES := \
     libaudiopolicy_legacy
+    
+    
+ifeq ($(strip $(BOARD_USES_GENERIC_AUDIO)),true)
+  LOCAL_MODULE := audio_policy.default
+else
+  LOCAL_MODULE := audio_policy.legacy
+endif
 
-LOCAL_MODULE := audio_policy.default
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 

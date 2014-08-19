@@ -1,5 +1,7 @@
 LOCAL_PATH := $(call my-dir)
 
+ifneq ($(BOARD_USES_GENERIC_INVENSENSE),false)
+
 include $(CLEAR_VARS)
 LOCAL_MODULE_TAGS := optional
 
@@ -99,3 +101,4 @@ include $(BUILD_SHARED_LIBRARY)
 #include $(BUILD_SHARED_LIBRARY)
 #include $(BUILD_MULTI_PREBUILT)
 
+endif

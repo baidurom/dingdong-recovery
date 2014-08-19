@@ -1,8 +1,8 @@
 /*
- * Command structure for dhd command line utility.
+ * Command structure for dhd command line utility, copied from wl utility
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
- *
+ * Copyright (C) 1999-2012, Broadcom Corporation
+ * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: dhdu_cmd.h,v 1.6 2008-06-05 00:36:42 Exp $
+ * $Id: dhdu_cmd.h 241182 2011-02-17 21:50:03Z $
  */
 
 #ifndef _dhdu_cmd_h_

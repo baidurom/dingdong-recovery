@@ -16,14 +16,14 @@
 
 ########################
 
-ifeq ($(BOARD_WLAN_DEVICE_REV),bcm4330_b1)
-BCM_FW_SRC_FILE_STA := fw_bcm4330_b1.bin
-BCM_FW_SRC_FILE_AP  := fw_bcm4330_apsta_b1.bin
-BCM_FW_SRC_FILE_P2P := fw_bcm4330_apsta_b1.bin
+ifeq ($(strip $(WIFI_BAND)),802_11_BG)
+BCM_FW_SRC_FILE_STA := fw_bcm4330_bg.bin
+BCM_FW_SRC_FILE_AP  := fw_bcm4330_apsta_bg.bin
+BCM_FW_SRC_FILE_P2P := fw_bcm4330_bg.bin
 else
-BCM_FW_SRC_FILE_STA := fw_bcm4330_b2.bin
-BCM_FW_SRC_FILE_AP  := fw_bcm4330_apsta_b2.bin
-BCM_FW_SRC_FILE_P2P := fw_bcm4330_p2p_b2.bin
+BCM_FW_SRC_FILE_STA := fw_bcm4330_abg.bin
+BCM_FW_SRC_FILE_AP  := fw_bcm4330_apsta_bg.bin
+BCM_FW_SRC_FILE_P2P := fw_bcm4330_abg.bin
 endif
 
 PRODUCT_COPY_FILES += \

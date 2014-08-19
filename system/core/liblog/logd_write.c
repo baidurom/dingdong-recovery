@@ -28,7 +28,10 @@
 #include <cutils/logger.h>
 #include <cutils/logd.h>
 #include <cutils/log.h>
+#include <cutils/alelog.h>
+#include <cutils/xlog.h>
 
+#define PROPERTY_VALUE_MAX  92
 #define LOG_BUF_SIZE	1024
 
 #if FAKE_LOG_DEVICE
@@ -43,7 +46,7 @@
 #endif
 
 static int __write_to_log_init(log_id_t, struct iovec *vec, size_t nr);
-static int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) = __write_to_log_init;
+int (*write_to_log)(log_id_t, struct iovec *vec, size_t nr) __attribute__((visibility ("hidden"))) = __write_to_log_init;
 #ifdef HAVE_PTHREADS
 static pthread_mutex_t log_init_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
@@ -132,6 +135,17 @@ static int __write_to_log_init(log_id_t log_id, struct iovec *vec, size_t nr)
 
 int __android_log_write(int prio, const char *tag, const char *msg)
 {
+	//BEGIN CL-21791: default close logv and logd for rom release
+	if (prio == ANDROID_LOG_VERBOSE || prio == ANDROID_LOG_DEBUG) {
+	   char* key = "persist.sys.log.enable";
+	   char buf[PROPERTY_VALUE_MAX];
+	   log_property_get(key, buf, "0");
+	   if (strcmp(buf, "1") != 0) {
+		   return 0;
+	   }
+	}
+	//END CL-21791
+
     struct iovec vec[3];
     log_id_t log_id = LOG_ID_MAIN;
 
@@ -140,8 +154,24 @@ int __android_log_write(int prio, const char *tag, const char *msg)
 
     /* XXX: This needs to go! */
     if (!strcmp(tag, "HTC_RIL") ||
+        #ifdef MTK_DT_SUPPORT
+        !strncmp(tag, "RIL3", 4) ||
+        !strcmp(tag, "AT3") ||
+        !strcmp(tag, "MUXD3") || 
+        #endif
+        #ifdef EVDO_DT_SUPPORT
+        !strcmp(tag, "VIA_RIL") ||
+        !strcmp(tag, "VIA_AT") ||
+        !strcmp(tag, "VIA_RILC") || 
+        !strcmp(tag, "VIA_RILD") || 
+        #endif /* EVDO_DT_SUPPORT */
+        !strcmp(tag, "RILMD2") ||
+        !strcmp(tag, "ATMD2") ||
+        !strcmp(tag, "MUXDMD2") || 
         !strncmp(tag, "RIL", 3) || /* Any log tag with "RIL" as the prefix */
+        !strncmp(tag, "IMS", 3) || /* Any log tag with "IMS" as the prefix */
         !strcmp(tag, "AT") ||
+        !strcmp(tag, "MUXD") || 
         !strcmp(tag, "GSM") ||
         !strcmp(tag, "STK") ||
         !strcmp(tag, "CDMA") ||
@@ -161,6 +191,17 @@ int __android_log_write(int prio, const char *tag, const char *msg)
 
 int __android_log_buf_write(int bufID, int prio, const char *tag, const char *msg)
 {
+	//BEGIN CL-21791: default close logv and logd for rom release
+	if (prio == ANDROID_LOG_VERBOSE || prio == ANDROID_LOG_DEBUG) {
+	   char* key = "persist.sys.log.enable";
+	   char buf[PROPERTY_VALUE_MAX];
+	   log_property_get(key, buf, "0");
+	   if (strcmp(buf, "1") != 0) {
+		   return 0;
+	   }
+	}
+	//END CL-21791
+
     struct iovec vec[3];
 
     if (!tag)
@@ -169,6 +210,7 @@ int __android_log_buf_write(int bufID, int prio, const char *tag, const char *ms
     /* XXX: This needs to go! */
     if (!strcmp(tag, "HTC_RIL") ||
         !strncmp(tag, "RIL", 3) || /* Any log tag with "RIL" as the prefix */
+        !strncmp(tag, "IMS", 3) || /* Any log tag with "IMS" as the prefix */
         !strcmp(tag, "AT") ||
         !strcmp(tag, "GSM") ||
         !strcmp(tag, "STK") ||
@@ -201,6 +243,11 @@ int __android_log_print(int prio, const char *tag, const char *fmt, ...)
     va_list ap;
     char buf[LOG_BUF_SIZE];
 
+#if !defined(FAKE_LOG_DEVICE)
+    if(!xlogf_native_tag_is_on(tag, prio)) 
+        return -1;
+#endif
+
     va_start(ap, fmt);
     vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);
     va_end(ap);
@@ -212,6 +259,11 @@ int __android_log_buf_print(int bufID, int prio, const char *tag, const char *fm
 {
     va_list ap;
     char buf[LOG_BUF_SIZE];
+
+#if !defined(FAKE_LOG_DEVICE)
+    if(!xlogf_native_tag_is_on(tag, prio)) 
+        return -1;
+#endif
 
     va_start(ap, fmt);
     vsnprintf(buf, LOG_BUF_SIZE, fmt, ap);

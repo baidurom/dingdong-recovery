@@ -1,0 +1,136 @@
+/* Copyright Statement:
+ *
+ * This software/firmware and related documentation ("MediaTek Software") are
+ * protected under relevant copyright laws. The information contained herein
+ * is confidential and proprietary to MediaTek Inc. and/or its licensors.
+ * Without the prior written permission of MediaTek inc. and/or its licensors,
+ * any reproduction, modification, use or disclosure of MediaTek Software,
+ * and information contained herein, in whole or in part, shall be strictly prohibited.
+ */
+/* MediaTek Inc. (C) 2010. All rights reserved.
+ *
+ * BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+ * THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+ * RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+ * AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+ * NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+ * SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+ * SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+ * THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+ * THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+ * CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+ * SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+ * STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+ * CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+ * AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+ * OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+ * MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+ *
+ * The following software/firmware and/or related documentation ("MediaTek Software")
+ * have been modified by MediaTek Inc. All revisions are subject to any receiver's
+ * applicable license agreements with MediaTek Inc.
+ */
+
+#ifndef TOUCHPANEL_H__
+#define TOUCHPANEL_H__
+
+#include <linux/ioctl.h>
+
+/* Pre-defined definition */
+#define TPD_POWER_SOURCE_1800 MT65XX_POWER_LDO_VGP5
+#define TPD_TYPE_CAPACITIVE
+#define TPD_TYPE_RESISTIVE
+#define TPD_POWER_SOURCE         MT6575_POWER_VGP2
+#define TPD_I2C_NUMBER           0
+#define TPD_WAKEUP_TRIAL         60
+#define TPD_WAKEUP_DELAY         100
+
+#define TPD_DELAY                (2*HZ/100)
+#define TPD_CALIBRATION_MATRIX_ROTATION_0  {4096, 0, 0, 0, 4096, 0, 0, 0};
+#define TPD_CALIBRATION_MATRIX  {-4096, 0, 4190208, 0, 4096, 0, 0, 0};
+#define TPD_CALIBRATION_MATRIX_ROTATION_90  {6995, 0, 0, 0, 2398, 0, 0, 0};
+
+#define TPD_HAVE_CALIBRATION
+//#define TPD_HAVE_BUTTON
+#define TPD_HAVE_TOUCH_KEY
+#define TPD_HAVE_TREMBLE_ELIMINATION
+
+#define TPD_HAVE_POWER_ON_OFF
+
+#define MAX_TRANSACTION_LENGTH 8
+#define I2C_DEVICE_ADDRESS_LEN 2
+#define MAX_I2C_TRANSFER_SIZE (MAX_TRANSACTION_LENGTH - I2C_DEVICE_ADDRESS_LEN)
+#define MAX_I2C_MAX_TRANSFER_SIZE 8
+
+
+#define TPD_TOUCH_INFO_REG_BASE 0xF40
+#define TPD_KEY_INFO_REG_BASE 0xF41
+#define TPD_POINT_INFO_REG_BASE 0xF42
+#define TPD_POWER_MODE_REG 0xFF2
+#define TPD_I2C_ENABLE_REG 0x0FFF
+#define TPD_I2C_DISABLE_REG 0x8000
+#define TPD_VERSION_INFO_REG 240
+#define TPD_CONFIG_REG_BASE 0xF80
+
+#define TPD_KEY_HOME 0x04
+#define TPD_KEY_BACK 0x02
+#define TPD_KEY_MENU 0x01
+
+#define INT_TRIGGER 0x01
+#define MAX_FINGER_NUM 5
+#define TPD_POINT_INFO_LEN 5
+#define TPD_TOUCH_INFO_LENGTH 1
+
+#ifdef TPD_HAVE_TOUCH_KEY
+const u8 touchKeyArray[] = { KEY_MENU, KEY_HOMEPAGE, KEY_BACK };
+
+#define TPD_TOUCH_KEY_NUM ( sizeof( touchKeyArray ) / sizeof( touchKeyArray[0] ) )
+#endif
+
+/*For factory Mode*/
+#define TPD_NAME				"GT827"
+#define TPD_IOCTL_MAGIC			't'
+#define TPD_IOCTL_ENABLE_I2C 	_IO(TPD_IOCTL_MAGIC, 1)
+#define TPD_IOCTL_DISABLE_I2C	_IO(TPD_IOCTL_MAGIC, 2)
+
+#if (defined(V6_DNP506))
+static u8 cfg_data[] = {
+	0x02, 0x11, 0x03, 0x12, 0x04, 0x13, 0x05, 0x14,
+	0x06, 0x15, 0x07, 0x16, 0x08, 0x17, 0x09, 0x18,
+	0x0A, 0x19, 0x0B, 0x1A, 0xFF, 0x15, 0x16, 0x17,
+	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x03, 0x0D,
+	0x04, 0x0E, 0x05, 0x0F, 0x06, 0x10, 0x07, 0x11,
+	0x08, 0x12, 0xFF, 0x0D, 0xFF, 0x0F, 0x10, 0x11,
+	0x12, 0x13, 0x1B, 0x03, 0xE8, 0x00, 0x00, 0x20,
+	0x00, 0x00, 0x05, 0x00, 0x00, 0x02, 0x55, 0x40,
+	0x34, 0x03, 0x00, 0x05, 0x00, 0x02, 0x1C, 0x03,
+	0xC0, 0x5D, 0x53, 0x57, 0x4E, 0x2F, 0x00, 0x28,
+	0x19, 0x05, 0x14, 0x10, 0x03, 0xA2, 0x00, 0x47,
+	0x50, 0x60, 0x58, 0x00, 0x50, 0x40, 0x30, 0x20,
+	0x00, 0x00, 0x00, 0x00, 0x17, 0x88, 0x26, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+};
+#else
+static u8 cfg_data[] = {
+	0x02, 0x11, 0x03, 0x12, 0x04, 0x13, 0x05, 0x14,
+	0x06, 0x15, 0x07, 0x16, 0x08, 0x17, 0x09, 0x18,
+	0x0A, 0x19, 0x0B, 0x1A, 0xFF, 0x15, 0x16, 0x17,
+	0x18, 0x19, 0x0E, 0x0D, 0x0B, 0xFF, 0x03, 0x0D,
+	0x04, 0x0E, 0x05, 0x0F, 0x06, 0x10, 0x07, 0x11,
+	0x08, 0x12, 0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0x0B,
+	0x0C, 0x0D, 0x0B, 0x03, 0x88, 0x00, 0x00, 0x2A,
+	0x00, 0x00, 0x04, 0x00, 0x00, 0x02, 0x50, 0x30,
+	0x30, 0x03, 0x00, 0x05, 0x00, 0x02, 0x1C, 0x03,
+	0xC0, 0x5D, 0x53, 0x57, 0x4E, 0x25, 0x00, 0x06,
+	0x19, 0x05, 0x19, 0x14, 0x03, 0xA2, 0x00, 0x47,
+	0x58, 0x60, 0x00, 0x00, 0x45, 0x30, 0x35, 0x20,
+	0x00, 0x00, 0x00, 0x00, 0x1B, 0x10, 0x25, 0x05,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01
+};
+#endif
+
+#endif				/* TOUCHPANEL_H__ */
+
+

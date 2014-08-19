@@ -985,7 +985,7 @@ void rxData_receivePacketFromWlan (TI_HANDLE hRxData, void *pBuffer, TRxAttr* pR
         }
 
     default:
-        TRACE0(pRxData->hReport, REPORT_SEVERITY_ERROR, " rxData_receivePacketFromWlan(): Received unspecified packet type !!! \n");
+        TRACE0(pRxData->hReport, REPORT_SEVERITY_INFORMATION, " rxData_receivePacketFromWlan(): Received unspecified packet type !!! \n");
         RxBufFree(pRxData->hOs, pBuffer); 
         break;
     }

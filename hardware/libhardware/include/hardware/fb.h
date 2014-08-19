@@ -64,14 +64,10 @@ typedef struct framebuffer_device_t {
     /* max swap interval supported by this framebuffer */
     const int       maxSwapInterval;
 
-    /* number of framebuffers */
+    /* Number of framebuffers supported*/
     const int       numFramebuffers;
 
-#ifdef HTC_MSM7X27A_CHIP
-    int reserved[8];
-#else
     int reserved[7];
-#endif
 
     /*
      * requests a specific swap-interval (same definition than EGL)
@@ -133,13 +129,6 @@ typedef struct framebuffer_device_t {
 
     int (*compositionComplete)(struct framebuffer_device_t* dev);
 
-/* add by tangliuxiang01@baidu.com, change lockBuffer to right place for t328w&d */
-#ifdef HTC_MSM7X27A_CHIP
-    int (*resoved_1) (struct framebuffer_device_t* dev, int);
-#else
-    int (*lockBuffer) (struct framebuffer_device_t* dev, int);
-#endif
-
     /*
      * This hook is OPTIONAL.
      *
@@ -155,19 +144,8 @@ typedef struct framebuffer_device_t {
      */
     int (*enableScreen)(struct framebuffer_device_t* dev, int enable);
 
-    int (*orientationChanged) (struct framebuffer_device_t* dev, int);
-#ifdef HTC_MSM7X27A_CHIP
-    int (*videoOverlayStarted) (struct framebuffer_device_t* dev, int);
-    int (*enableHDMIOutput) (struct framebuffer_device_t* dev, int);
-    int (*setActionSafeWidthRatio) (struct framebuffer_device_t* dev, float);
-    int (*lockBuffer) (struct framebuffer_device_t* dev, int);
-	int (*setActionSafeHeightRatio) (struct framebuffer_device_t* dev, float);
-#else
-    int (*videoOverlayStarted) (struct framebuffer_device_t* dev, int);
-    int (*enableHDMIOutput) (struct framebuffer_device_t* dev, int);
-    int (*setActionSafeWidthRatio) (struct framebuffer_device_t* dev, float);
-    int (*setActionSafeHeightRatio) (struct framebuffer_device_t* dev, float);
-#endif
+    void* reserved_proc[6];
+
 } framebuffer_device_t;
 
 

@@ -18,7 +18,7 @@
 #define ERROR_UTILS_H
 
 ///Header file where all the android error codes are defined
-#include <Errors.h>
+#include <utils/Errors.h>
 
 ///Header file where all the OMX error codes are defined
 #include "OMX_Core.h"

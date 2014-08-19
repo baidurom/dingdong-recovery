@@ -16,8 +16,9 @@ LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg
-LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c 
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/../mkbootimg \
+  $(LOCAL_PATH)/../../extras/ext4_utils
+LOCAL_SRC_FILES := protocol.c engine.c bootimg.c fastboot.c
 LOCAL_MODULE := fastboot
 
 ifeq ($(HOST_OS),linux)
@@ -39,6 +40,13 @@ ifeq ($(HOST_OS),windows)
     LOCAL_C_INCLUDES += /usr/include/w32api/ddk
   endif
   ifneq ($(strip $(USE_MINGW)),)
+    ##### For Auto Enter Fastboot Mode ####
+    LOCAL_SRC_FILES += autoenter/brom.cpp autoenter/comscan.cpp autoenter/IEnterFastboot.cpp autoenter/NewCOMUtil.cpp autoenter/preloadercmd.cpp
+    LOCAL_C_INCLUDES += $(LOCAL_PATH)/autoenter
+    LOCAL_CPPFLAGS += -fexceptions
+    LOCAL_LDLIBS += -lsetupapi
+    ##### For Auto Enter Fastboot Mode END####
+    
     # MinGW under Linux case
     LOCAL_LDLIBS += -lws2_32
     USE_SYSDEPS_WIN32 := 1
@@ -47,10 +55,25 @@ ifeq ($(HOST_OS),windows)
   LOCAL_C_INCLUDES += development/host/windows/usb/api
 endif
 
-LOCAL_STATIC_LIBRARIES := $(EXTRA_STATIC_LIBS) libzipfile libunz
+LOCAL_STATIC_LIBRARIES := \
+    $(EXTRA_STATIC_LIBS) \
+    libzipfile \
+    libunz \
+    libext4_utils_host \
+    libsparse_host \
+    libz
+
+ifneq ($(HOST_OS),windows)
+ifeq ($(HAVE_SELINUX), true)
+LOCAL_STATIC_LIBRARIES += libselinux
+endif # HAVE_SELINUX
+endif # HOST_OS != windows
 
 include $(BUILD_HOST_EXECUTABLE)
-$(call dist-for-goals,dist_files,$(LOCAL_BUILT_MODULE))
+
+
+$(call dist-for-goals,dist_files sdk,$(LOCAL_BUILT_MODULE))
+
 
 ifeq ($(HOST_OS),linux)
 include $(CLEAR_VARS)
@@ -62,3 +85,5 @@ endif
 ifeq ($(HOST_OS),windows)
 $(LOCAL_INSTALLED_MODULE): $(HOST_OUT_EXECUTABLES)/AdbWinApi.dll
 endif
+
+

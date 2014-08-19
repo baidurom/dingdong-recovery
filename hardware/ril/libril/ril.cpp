@@ -92,11 +92,11 @@ namespace android {
     #define startRequest           sprintf(printBuf, "(")
     #define closeRequest           sprintf(printBuf, "%s)", printBuf)
     #define printRequest(token, req)           \
-            LOGD("[%04d]> %s %s", token, requestToString(req), printBuf)
+            ALOGD("[%04d]> %s %s", token, requestToString(req), printBuf)
 
     #define startResponse           sprintf(printBuf, "%s {", printBuf)
     #define closeResponse           sprintf(printBuf, "%s}", printBuf)
-    #define printResponse           LOGD("%s", printBuf)
+    #define printResponse           ALOGD("%s", printBuf)
 
     #define clearPrintBuf           printBuf[0] = 0
     #define removeLastChar          printBuf[strlen(printBuf)-1] = 0
@@ -202,6 +202,8 @@ static void dispatchCallForward(Parcel& p, RequestInfo *pRI);
 static void dispatchRaw(Parcel& p, RequestInfo *pRI);
 static void dispatchSmsWrite (Parcel &p, RequestInfo *pRI);
 static void dispatchDataCall (Parcel& p, RequestInfo *pRI);
+static void dispatchVoiceRadioTech (Parcel& p, RequestInfo *pRI);
+static void dispatchCdmaSubscriptionSource (Parcel& p, RequestInfo *pRI);
 
 static void dispatchCdmaSms(Parcel &p, RequestInfo *pRI);
 static void dispatchCdmaSmsAck(Parcel &p, RequestInfo *pRI);
@@ -230,6 +232,11 @@ static int responseRilSignalStrength(Parcel &p,void *response, size_t responsele
 static int responseCallRing(Parcel &p, void *response, size_t responselen);
 static int responseCdmaSignalInfoRecord(Parcel &p,void *response, size_t responselen);
 static int responseCdmaCallWaiting(Parcel &p,void *response, size_t responselen);
+static int responseSimRefresh(Parcel &p, void *response, size_t responselen);
+
+static int decodeVoiceRadioTechnology (RIL_RadioState radioState);
+static int decodeCdmaSubscriptionSource (RIL_RadioState radioState);
+static RIL_RadioState processRadioState(RIL_RadioState newRadioState);
 
 extern "C" const char * requestToString(int request);
 extern "C" const char * failCauseToString(RIL_Errno);
@@ -254,6 +261,25 @@ static UnsolResponseInfo s_unsolResponses[] = {
 #include "ril_unsol_commands.h"
 };
 
+/* For older RILs that do not support new commands RIL_REQUEST_VOICE_RADIO_TECH and
+   RIL_UNSOL_VOICE_RADIO_TECH_CHANGED messages, decode the voice radio tech from
+   radio state message and store it. Every time there is a change in Radio State
+   check to see if voice radio tech changes and notify telephony
+ */
+int voiceRadioTech = -1;
+
+/* For older RILs that do not support new commands RIL_REQUEST_GET_CDMA_SUBSCRIPTION_SOURCE
+   and RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED messages, decode the subscription
+   source from radio state and store it. Every time there is a change in Radio State
+   check to see if subscription source changed and notify telephony
+ */
+int cdmaSubscriptionSource = -1;
+
+/* For older RILs that do not send RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED, decode the
+   SIM/RUIM state from radio state and store it. Every time there is a change in Radio State,
+   check to see if SIM/RUIM status changed and notify telephony
+ */
+int simRuimStatus = -1;
 
 static char *
 strdupReadString(Parcel &p) {
@@ -312,7 +338,7 @@ issueLocalRequest(int request, void *data, int len) {
     ret = pthread_mutex_unlock(&s_pendingRequestsMutex);
     assert (ret == 0);
 
-    LOGD("C[locl]> %s", requestToString(request));
+    ALOGD("C[locl]> %s", requestToString(request));
 
     s_callbacks.onRequest(request, data, len, pRI);
 }
@@ -335,12 +361,12 @@ processCommandBuffer(void *buffer, size_t buflen) {
     status = p.readInt32 (&token);
 
     if (status != NO_ERROR) {
-        LOGE("invalid request block");
+        ALOGE("invalid request block");
         return 0;
     }
 
     if (request < 1 || request >= (int32_t)NUM_ELEMS(s_commands)) {
-        LOGE("unsupported request code %d token %d", request, token);
+        ALOGE("unsupported request code %d token %d", request, token);
         // FIXME this should perhaps return a response
         return 0;
     }
@@ -369,7 +395,7 @@ processCommandBuffer(void *buffer, size_t buflen) {
 
 static void
 invalidCommandBlock (RequestInfo *pRI) {
-    LOGE("invalid command block for token %d request %s",
+    ALOGE("invalid command block for token %d request %s",
                 pRI->token, requestToString(pRI->pCI->requestNumber));
 }
 
@@ -1219,6 +1245,60 @@ static void dispatchDataCall(Parcel& p, RequestInfo *pRI) {
     }
 }
 
+// For backwards compatibility with RILs that dont support RIL_REQUEST_VOICE_RADIO_TECH.
+// When all RILs handle this request, this function can be removed and
+// the request can be sent directly to the RIL using dispatchVoid.
+static void dispatchVoiceRadioTech(Parcel& p, RequestInfo *pRI) {
+    RIL_RadioState state = s_callbacks.onStateRequest();
+
+    if ((RADIO_STATE_UNAVAILABLE == state) || (RADIO_STATE_OFF == state)) {
+        RIL_onRequestComplete(pRI, RIL_E_RADIO_NOT_AVAILABLE, NULL, 0);
+    }
+
+    // RILs that support RADIO_STATE_ON should support this request.
+    if (RADIO_STATE_ON == state) {
+        dispatchVoid(p, pRI);
+        return;
+    }
+
+    // For Older RILs, that do not support RADIO_STATE_ON, assume that they
+    // will not support this new request either and decode Voice Radio Technology
+    // from Radio State
+    voiceRadioTech = decodeVoiceRadioTechnology(state);
+
+    if (voiceRadioTech < 0)
+        RIL_onRequestComplete(pRI, RIL_E_GENERIC_FAILURE, NULL, 0);
+    else
+        RIL_onRequestComplete(pRI, RIL_E_SUCCESS, &voiceRadioTech, sizeof(int));
+}
+
+// For backwards compatibility in RIL_REQUEST_CDMA_GET_SUBSCRIPTION_SOURCE:.
+// When all RILs handle this request, this function can be removed and
+// the request can be sent directly to the RIL using dispatchVoid.
+static void dispatchCdmaSubscriptionSource(Parcel& p, RequestInfo *pRI) {
+    RIL_RadioState state = s_callbacks.onStateRequest();
+
+    if ((RADIO_STATE_UNAVAILABLE == state) || (RADIO_STATE_OFF == state)) {
+        RIL_onRequestComplete(pRI, RIL_E_RADIO_NOT_AVAILABLE, NULL, 0);
+    }
+
+    // RILs that support RADIO_STATE_ON should support this request.
+    if (RADIO_STATE_ON == state) {
+        dispatchVoid(p, pRI);
+        return;
+    }
+
+    // For Older RILs, that do not support RADIO_STATE_ON, assume that they
+    // will not support this new request either and decode CDMA Subscription Source
+    // from Radio State
+    cdmaSubscriptionSource = decodeCdmaSubscriptionSource(state);
+
+    if (cdmaSubscriptionSource < 0)
+        RIL_onRequestComplete(pRI, RIL_E_GENERIC_FAILURE, NULL, 0);
+    else
+        RIL_onRequestComplete(pRI, RIL_E_SUCCESS, &cdmaSubscriptionSource, sizeof(int));
+}
+
 static int
 blockingWrite(int fd, const void *buffer, size_t len) {
     size_t writeOffset = 0;
@@ -1236,7 +1316,7 @@ blockingWrite(int fd, const void *buffer, size_t len) {
         if (written >= 0) {
             writeOffset += written;
         } else {   // written < 0
-            LOGE ("RIL Response: unexpected error on write errno:%d", errno);
+            ALOGE ("RIL Response: unexpected error on write errno:%d", errno);
             close(fd);
             return -1;
         }
@@ -1256,7 +1336,7 @@ sendResponseRaw (const void *data, size_t dataSize) {
     }
 
     if (dataSize > MAX_COMMAND_BYTES) {
-        LOGE("RIL: packet larger than %u (%u)",
+        ALOGE("RIL: packet larger than %u (%u)",
                 MAX_COMMAND_BYTES, (unsigned int )dataSize);
 
         return -1;
@@ -1298,11 +1378,11 @@ responseInts(Parcel &p, void *response, size_t responselen) {
     int numInts;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
     if (responselen % sizeof(int) != 0) {
-        LOGE("invalid response length %d expected multiple of %d\n",
+        ALOGE("invalid response length %d expected multiple of %d\n",
             (int)responselen, (int)sizeof(int));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1336,11 +1416,11 @@ static int responseStrings(Parcel &p, void *response, size_t responselen) {
     int numStrings;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
     if (responselen % sizeof(char *) != 0) {
-        LOGE("invalid response length %d expected multiple of %d\n",
+        ALOGE("invalid response length %d expected multiple of %d\n",
             (int)responselen, (int)sizeof(char *));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1391,12 +1471,12 @@ static int responseCallList(Parcel &p, void *response, size_t responselen) {
     int num;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen % sizeof (RIL_Call *) != 0) {
-        LOGE("invalid response length %d expected multiple of %d\n",
+        ALOGE("invalid response length %d expected multiple of %d\n",
             (int)responselen, (int)sizeof (RIL_Call *));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1459,12 +1539,12 @@ static int responseCallList(Parcel &p, void *response, size_t responselen) {
 
 static int responseSMS(Parcel &p, void *response, size_t responselen) {
     if (response == NULL) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen != sizeof (RIL_SMS_Response) ) {
-        LOGE("invalid response length %d expected %d",
+        ALOGE("invalid response length %d expected %d",
                 (int)responselen, (int)sizeof (RIL_SMS_Response));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1486,12 +1566,12 @@ static int responseSMS(Parcel &p, void *response, size_t responselen) {
 static int responseDataCallListV4(Parcel &p, void *response, size_t responselen)
 {
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen % sizeof(RIL_Data_Call_Response_v4) != 0) {
-        LOGE("invalid response length %d expected multiple of %d",
+        ALOGE("invalid response length %d expected multiple of %d",
                 (int)responselen, (int)sizeof(RIL_Data_Call_Response_v4));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1529,12 +1609,12 @@ static int responseDataCallList(Parcel &p, void *response, size_t responselen)
         return responseDataCallListV4(p, response, responselen);
     } else {
         if (response == NULL && responselen != 0) {
-            LOGE("invalid response: NULL");
+            ALOGE("invalid response: NULL");
             return RIL_ERRNO_INVALID_RESPONSE;
         }
 
         if (responselen % sizeof(RIL_Data_Call_Response_v6) != 0) {
-            LOGE("invalid response length %d expected multiple of %d",
+            ALOGE("invalid response length %d expected multiple of %d",
                     (int)responselen, (int)sizeof(RIL_Data_Call_Response_v6));
             return RIL_ERRNO_INVALID_RESPONSE;
         }
@@ -1583,7 +1663,7 @@ static int responseSetupDataCall(Parcel &p, void *response, size_t responselen)
 
 static int responseRaw(Parcel &p, void *response, size_t responselen) {
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL with responselen != 0");
+        ALOGE("invalid response: NULL with responselen != 0");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
@@ -1601,12 +1681,12 @@ static int responseRaw(Parcel &p, void *response, size_t responselen) {
 
 static int responseSIM_IO(Parcel &p, void *response, size_t responselen) {
     if (response == NULL) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen != sizeof (RIL_SIM_IO_Response) ) {
-        LOGE("invalid response length was %d expected %d",
+        ALOGE("invalid response length was %d expected %d",
                 (int)responselen, (int)sizeof (RIL_SIM_IO_Response));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1629,12 +1709,12 @@ static int responseCallForwards(Parcel &p, void *response, size_t responselen) {
     int num;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen % sizeof(RIL_CallForwardInfo *) != 0) {
-        LOGE("invalid response length %d expected multiple of %d",
+        ALOGE("invalid response length %d expected multiple of %d",
                 (int)responselen, (int)sizeof(RIL_CallForwardInfo *));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1667,12 +1747,12 @@ static int responseCallForwards(Parcel &p, void *response, size_t responselen) {
 
 static int responseSsn(Parcel &p, void *response, size_t responselen) {
     if (response == NULL) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen != sizeof(RIL_SuppSvcNotification)) {
-        LOGE("invalid response length was %d expected %d",
+        ALOGE("invalid response length was %d expected %d",
                 (int)responselen, (int)sizeof (RIL_SuppSvcNotification));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1698,12 +1778,12 @@ static int responseCellList(Parcel &p, void *response, size_t responselen) {
     int num;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen % sizeof (RIL_NeighboringCell *) != 0) {
-        LOGE("invalid response length %d expected multiple of %d\n",
+        ALOGE("invalid response length %d expected multiple of %d\n",
             (int)responselen, (int)sizeof (RIL_NeighboringCell *));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1747,12 +1827,12 @@ static int responseCdmaInformationRecords(Parcel &p,
     RIL_CDMA_InformationRecord *infoRec;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen != sizeof (RIL_CDMA_InformationRecords)) {
-        LOGE("invalid response length %d expected multiple of %d\n",
+        ALOGE("invalid response length %d expected multiple of %d\n",
             (int)responselen, (int)sizeof (RIL_CDMA_InformationRecords *));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1772,7 +1852,7 @@ static int responseCdmaInformationRecords(Parcel &p,
             case RIL_CDMA_EXTENDED_DISPLAY_INFO_REC:
                 if (infoRec->rec.display.alpha_len >
                                          CDMA_ALPHA_INFO_BUFFER_LENGTH) {
-                    LOGE("invalid display info response length %d \
+                    ALOGE("invalid display info response length %d \
                           expected not more than %d\n",
                          (int)infoRec->rec.display.alpha_len,
                          CDMA_ALPHA_INFO_BUFFER_LENGTH);
@@ -1792,7 +1872,7 @@ static int responseCdmaInformationRecords(Parcel &p,
             case RIL_CDMA_CALLING_PARTY_NUMBER_INFO_REC:
             case RIL_CDMA_CONNECTED_NUMBER_INFO_REC:
                 if (infoRec->rec.number.len > CDMA_NUMBER_INFO_BUFFER_LENGTH) {
-                    LOGE("invalid display info response length %d \
+                    ALOGE("invalid display info response length %d \
                           expected not more than %d\n",
                          (int)infoRec->rec.number.len,
                          CDMA_NUMBER_INFO_BUFFER_LENGTH);
@@ -1829,7 +1909,7 @@ static int responseCdmaInformationRecords(Parcel &p,
             case RIL_CDMA_REDIRECTING_NUMBER_INFO_REC:
                 if (infoRec->rec.redir.redirectingNumber.len >
                                               CDMA_NUMBER_INFO_BUFFER_LENGTH) {
-                    LOGE("invalid display info response length %d \
+                    ALOGE("invalid display info response length %d \
                           expected not more than %d\n",
                          (int)infoRec->rec.redir.redirectingNumber.len,
                          CDMA_NUMBER_INFO_BUFFER_LENGTH);
@@ -1884,10 +1964,10 @@ static int responseCdmaInformationRecords(Parcel &p,
                 break;
             case RIL_CDMA_T53_RELEASE_INFO_REC:
                 // TODO(Moto): See David Krause, he has the answer:)
-                LOGE("RIL_CDMA_T53_RELEASE_INFO_REC: return INVALID_RESPONSE");
+                ALOGE("RIL_CDMA_T53_RELEASE_INFO_REC: return INVALID_RESPONSE");
                 return RIL_ERRNO_INVALID_RESPONSE;
             default:
-                LOGE("Incorrect name value");
+                ALOGE("Incorrect name value");
                 return RIL_ERRNO_INVALID_RESPONSE;
         }
     }
@@ -1899,7 +1979,7 @@ static int responseCdmaInformationRecords(Parcel &p,
 static int responseRilSignalStrength(Parcel &p,
                     void *response, size_t responselen) {
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
@@ -1946,7 +2026,7 @@ static int responseRilSignalStrength(Parcel &p,
         closeResponse;
 
     } else {
-        LOGE("invalid response length");
+        ALOGE("invalid response length");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
@@ -1963,12 +2043,12 @@ static int responseCallRing(Parcel &p, void *response, size_t responselen) {
 
 static int responseCdmaSignalInfoRecord(Parcel &p, void *response, size_t responselen) {
     if (response == NULL || responselen == 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen != sizeof (RIL_CDMA_SignalInfoRecord)) {
-        LOGE("invalid response length %d expected sizeof (RIL_CDMA_SignalInfoRecord) of %d\n",
+        ALOGE("invalid response length %d expected sizeof (RIL_CDMA_SignalInfoRecord) of %d\n",
             (int)responselen, (int)sizeof (RIL_CDMA_SignalInfoRecord));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -1993,12 +2073,12 @@ static int responseCdmaSignalInfoRecord(Parcel &p, void *response, size_t respon
 static int responseCdmaCallWaiting(Parcel &p, void *response,
             size_t responselen) {
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen < sizeof(RIL_CDMA_CallWaiting_v6)) {
-        LOGW("Upgrade to ril version %d\n", RIL_VERSION);
+        ALOGW("Upgrade to ril version %d\n", RIL_VERSION);
     }
 
     RIL_CDMA_CallWaiting_v6 *p_cur = ((RIL_CDMA_CallWaiting_v6 *) response);
@@ -2030,6 +2110,40 @@ static int responseCdmaCallWaiting(Parcel &p, void *response,
             p_cur->signalInfoRecord.signal,
             p_cur->number_type,
             p_cur->number_plan);
+    closeResponse;
+
+    return 0;
+}
+
+static int responseSimRefresh(Parcel &p, void *response, size_t responselen) {
+    if (response == NULL && responselen != 0) {
+        ALOGE("responseSimRefresh: invalid response: NULL");
+        return RIL_ERRNO_INVALID_RESPONSE;
+    }
+
+    startResponse;
+    if (s_callbacks.version == 7) {
+        RIL_SimRefreshResponse_v7 *p_cur = ((RIL_SimRefreshResponse_v7 *) response);
+        p.writeInt32(p_cur->result);
+        p.writeInt32(p_cur->ef_id);
+        writeStringToParcel(p, p_cur->aid);
+
+        appendPrintBuf("%sresult=%d, ef_id=%d, aid=%s",
+                printBuf,
+                p_cur->result,
+                p_cur->ef_id,
+                p_cur->aid);
+    } else {
+        int *p_cur = ((int *) response);
+        p.writeInt32(p_cur[0]);
+        p.writeInt32(p_cur[1]);
+        writeStringToParcel(p, NULL);
+
+        appendPrintBuf("%sresult=%d, ef_id=%d",
+                printBuf,
+                p_cur[0],
+                p_cur[1]);
+    }
     closeResponse;
 
     return 0;
@@ -2083,7 +2197,7 @@ static int responseSimStatus(Parcel &p, void *response, size_t responselen) {
     int i;
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
@@ -2108,7 +2222,7 @@ static int responseSimStatus(Parcel &p, void *response, size_t responselen) {
 
         sendSimStatusAppInfo(p, p_cur->num_applications, p_cur->applications);
     } else {
-        LOGE("responseSimStatus: A RilCardStatus_v6 or _v5 expected\n");
+        ALOGE("responseSimStatus: A RilCardStatus_v6 or _v5 expected\n");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
@@ -2170,15 +2284,15 @@ static int responseCdmaSms(Parcel &p, void *response, size_t responselen) {
     uint8_t uct;
     void* dest;
 
-    LOGD("Inside responseCdmaSms");
+    ALOGD("Inside responseCdmaSms");
 
     if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
+        ALOGE("invalid response: NULL");
         return RIL_ERRNO_INVALID_RESPONSE;
     }
 
     if (responselen != sizeof(RIL_CDMA_SMS_Message)) {
-        LOGE("invalid response length was %d expected %d",
+        ALOGE("invalid response length was %d expected %d",
                 (int)responselen, (int)sizeof(RIL_CDMA_SMS_Message));
         return RIL_ERRNO_INVALID_RESPONSE;
     }
@@ -2230,7 +2344,7 @@ static void processWakeupCallback(int fd, short flags, void *param) {
     char buff[16];
     int ret;
 
-    LOGV("processWakeupCallback");
+    ALOGV("processWakeupCallback");
 
     /* empty our wakeup socket out */
     do {
@@ -2287,9 +2401,9 @@ static void processCommandsCallback(int fd, short flags, void *param) {
     if (ret == 0 || !(errno == EAGAIN || errno == EINTR)) {
         /* fatal error or end-of-stream */
         if (ret != 0) {
-            LOGE("error on reading command socket errno:%d\n", errno);
+            ALOGE("error on reading command socket errno:%d\n", errno);
         } else {
-            LOGW("EOS.  Closing command socket.");
+            ALOGW("EOS.  Closing command socket.");
         }
 
         close(s_fdCommand);
@@ -2329,11 +2443,11 @@ static void onNewCommandConnect() {
     if (s_callbacks.getVersion != NULL) {
         const char *version;
         version = s_callbacks.getVersion();
-        LOGI("RIL Daemon version: %s\n", version);
+        ALOGI("RIL Daemon version: %s\n", version);
 
         property_set(PROPERTY_RIL_IMPL, version);
     } else {
-        LOGI("RIL Daemon version: unavailable\n");
+        ALOGI("RIL Daemon version: unavailable\n");
         property_set(PROPERTY_RIL_IMPL, "unavailable");
     }
 
@@ -2359,7 +2473,7 @@ static void listenCallback (int fd, short flags, void *param) {
     s_fdCommand = accept(s_fdListen, (sockaddr *) &peeraddr, &socklen);
 
     if (s_fdCommand < 0 ) {
-        LOGE("Error on accept() errno:%d", errno);
+        ALOGE("Error on accept() errno:%d", errno);
         /* start listening for new connections again */
         rilEventAddWakeup(&s_listen_event);
 	      return;
@@ -2380,17 +2494,17 @@ static void listenCallback (int fd, short flags, void *param) {
             if (strcmp(pwd->pw_name, PHONE_PROCESS) == 0) {
                 is_phone_socket = 1;
             } else {
-                LOGE("RILD can't accept socket from process %s", pwd->pw_name);
+                ALOGE("RILD can't accept socket from process %s", pwd->pw_name);
             }
         } else {
-            LOGE("Error on getpwuid() errno: %d", errno);
+            ALOGE("Error on getpwuid() errno: %d", errno);
         }
     } else {
-        LOGD("Error on getsockopt() errno: %d", errno);
+        ALOGD("Error on getsockopt() errno: %d", errno);
     }
 
     if ( !is_phone_socket ) {
-      LOGE("RILD must accept socket from %s", PHONE_PROCESS);
+      ALOGE("RILD must accept socket from %s", PHONE_PROCESS);
 
       close(s_fdCommand);
       s_fdCommand = -1;
@@ -2406,10 +2520,10 @@ static void listenCallback (int fd, short flags, void *param) {
     ret = fcntl(s_fdCommand, F_SETFL, O_NONBLOCK);
 
     if (ret < 0) {
-        LOGE ("Error setting O_NONBLOCK errno:%d", errno);
+        ALOGE ("Error setting O_NONBLOCK errno:%d", errno);
     }
 
-    LOGI("libril: new connection");
+    ALOGI("libril: new connection");
 
     p_rs = record_stream_new(s_fdCommand, MAX_COMMAND_BYTES);
 
@@ -2446,12 +2560,12 @@ static void debugCallback (int fd, short flags, void *param) {
     acceptFD = accept (fd,  (sockaddr *) &peeraddr, &socklen);
 
     if (acceptFD < 0) {
-        LOGE ("error accepting on debug port: %d\n", errno);
+        ALOGE ("error accepting on debug port: %d\n", errno);
         return;
     }
 
     if (recv(acceptFD, &number, sizeof(int), 0) != sizeof(int)) {
-        LOGE ("error reading on socket: number of Args: \n");
+        ALOGE ("error reading on socket: number of Args: \n");
         return;
     }
     args = (char **) malloc(sizeof(char*) * number);
@@ -2459,7 +2573,7 @@ static void debugCallback (int fd, short flags, void *param) {
     for (int i = 0; i < number; i++) {
         int len;
         if (recv(acceptFD, &len, sizeof(int), 0) != sizeof(int)) {
-            LOGE ("error reading on socket: Len of Args: \n");
+            ALOGE ("error reading on socket: Len of Args: \n");
             freeDebugCallbackArgs(i, args);
             return;
         }
@@ -2467,7 +2581,7 @@ static void debugCallback (int fd, short flags, void *param) {
         args[i] = (char *) malloc((sizeof(char) * len) + 1);
         if (recv(acceptFD, args[i], sizeof(char) * len, 0)
             != (int)sizeof(char) * len) {
-            LOGE ("error reading on socket: Args[%d] \n", i);
+            ALOGE ("error reading on socket: Args[%d] \n", i);
             freeDebugCallbackArgs(i, args);
             return;
         }
@@ -2477,11 +2591,11 @@ static void debugCallback (int fd, short flags, void *param) {
 
     switch (atoi(args[0])) {
         case 0:
-            LOGI ("Connection on debug port: issuing reset.");
+            ALOGI ("Connection on debug port: issuing reset.");
             issueLocalRequest(RIL_REQUEST_RESET_RADIO, NULL, 0);
             break;
         case 1:
-            LOGI ("Connection on debug port: issuing radio power off.");
+            ALOGI ("Connection on debug port: issuing radio power off.");
             data = 0;
             issueLocalRequest(RIL_REQUEST_RADIO_POWER, &data, sizeof(int));
             // Close the socket
@@ -2489,12 +2603,12 @@ static void debugCallback (int fd, short flags, void *param) {
             s_fdCommand = -1;
             break;
         case 2:
-            LOGI ("Debug port: issuing unsolicited voice network change.");
+            ALOGI ("Debug port: issuing unsolicited voice network change.");
             RIL_onUnsolicitedResponse(RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED,
                                       NULL, 0);
             break;
         case 3:
-            LOGI ("Debug port: QXDM log enable.");
+            ALOGI ("Debug port: QXDM log enable.");
             qxdm_data[0] = 65536;     // head.func_tag
             qxdm_data[1] = 16;        // head.len
             qxdm_data[2] = 1;         // mode: 1 for 'start logging'
@@ -2505,7 +2619,7 @@ static void debugCallback (int fd, short flags, void *param) {
                               6 * sizeof(int));
             break;
         case 4:
-            LOGI ("Debug port: QXDM log disable.");
+            ALOGI ("Debug port: QXDM log disable.");
             qxdm_data[0] = 65536;
             qxdm_data[1] = 16;
             qxdm_data[2] = 0;          // mode: 0 for 'stop logging'
@@ -2516,7 +2630,7 @@ static void debugCallback (int fd, short flags, void *param) {
                               6 * sizeof(int));
             break;
         case 5:
-            LOGI("Debug port: Radio On");
+            ALOGI("Debug port: Radio On");
             data = 1;
             issueLocalRequest(RIL_REQUEST_RADIO_POWER, &data, sizeof(int));
             sleep(2);
@@ -2524,33 +2638,33 @@ static void debugCallback (int fd, short flags, void *param) {
             issueLocalRequest(RIL_REQUEST_SET_NETWORK_SELECTION_AUTOMATIC, NULL, 0);
             break;
         case 6:
-            LOGI("Debug port: Setup Data Call, Apn :%s\n", args[1]);
+            ALOGI("Debug port: Setup Data Call, Apn :%s\n", args[1]);
             actData[0] = args[1];
             issueLocalRequest(RIL_REQUEST_SETUP_DATA_CALL, &actData,
                               sizeof(actData));
             break;
         case 7:
-            LOGI("Debug port: Deactivate Data Call");
+            ALOGI("Debug port: Deactivate Data Call");
             issueLocalRequest(RIL_REQUEST_DEACTIVATE_DATA_CALL, &deactData,
                               sizeof(deactData));
             break;
         case 8:
-            LOGI("Debug port: Dial Call");
+            ALOGI("Debug port: Dial Call");
             dialData.clir = 0;
             dialData.address = args[1];
             issueLocalRequest(RIL_REQUEST_DIAL, &dialData, sizeof(dialData));
             break;
         case 9:
-            LOGI("Debug port: Answer Call");
+            ALOGI("Debug port: Answer Call");
             issueLocalRequest(RIL_REQUEST_ANSWER, NULL, 0);
             break;
         case 10:
-            LOGI("Debug port: End Call");
+            ALOGI("Debug port: End Call");
             issueLocalRequest(RIL_REQUEST_HANGUP, &hangupData,
                               sizeof(hangupData));
             break;
         default:
-            LOGE ("Invalid request");
+            ALOGE ("Invalid request");
             break;
     }
     freeDebugCallbackArgs(number, args);
@@ -2592,7 +2706,7 @@ eventLoop(void *param) {
     ret = pipe(filedes);
 
     if (ret < 0) {
-        LOGE("Error in pipe() errno:%d", errno);
+        ALOGE("Error in pipe() errno:%d", errno);
         return NULL;
     }
 
@@ -2608,7 +2722,7 @@ eventLoop(void *param) {
 
     // Only returns on error
     ril_event_loop();
-    LOGE ("error in event_loop_base errno:%d", errno);
+    ALOGE ("error in event_loop_base errno:%d", errno);
     // kill self to restart on error
     kill(0, SIGKILL);
 
@@ -2635,7 +2749,7 @@ RIL_startEventLoop(void) {
     pthread_mutex_unlock(&s_startupMutex);
 
     if (ret < 0) {
-        LOGE("Failed to create dispatch thread errno:%d", errno);
+        ALOGE("Failed to create dispatch thread errno:%d", errno);
         return;
     }
 }
@@ -2651,23 +2765,23 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
     int flags;
 
     if (callbacks == NULL) {
-        LOGE("RIL_register: RIL_RadioFunctions * null");
+        ALOGE("RIL_register: RIL_RadioFunctions * null");
         return;
     }
     if (callbacks->version < RIL_VERSION_MIN) {
-        LOGE("RIL_register: version %d is to old, min version is %d",
+        ALOGE("RIL_register: version %d is to old, min version is %d",
              callbacks->version, RIL_VERSION_MIN);
         return;
     }
     if (callbacks->version > RIL_VERSION) {
-        LOGE("RIL_register: version %d is too new, max version is %d",
+        ALOGE("RIL_register: version %d is too new, max version is %d",
              callbacks->version, RIL_VERSION);
         return;
     }
-    LOGE("RIL_register: RIL version %d", callbacks->version);
+    ALOGE("RIL_register: RIL version %d", callbacks->version);
 
     if (s_registerCalled > 0) {
-        LOGE("RIL_register has been called more than once. "
+        ALOGE("RIL_register has been called more than once. "
                 "Subsequent call ignored");
         return;
     }
@@ -2701,7 +2815,7 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM);
 
     if (ret < 0) {
-        LOGE("Unable to bind socket errno:%d", errno);
+        ALOGE("Unable to bind socket errno:%d", errno);
         exit (-1);
     }
     s_fdListen = ret;
@@ -2709,14 +2823,14 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
 #else
     s_fdListen = android_get_control_socket(SOCKET_NAME_RIL);
     if (s_fdListen < 0) {
-        LOGE("Failed to get socket '" SOCKET_NAME_RIL "'");
+        ALOGE("Failed to get socket '" SOCKET_NAME_RIL "'");
         exit(-1);
     }
 
     ret = listen(s_fdListen, 4);
 
     if (ret < 0) {
-        LOGE("Failed to listen on control socket '%d': %s",
+        ALOGE("Failed to listen on control socket '%d': %s",
              s_fdListen, strerror(errno));
         exit(-1);
     }
@@ -2734,14 +2848,14 @@ RIL_register (const RIL_RadioFunctions *callbacks) {
 
     s_fdDebug = android_get_control_socket(SOCKET_NAME_RIL_DEBUG);
     if (s_fdDebug < 0) {
-        LOGE("Failed to get socket '" SOCKET_NAME_RIL_DEBUG "' errno:%d", errno);
+        ALOGE("Failed to get socket '" SOCKET_NAME_RIL_DEBUG "' errno:%d", errno);
         exit(-1);
     }
 
     ret = listen(s_fdDebug, 4);
 
     if (ret < 0) {
-        LOGE("Failed to listen on ril debug socket '%d': %s",
+        ALOGE("Failed to listen on ril debug socket '%d': %s",
              s_fdDebug, strerror(errno));
         exit(-1);
     }
@@ -2791,14 +2905,14 @@ RIL_onRequestComplete(RIL_Token t, RIL_Errno e, void *response, size_t responsel
     pRI = (RequestInfo *)t;
 
     if (!checkAndDequeueRequestInfo(pRI)) {
-        LOGE ("RIL_onRequestComplete: invalid RIL_Token");
+        ALOGE ("RIL_onRequestComplete: invalid RIL_Token");
         return;
     }
 
     if (pRI->local > 0) {
         // Locally issued command...void only!
         // response does not go back up the command socket
-        LOGD("C[locl]< %s", requestToString(pRI->pCI->requestNumber));
+        ALOGD("C[locl]< %s", requestToString(pRI->pCI->requestNumber));
 
         goto done;
     }
@@ -2831,7 +2945,7 @@ RIL_onRequestComplete(RIL_Token t, RIL_Errno e, void *response, size_t responsel
         }
 
         if (s_fdCommand < 0) {
-            LOGD ("RIL onRequestComplete: Command channel closed");
+            ALOGD ("RIL onRequestComplete: Command channel closed");
         }
         sendResponse(p);
     }
@@ -2858,12 +2972,129 @@ static void
 wakeTimeoutCallback (void *param) {
     // We're using "param != NULL" as a cancellation mechanism
     if (param == NULL) {
-        //LOGD("wakeTimeout: releasing wake lock");
+        //ALOGD("wakeTimeout: releasing wake lock");
 
         releaseWakeLock();
     } else {
-        //LOGD("wakeTimeout: releasing wake lock CANCELLED");
+        //ALOGD("wakeTimeout: releasing wake lock CANCELLED");
     }
+}
+
+static int
+decodeVoiceRadioTechnology (RIL_RadioState radioState) {
+    switch (radioState) {
+        case RADIO_STATE_SIM_NOT_READY:
+        case RADIO_STATE_SIM_LOCKED_OR_ABSENT:
+        case RADIO_STATE_SIM_READY:
+            return RADIO_TECH_UMTS;
+
+        case RADIO_STATE_RUIM_NOT_READY:
+        case RADIO_STATE_RUIM_READY:
+        case RADIO_STATE_RUIM_LOCKED_OR_ABSENT:
+        case RADIO_STATE_NV_NOT_READY:
+        case RADIO_STATE_NV_READY:
+            return RADIO_TECH_1xRTT;
+
+        default:
+            ALOGD("decodeVoiceRadioTechnology: Invoked with incorrect RadioState");
+            return -1;
+    }
+}
+
+static int
+decodeCdmaSubscriptionSource (RIL_RadioState radioState) {
+    switch (radioState) {
+        case RADIO_STATE_SIM_NOT_READY:
+        case RADIO_STATE_SIM_LOCKED_OR_ABSENT:
+        case RADIO_STATE_SIM_READY:
+        case RADIO_STATE_RUIM_NOT_READY:
+        case RADIO_STATE_RUIM_READY:
+        case RADIO_STATE_RUIM_LOCKED_OR_ABSENT:
+            return CDMA_SUBSCRIPTION_SOURCE_RUIM_SIM;
+
+        case RADIO_STATE_NV_NOT_READY:
+        case RADIO_STATE_NV_READY:
+            return CDMA_SUBSCRIPTION_SOURCE_NV;
+
+        default:
+            ALOGD("decodeCdmaSubscriptionSource: Invoked with incorrect RadioState");
+            return -1;
+    }
+}
+
+static int
+decodeSimStatus (RIL_RadioState radioState) {
+   switch (radioState) {
+       case RADIO_STATE_SIM_NOT_READY:
+       case RADIO_STATE_RUIM_NOT_READY:
+       case RADIO_STATE_NV_NOT_READY:
+       case RADIO_STATE_NV_READY:
+           return -1;
+       case RADIO_STATE_SIM_LOCKED_OR_ABSENT:
+       case RADIO_STATE_SIM_READY:
+       case RADIO_STATE_RUIM_READY:
+       case RADIO_STATE_RUIM_LOCKED_OR_ABSENT:
+           return radioState;
+       default:
+           ALOGD("decodeSimStatus: Invoked with incorrect RadioState");
+           return -1;
+   }
+}
+
+static bool is3gpp2(int radioTech) {
+    switch (radioTech) {
+        case RADIO_TECH_IS95A:
+        case RADIO_TECH_IS95B:
+        case RADIO_TECH_1xRTT:
+        case RADIO_TECH_EVDO_0:
+        case RADIO_TECH_EVDO_A:
+        case RADIO_TECH_EVDO_B:
+        case RADIO_TECH_EHRPD:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* If RIL sends SIM states or RUIM states, store the voice radio
+ * technology and subscription source information so that they can be
+ * returned when telephony framework requests them
+ */
+static RIL_RadioState
+processRadioState(RIL_RadioState newRadioState) {
+
+    if((newRadioState > RADIO_STATE_UNAVAILABLE) && (newRadioState < RADIO_STATE_ON)) {
+        int newVoiceRadioTech;
+        int newCdmaSubscriptionSource;
+        int newSimStatus;
+
+        /* This is old RIL. Decode Subscription source and Voice Radio Technology
+           from Radio State and send change notifications if there has been a change */
+        newVoiceRadioTech = decodeVoiceRadioTechnology(newRadioState);
+        if(newVoiceRadioTech != voiceRadioTech) {
+            voiceRadioTech = newVoiceRadioTech;
+            RIL_onUnsolicitedResponse (RIL_UNSOL_VOICE_RADIO_TECH_CHANGED,
+                        &voiceRadioTech, sizeof(voiceRadioTech));
+        }
+        if(is3gpp2(newVoiceRadioTech)) {
+            newCdmaSubscriptionSource = decodeCdmaSubscriptionSource(newRadioState);
+            if(newCdmaSubscriptionSource != cdmaSubscriptionSource) {
+                cdmaSubscriptionSource = newCdmaSubscriptionSource;
+                RIL_onUnsolicitedResponse (RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED,
+                        &cdmaSubscriptionSource, sizeof(cdmaSubscriptionSource));
+            }
+        }
+        newSimStatus = decodeSimStatus(newRadioState);
+        if(newSimStatus != simRuimStatus) {
+            simRuimStatus = newSimStatus;
+            RIL_onUnsolicitedResponse(RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED, NULL, 0);
+        }
+
+        /* Send RADIO_ON to telephony */
+        newRadioState = RADIO_STATE_ON;
+    }
+
+    return newRadioState;
 }
 
 extern "C"
@@ -2874,10 +3105,11 @@ void RIL_onUnsolicitedResponse(int unsolResponse, void *data,
     int ret;
     int64_t timeReceived = 0;
     bool shouldScheduleTimeout = false;
+    RIL_RadioState newState;
 
     if (s_registerCalled == 0) {
         // Ignore RIL_onUnsolicitedResponse before RIL_register
-        LOGW("RIL_onUnsolicitedResponse called before RIL_register");
+        ALOGW("RIL_onUnsolicitedResponse called before RIL_register");
         return;
     }
 
@@ -2885,7 +3117,7 @@ void RIL_onUnsolicitedResponse(int unsolResponse, void *data,
 
     if ((unsolResponseIndex < 0)
         || (unsolResponseIndex >= (int32_t)NUM_ELEMS(s_unsolResponses))) {
-        LOGE("unsupported unsolicited response code %d", unsolResponse);
+        ALOGE("unsupported unsolicited response code %d", unsolResponse);
         return;
     }
 
@@ -2930,7 +3162,8 @@ void RIL_onUnsolicitedResponse(int unsolResponse, void *data,
     // some things get more payload
     switch(unsolResponse) {
         case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED:
-            p.writeInt32(s_callbacks.onStateRequest());
+            newState = processRadioState(s_callbacks.onStateRequest());
+            p.writeInt32(newState);
             appendPrintBuf("%s {%s}", printBuf,
                 radioStateToString(s_callbacks.onStateRequest()));
         break;
@@ -3062,6 +3295,7 @@ radioStateToString(RIL_RadioState s) {
         case RADIO_STATE_RUIM_LOCKED_OR_ABSENT:return"RADIO_RUIM_LOCKED_OR_ABSENT";
         case RADIO_STATE_NV_NOT_READY:return"RADIO_NV_NOT_READY";
         case RADIO_STATE_NV_READY:return"RADIO_NV_READY";
+        case RADIO_STATE_ON:return"RADIO_ON";
         default: return "<unknown state>";
     }
 }
@@ -3196,6 +3430,7 @@ requestToString(int request) {
         case RIL_REQUEST_ISIM_AUTHENTICATION: return "ISIM_AUTHENTICATION";
         case RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU: return "RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU";
         case RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS: return "RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS";
+        case RIL_REQUEST_VOICE_RADIO_TECH: return "VOICE_RADIO_TECH";
         case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED: return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED: return "UNSOL_RESPONSE_CALL_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED: return "UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED";
@@ -3230,6 +3465,7 @@ requestToString(int request) {
         case RIL_UNSOL_CDMA_PRL_CHANGED: return "UNSOL_CDMA_PRL_CHANGED";
         case RIL_UNSOL_EXIT_EMERGENCY_CALLBACK_MODE: return "UNSOL_EXIT_EMERGENCY_CALLBACK_MODE";
         case RIL_UNSOL_RIL_CONNECTED: return "UNSOL_RIL_CONNECTED";
+        case RIL_UNSOL_VOICE_RADIO_TECH_CHANGED: return "UNSOL_VOICE_RADIO_TECH_CHANGED";
         default: return "<unknown request>";
     }
 }

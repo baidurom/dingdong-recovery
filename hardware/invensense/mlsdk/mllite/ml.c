@@ -201,8 +201,12 @@ inv_error_t inv_apply_calibration(void)
 
     for (ii = 0; ii < 9; ii++) {
         gyroCal[ii] = mldl_cfg->pdata->orientation[ii];
-        accelCal[ii] = mldl_cfg->pdata->accel.orientation[ii];
-        magCal[ii] = mldl_cfg->pdata->compass.orientation[ii];
+        if (NULL != mldl_cfg->accel){
+            accelCal[ii] = mldl_cfg->pdata->accel.orientation[ii];
+        }
+        if (NULL != mldl_cfg->compass){
+            magCal[ii] = mldl_cfg->pdata->compass.orientation[ii];
+        }
     }
 
     switch (mldl_cfg->full_scale) {
@@ -225,8 +229,9 @@ inv_error_t inv_apply_calibration(void)
         break;
     }
 
-    RANGE_FIXEDPOINT_TO_FLOAT(mldl_cfg->accel->range, accelScale);
-    inv_obj.accel_sens = (long)(accelScale * 65536L);
+    if (NULL != mldl_cfg->accel){
+        RANGE_FIXEDPOINT_TO_FLOAT(mldl_cfg->accel->range, accelScale);
+        inv_obj.accel_sens = (long)(accelScale * 65536L);
     /* sensitivity adjustment, typically = 2 (for +/- 2 gee) */
 #if defined CONFIG_MPU_SENSORS_MPU6050A2 || \
     defined CONFIG_MPU_SENSORS_MPU6050B1
@@ -234,9 +239,11 @@ inv_error_t inv_apply_calibration(void)
 #else
     inv_obj.accel_sens /= 2;
 #endif
-
-    RANGE_FIXEDPOINT_TO_FLOAT(mldl_cfg->compass->range, magScale);
-    inv_obj.compass_sens = (long)(magScale * 32768);
+    }
+    if (NULL != mldl_cfg->compass){
+        RANGE_FIXEDPOINT_TO_FLOAT(mldl_cfg->compass->range, magScale);
+        inv_obj.compass_sens = (long)(magScale * 32768);
+    }
 
     if (inv_get_state() == INV_STATE_DMP_OPENED) {
         result = inv_set_gyro_calibration(gyroScale, gyroCal);
@@ -244,15 +251,19 @@ inv_error_t inv_apply_calibration(void)
             MPL_LOGE("Unable to set Gyro Calibration\n");
             return result;
         }
-        result = inv_set_accel_calibration(accelScale, accelCal);
-        if (INV_SUCCESS != result) {
-            MPL_LOGE("Unable to set Accel Calibration\n");
-            return result;
+        if (NULL != mldl_cfg->accel){
+            result = inv_set_accel_calibration(accelScale, accelCal);
+            if (INV_SUCCESS != result) {
+                MPL_LOGE("Unable to set Accel Calibration\n");
+                return result;
+            }
         }
-        result = inv_set_compass_calibration(magScale, magCal);
-        if (INV_SUCCESS != result) {
-            MPL_LOGE("Unable to set Mag Calibration\n");
-            return result;
+        if (NULL != mldl_cfg->compass){
+            result = inv_set_compass_calibration(magScale, magCal);
+            if (INV_SUCCESS != result) {
+                MPL_LOGE("Unable to set Mag Calibration\n");
+                return result;
+            }
         }
     }
     return INV_SUCCESS;

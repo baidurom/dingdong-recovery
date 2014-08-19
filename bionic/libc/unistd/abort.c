@@ -34,11 +34,6 @@
 #include "thread_private.h"
 #include "atexit.h"
 
-/* temporary, for bug hunting */
-#include "logd.h"
-#define debug_log(format, ...)  \
-    __libc_android_log_print(ANDROID_LOG_DEBUG, "libc-abort", (format), ##__VA_ARGS__ )
-
 #ifdef __arm__
 __LIBC_HIDDEN__ void
 __libc_android_abort(void)
@@ -51,7 +46,7 @@ abort(void)
 	static int cleanup_called = 0;
 	sigset_t mask;
 
-  
+
 	sigfillset(&mask);
 	/*
 	 * don't block SIGABRT to give any handler a chance; we ignore
@@ -79,7 +74,12 @@ abort(void)
 
     /* temporary, for bug hunting */
     /* seg fault seems to produce better debuggerd results than SIGABRT */
+#ifdef __mips__
+    /* An access that will generate SIGSEGV rather than SIGBUS. */
+    *((char*)0xdeadc0c0) = 39;
+#else
     *((char*)0xdeadbaad) = 39;
+#endif
     /* -- */
 
 	(void)kill(getpid(), SIGABRT);
@@ -102,29 +102,3 @@ abort(void)
 	(void)kill(getpid(), SIGABRT);
 	_exit(1);
 }
-
-#ifdef __arm__
-/*
- * abort() does not return, which gcc interprets to mean that it doesn't
- * need to preserve any of the callee-save registers.  Unfortunately this
- * includes the link register, so if LR is used there is no way to determine
- * which function called abort().
- *
- * We work around this by inserting a trivial stub that doesn't alter
- * any of the "interesting" registers and thus doesn't need to save them.
- * We can't just call __libc_android_abort from C because gcc uses "bl"
- * without first saving LR, so we use an asm statement.  This also has
- * the side-effect of replacing abort() with __libc_android_abort() in
- * the stack trace.
- *
- * Ideally __libc_android_abort would be static, but I haven't figured out
- * how to tell gcc to call a static function from an asm statement.
- */
-void
-abort(void)
-{
-    asm ("b __libc_android_abort");
-    _exit(1);       /* suppress gcc noreturn warnings */
-}
-#endif
-

@@ -110,7 +110,11 @@ void GGLAssembler::extract(integer_t& d, int s, int h, int l, int bits)
 {
     const int maskLen = h-l;
 
+#ifdef __mips__
+    assert(maskLen<=11);
+#else
     assert(maskLen<=8);
+#endif
     assert(h);
     
 #if __ARM_ARCH__ >= 7
@@ -257,7 +261,7 @@ void GGLAssembler::downshift(
     int dbits = dh - dl;
     int dithering = 0;
     
-    LOGE_IF(sbits<dbits, "sbits (%d) < dbits (%d) in downshift", sbits, dbits);
+    ALOGE_IF(sbits<dbits, "sbits (%d) < dbits (%d) in downshift", sbits, dbits);
 
     if (sbits>dbits) {
         // see if we need to dither

@@ -44,19 +44,20 @@ extern "C" {
 }
 
 #define ARRAY_SIZE(array) (sizeof((array)) / sizeof((array)[0]))
+#define MIN(x,y) ((x < y) ? x : y)
 
 namespace android {
-struct string_pair {
-    const char* string1;
-    const char* string2;
+struct integer_string_pair {
+    unsigned int integer;
+    const char* string;
 };
 
-static string_pair degress_to_exif_lut [] = {
+static integer_string_pair degress_to_exif_lut [] = {
     // degrees, exif_orientation
-    {"0",   "1"},
-    {"90",  "6"},
-    {"180", "3"},
-    {"270", "8"},
+    {0,   "1"},
+    {90,  "6"},
+    {180, "3"},
+    {270, "8"},
 };
 struct libjpeg_destination_mgr : jpeg_destination_mgr {
     libjpeg_destination_mgr(uint8_t* input, int size);
@@ -199,10 +200,10 @@ static void resize_nv12(Encoder_libjpeg::params* params, uint8_t* dst_buffer) {
 }
 
 /* public static functions */
-const char* ExifElementsTable::degreesToExifOrientation(const char* degrees) {
+const char* ExifElementsTable::degreesToExifOrientation(unsigned int degrees) {
     for (unsigned int i = 0; i < ARRAY_SIZE(degress_to_exif_lut); i++) {
-        if (!strcmp(degrees, degress_to_exif_lut[i].string1)) {
-            return degress_to_exif_lut[i].string2;
+        if (degrees == degress_to_exif_lut[i].integer) {
+            return degress_to_exif_lut[i].string;
         }
     }
     return NULL;
@@ -266,7 +267,7 @@ void ExifElementsTable::insertExifToJpeg(unsigned char* jpeg, size_t jpeg_size) 
     ResetJpgfile();
     if (ReadJpegSectionsFromBuffer(jpeg, jpeg_size, read_mode)) {
         jpeg_opened = true;
-        create_EXIF(table, exif_tag_count, gps_tag_count);
+        create_EXIF(table, exif_tag_count, gps_tag_count, has_datetime_tag);
     }
 }
 
@@ -305,7 +306,7 @@ ExifElementsTable::~ExifElementsTable() {
 }
 
 status_t ExifElementsTable::insertElement(const char* tag, const char* value) {
-    int value_length = 0;
+    unsigned int value_length = 0;
     status_t ret = NO_ERROR;
 
     if (!value || !tag) {
@@ -331,6 +332,10 @@ status_t ExifElementsTable::insertElement(const char* tag, const char* value) {
         table[position].GpsTag = FALSE;
         table[position].Tag = TagNameToValue(tag);
         exif_tag_count++;
+
+        if (strcmp(tag, TAG_DATETIME) == 0) {
+            has_datetime_tag = true;
+        }
     }
 
     table[position].DataLength = 0;

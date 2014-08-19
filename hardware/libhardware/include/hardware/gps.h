@@ -36,7 +36,7 @@ __BEGIN_DECLS
 typedef int64_t GpsUtcTime;
 
 /** Maximum number of SVs for gps_sv_status_callback(). */
-#define GPS_MAX_SVS 32
+#define GPS_MAX_SVS 256
 
 /** Requested operational mode for GPS operation. */
 typedef uint32_t GpsPositionMode;
@@ -286,19 +286,48 @@ typedef struct {
     /** Represents a bit mask indicating which SVs
      * have ephemeris data.
      */
-    uint32_t    ephemeris_mask;
+    uint32_t    ephemeris_mask[8];
 
     /** Represents a bit mask indicating which SVs
      * have almanac data.
      */
-    uint32_t    almanac_mask;
+    uint32_t    almanac_mask[8];
 
     /**
      * Represents a bit mask indicating which SVs
      * were used for computing the most recent position fix.
      */
-    uint32_t    used_in_fix_mask;
+    uint32_t    used_in_fix_mask[8];
 } GpsSvStatus;
+
+typedef struct {
+    /** set to sizeof(GpsTestResult)*/
+    size_t size;
+    /** the result value on GPS Test, 0:Success, 1:Fail*/
+    int error_code;
+
+    /** means theta of measured angle on GPS Test, Range: 0~360, default is 0*/
+    int theta;
+
+    /** means phi of measured angle on GPS Test, Range: 0~360, default is 0*/
+    int phi;
+
+    /** the number of success of GPS test*/
+    int success_num;
+
+    /** the number of completion of GPS test*/
+    int completed_num;
+
+    /** the average of C/No, unit:0.1dB, ex.37.8dB*/
+    int avg_cno;
+
+    /** the standard deviation of C/No, unit0.1dB, ex.37.8dB*/
+    int dev_cno;
+
+    /** average Speed, 0.1unit, default is 0*/
+    int avg_speed;  
+
+}GpsTestResult;
 
 /* 2G and 3G */
 /* In 3G lac is discarded */
@@ -364,6 +393,11 @@ typedef void (* gps_request_utc_time)();
  */
 typedef pthread_t (* gps_create_thread)(const char* name, void (*start)(void *), void* arg);
 
+/** Callback for GPS AT command test result
+ *  Can only be called from a thread created by create_thread_cb
+ */
+typedef void (* gps_test_callback)(GpsTestResult* test_result);
+
 /** GPS callback structure. */
 typedef struct {
     /** set to sizeof(GpsCallbacks) */
@@ -372,6 +406,7 @@ typedef struct {
     gps_status_callback status_cb;
     gps_sv_status_callback sv_status_cb;
     gps_nmea_callback nmea_cb;
+    gps_test_callback test_cb;
     gps_set_capabilities set_capabilities_cb;
     gps_acquire_wakelock acquire_wakelock_cb;
     gps_release_wakelock release_wakelock_cb;
@@ -427,6 +462,15 @@ typedef struct {
 
     /** Get a pointer to extension information. */
     const void* (*get_extension)(const char* name);
+
+    /** EPO file */
+    int (*epo_file_time) (long long uTime[]);
+    int (*epo_file_update) (void);
+    
+    /** GPS AT command test*/
+    int (*test_start)(int test_num, int prn_num, int time_delay);
+    int (*test_stop)(void);
+    int (*test_inprogress)(void);
 } GpsInterface;
 
 /** Callback to request the client to download XTRA data.

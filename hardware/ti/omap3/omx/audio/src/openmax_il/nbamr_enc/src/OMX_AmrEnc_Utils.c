@@ -3200,7 +3200,7 @@ OMX_ERRORTYPE AddStateTransition(AMRENC_COMPONENT_PRIVATE *pComponentPrivate) {
     }
     /* Increment state change request reference count */
     pComponentPrivate->nPendingStateChangeRequests++;
-    LOGI("addstatetranstion: %ld @ %d", pComponentPrivate->nPendingStateChangeRequests, pComponentPrivate->curState);
+    ALOGI("addstatetranstion: %ld @ %d", pComponentPrivate->nPendingStateChangeRequests, pComponentPrivate->curState);
 
     if(pthread_mutex_unlock(&pComponentPrivate->mutexStateChangeRequest)) {
        return OMX_ErrorUndefined;
@@ -3217,7 +3217,7 @@ OMX_ERRORTYPE RemoveStateTransition(AMRENC_COMPONENT_PRIVATE *pComponentPrivate,
     }
     pComponentPrivate->nPendingStateChangeRequests--;
 
-    LOGI("removestatetransition: %ld @ %d", pComponentPrivate->nPendingStateChangeRequests, pComponentPrivate->curState);
+    ALOGI("removestatetransition: %ld @ %d", pComponentPrivate->nPendingStateChangeRequests, pComponentPrivate->curState);
     /* If there are no more pending requests, signal the thread waiting on this*/
     if(!pComponentPrivate->nPendingStateChangeRequests && bEnableSignal) {
        pthread_cond_signal(&(pComponentPrivate->StateChangeCondition));

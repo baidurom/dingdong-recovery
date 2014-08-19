@@ -126,6 +126,9 @@ ifeq ($(BMTRACE),y)
    DK_DEFINES += -D TIWLAN_BMTRACE
 endif
 
+# WPS Support
+DK_DEFINES += -D SUPPL_WPS_SUPPORT
+
 ##
 ##
 ## Platform Compilation Directives

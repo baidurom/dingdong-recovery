@@ -1286,7 +1286,6 @@ TI_STATUS drvMain_Recovery (TI_HANDLE hDrvMain)
 {
     TDrvMain         *pDrvMain = (TDrvMain *) hDrvMain;
 
-	pDrvMain->uNumOfRecoveryAttempts++;
     if (!pDrvMain->bRecovery)
     {
         TRACE1(pDrvMain->tStadHandles.hReport, REPORT_SEVERITY_CONSOLE,".....drvMain_Recovery, ts=%d\n", os_timeStampMs(pDrvMain->tStadHandles.hOs));
@@ -1731,6 +1730,7 @@ static void drvMain_Sm (TI_HANDLE hDrvMain, ESmEvent eEvent)
         }
         else if (pDrvMain->uNumOfRecoveryAttempts < MAX_NUM_OF_RECOVERY_TRIGGERS) 
         {
+            pDrvMain->uNumOfRecoveryAttempts++;
             pDrvMain->eSmState = SM_STATE_STOPPING;
             eStatus = drvMain_StopActivities (pDrvMain);
         }

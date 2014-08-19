@@ -14,8 +14,8 @@ $(error expecting 1 protoc we have $(words $(PROTOC)), PROTOC='$(PROTOC)')
 endif
 
 ifeq ("$(ANDROID_DEVICE)","")
-$(warning Default to ANDROID_DEVICE=crespo")
-ANDROID_DEVICE=crespo
+$(warning Default to ANDROID_DEVICE=passion")
+ANDROID_DEVICE=passion
 endif
 
 # Directories of source files

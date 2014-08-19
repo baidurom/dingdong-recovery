@@ -16,7 +16,8 @@
 LOCAL_PATH := $(my-dir)
 include $(CLEAR_VARS)
 
-liblog_sources := logd_write.c
+liblog_sources := logd_write.c \
+					log_properties.c
 
 # some files must not be compiled when building against Mingw
 # they correspond to features not used by our host development tools
@@ -40,19 +41,39 @@ endif
 
 liblog_host_sources := $(liblog_sources) fake_log_device.c
 
-# Static library for host
+
+# Shared and static library for host
 # ========================================================
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_host_sources)
 LOCAL_LDLIBS := -lpthread
 LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1
+LOCAL_WHOLE_STATIC_LIBRARIES := libxlog
 include $(BUILD_HOST_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := liblog
+LOCAL_WHOLE_STATIC_LIBRARIES := liblog
+include $(BUILD_HOST_SHARED_LIBRARY)
+
+
+# Static library for host, 64-bit
+# ========================================================
+include $(CLEAR_VARS)
+LOCAL_MODULE := lib64log
+LOCAL_SRC_FILES := $(liblog_host_sources)
+LOCAL_LDLIBS := -lpthread
+LOCAL_CFLAGS := -DFAKE_LOG_DEVICE=1 -m64
+LOCAL_WHOLE_STATIC_LIBRARIES := libxlog
+include $(BUILD_HOST_STATIC_LIBRARY)
+
 
 # Shared and static library for target
 # ========================================================
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblog
 LOCAL_SRC_FILES := $(liblog_sources)
+LOCAL_WHOLE_STATIC_LIBRARIES := libxlog
 include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)

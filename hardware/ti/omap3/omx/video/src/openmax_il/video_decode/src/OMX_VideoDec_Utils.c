@@ -1865,7 +1865,7 @@ EXIT:
 
 OMX_ERRORTYPE VIDDEC_EmptyBufferDone(VIDDEC_COMPONENT_PRIVATE* pComponentPrivate, OMX_BUFFERHEADERTYPE* pBufferHeader)
 {
-    //LOGI("VIDDEC_EmptyBufferDone: header %p buffer %p", pBufferHeader, pBufferHeader->pBuffer);
+    //ALOGI("VIDDEC_EmptyBufferDone: header %p buffer %p", pBufferHeader, pBufferHeader->pBuffer);
     ((VIDDEC_BUFFER_PRIVATE* )pBufferHeader->pInputPortPrivate)->eBufferOwner = VIDDEC_BUFFER_WITH_CLIENT;
 
     // No buffer flag EOS event needs to be sent for INPUT port
@@ -1889,7 +1889,7 @@ OMX_ERRORTYPE VIDDEC_EmptyBufferDone(VIDDEC_COMPONENT_PRIVATE* pComponentPrivate
 
 OMX_ERRORTYPE VIDDEC_FillBufferDone(VIDDEC_COMPONENT_PRIVATE* pComponentPrivate, OMX_BUFFERHEADERTYPE* pBufferHeader)
 {
-    //LOGI("VIDDEC_FillBufferDone: header %p buffer %p", pBufferHeader, pBufferHeader->pBuffer);
+    //ALOGI("VIDDEC_FillBufferDone: header %p buffer %p", pBufferHeader, pBufferHeader->pBuffer);
     ((VIDDEC_BUFFER_PRIVATE* )pBufferHeader->pOutputPortPrivate)->eBufferOwner = VIDDEC_BUFFER_WITH_CLIENT;
 
     // OpenMAX-IL standard specifies that a component generates the OMX_EventBufferFlag event when an OUTPUT port
@@ -2386,7 +2386,7 @@ OMX_ERRORTYPE VIDDEC_HandleCommand (OMX_HANDLETYPE phandle, OMX_U32 nParam1)
 
     switch (nParam1) {
         case OMX_StateIdle:
-        LOGD("Handle request for state transition: %d => OMX_StateIdle", pComponentPrivate->eState);
+        ALOGD("Handle request for state transition: %d => OMX_StateIdle", pComponentPrivate->eState);
         if (pComponentPrivate->eState == OMX_StateIdle) {
             eError = OMX_ErrorSameState;
             OMX_PRSTATE4(pComponentPrivate->dbg, "Same State 0x%x\n", eError);
@@ -2732,7 +2732,7 @@ OMX_ERRORTYPE VIDDEC_HandleCommand (OMX_HANDLETYPE phandle, OMX_U32 nParam1)
                                                        OMX_CommandStateSet,
                                                        pComponentPrivate->eState,
                                                        NULL);
-               LOGD("OMX_StateIdle state reached");
+               ALOGD("OMX_StateIdle state reached");
                break;
             }
             else if (pComponentPrivate->eState == OMX_StateExecuting || pComponentPrivate->eState == OMX_StatePause) {
@@ -2815,7 +2815,7 @@ OMX_ERRORTYPE VIDDEC_HandleCommand (OMX_HANDLETYPE phandle, OMX_U32 nParam1)
                                                        OMX_CommandStateSet,
                                                        pComponentPrivate->eState,
                                                        NULL);
-                LOGD("OMX_StateIdle state reached");
+                ALOGD("OMX_StateIdle state reached");
                 eError = OMX_ErrorNone;
                 pComponentPrivate->bTransPause = 0;
                 pComponentPrivate->bIsPaused = 0;
@@ -8447,7 +8447,7 @@ OMX_ERRORTYPE VIDDEC_CopyBuffer(VIDDEC_COMPONENT_PRIVATE* pComponentPrivate,
             free(pComponentPrivate->eFirstBuffer.pFirstBufferSaved);
             pComponentPrivate->eFirstBuffer.pFirstBufferSaved = NULL;
         } else {
-            LOGE("Not enough memory in the buffer to concatenate the 2 frames, loosing first frame\n");
+            ALOGE("Not enough memory in the buffer to concatenate the 2 frames, loosing first frame\n");
         }
 EXIT:
     OMX_PRINT1(pComponentPrivate->dbg, "OUT\n");
@@ -9082,7 +9082,7 @@ OMX_ERRORTYPE VIDDEC_SetMpeg4_Parameters(VIDDEC_COMPONENT_PRIVATE* pComponentPri
 
     property_get("deblocking.video.disableIfD1", value, "0");
     mDisableDeblockingIfD1 = atoi(value);
-    LOGD_IF(mDisableDeblockingIfD1, "Disabling deblocking if D1 resolution");
+    ALOGD_IF(mDisableDeblockingIfD1, "Disabling deblocking if D1 resolution");
 
     OMX_PRDSP2(pComponentPrivate->dbg,"Initializing DSP for mpeg4 and h263 eCompressionFormat 0x%x\n",
     pComponentPrivate->pInPortDef->format.video.eCompressionFormat);
@@ -9111,7 +9111,7 @@ OMX_ERRORTYPE VIDDEC_SetMpeg4_Parameters(VIDDEC_COMPONENT_PRIVATE* pComponentPri
         if(pComponentPrivate->pOutPortDef->format.video.nFrameWidth > 480 || 
                 pComponentPrivate->pOutPortDef->format.video.nFrameHeight > 480){
            bDisDeblocking = OMX_TRUE;
-           LOGD("D1 or higher resolution: Disable Deblocking!!");
+           ALOGD("D1 or higher resolution: Disable Deblocking!!");
         }
     }
 

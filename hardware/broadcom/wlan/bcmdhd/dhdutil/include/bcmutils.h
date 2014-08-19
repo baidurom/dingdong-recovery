@@ -1,7 +1,7 @@
 /*
  * Misc useful os-independent macros and functions.
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,14 +15,11 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: bcmutils.h,v 13.236.2.16 2011-01-26 00:45:06 Exp $
+ * $Id: bcmutils.h 347624 2012-07-27 10:49:56Z $
  */
-
 
 #ifndef	_bcmutils_h_
 #define	_bcmutils_h_
-
-#include <stddef.h>
 
 #define bcm_strcpy_s(dst, noOfElements, src)            strcpy((dst), (src))
 #define bcm_strncpy_s(dst, noOfElements, src, count)    strncpy((dst), (src), (count))
@@ -30,6 +27,10 @@
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#ifdef PKTQ_LOG
+#include <wlioctl.h>
 #endif
 
 
@@ -98,24 +99,46 @@ typedef struct pktq_prec {
 	uint16 max;
 } pktq_prec_t;
 
+#ifdef PKTQ_LOG
+typedef struct {
+	uint32 requested;    
+	uint32 stored;	     
+	uint32 saved;	     
+	uint32 selfsaved;    
+	uint32 full_dropped; 
+	uint32 dropped;      
+	uint32 sacrificed;   
+	uint32 busy;         
+	uint32 retry;        
+	uint32 ps_retry;     
+	uint32 retry_drop;   
+	uint32 max_avail;    
+	uint32 max_used;     
+	uint32 queue_capacity; 
+} pktq_counters_t;
+#endif 
+
+
+#define PKTQ_COMMON	\
+	uint16 num_prec;        			\
+	uint16 hi_prec;         	\
+	uint16 max;             					\
+	uint16 len;             
 
 
 struct pktq {
-	uint16 num_prec;
-	uint16 hi_prec;
-	uint16 max;
-	uint16 len;
-
+	PKTQ_COMMON
+	
 	struct pktq_prec q[PKTQ_MAX_PREC];
+#ifdef PKTQ_LOG
+	pktq_counters_t	_prec_cnt[PKTQ_MAX_PREC];		
+#endif
 };
 
 
 struct spktq {
-	uint16 num_prec;
-	uint16 hi_prec;
-	uint16 max;
-	uint16 len;
-
+	PKTQ_COMMON
+	
 	struct pktq_prec q[1];
 };
 
@@ -136,7 +159,9 @@ typedef bool (*ifpkt_cb_t)(void*, int);
 #define SHARED_POOL		((struct pktpool *)NULL)
 #endif
 
+#ifndef PKTPOOL_LEN_MAX
 #define PKTPOOL_LEN_MAX		40
+#endif 
 #define PKTPOOL_CB_MAX		3
 
 struct pktpool;
@@ -187,6 +212,7 @@ typedef struct pktpool {
 	uint8 cbcnt;
 	uint8 ecbcnt;
 	bool emptycb_disable;
+	pktpool_cbinfo_t *availcb_excl;
 	pktpool_cbinfo_t cbs[PKTPOOL_CB_MAX];
 	pktpool_cbinfo_t ecbs[PKTPOOL_CB_MAX];
 	void *q[PKTPOOL_LEN_MAX + 1];
@@ -212,10 +238,14 @@ extern void* pktpool_get(pktpool_t *pktp);
 extern void pktpool_free(pktpool_t *pktp, void *p);
 extern int pktpool_add(pktpool_t *pktp, void *p);
 extern uint16 pktpool_avail(pktpool_t *pktp);
+extern int pktpool_avail_notify_normal(osl_t *osh, pktpool_t *pktp);
+extern int pktpool_avail_notify_exclusive(osl_t *osh, pktpool_t *pktp, pktpool_cb_t cb);
 extern int pktpool_avail_register(pktpool_t *pktp, pktpool_cb_t cb, void *arg);
 extern int pktpool_empty_register(pktpool_t *pktp, pktpool_cb_t cb, void *arg);
 extern int pktpool_setmaxlen(pktpool_t *pktp, uint16 maxlen);
+extern int pktpool_setmaxlen_strict(osl_t *osh, pktpool_t *pktp, uint16 maxlen);
 extern void pktpool_emptycb_disable(pktpool_t *pktp, bool disable);
+extern bool pktpool_emptycb_disabled(pktpool_t *pktp);
 
 #define POOLPTR(pp)			((pktpool_t *)(pp))
 #define pktpool_len(pp)			(POOLPTR(pp)->len - 1)
@@ -239,18 +269,20 @@ extern int ether_isnulladdr(const void *ea);
 
 
 
-#define pktq_psetmax(pq, prec, _max)    ((pq)->q[prec].max = (_max))
-#define pktq_plen(pq, prec)             ((pq)->q[prec].len)
-#define pktq_pavail(pq, prec)           ((pq)->q[prec].max - (pq)->q[prec].len)
-#define pktq_pfull(pq, prec)            ((pq)->q[prec].len >= (pq)->q[prec].max)
-#define pktq_pempty(pq, prec)           ((pq)->q[prec].len == 0)
+#define pktq_psetmax(pq, prec, _max)	((pq)->q[prec].max = (_max))
+#define pktq_pmax(pq, prec)		((pq)->q[prec].max)
+#define pktq_plen(pq, prec)		((pq)->q[prec].len)
+#define pktq_pavail(pq, prec)		((pq)->q[prec].max - (pq)->q[prec].len)
+#define pktq_pfull(pq, prec)		((pq)->q[prec].len >= (pq)->q[prec].max)
+#define pktq_pempty(pq, prec)		((pq)->q[prec].len == 0)
 
-#define pktq_ppeek(pq, prec)            ((pq)->q[prec].head)
-#define pktq_ppeek_tail(pq, prec)       ((pq)->q[prec].tail)
+#define pktq_ppeek(pq, prec)		((pq)->q[prec].head)
+#define pktq_ppeek_tail(pq, prec)	((pq)->q[prec].tail)
 
 extern void *pktq_penq(struct pktq *pq, int prec, void *p);
 extern void *pktq_penq_head(struct pktq *pq, int prec, void *p);
 extern void *pktq_pdeq(struct pktq *pq, int prec);
+extern void *pktq_pdeq_prev(struct pktq *pq, int prec, void *prev_p);
 extern void *pktq_pdeq_tail(struct pktq *pq, int prec);
 
 extern void pktq_pflush(osl_t *osh, struct pktq *pq, int prec, bool dir,
@@ -262,23 +294,26 @@ extern bool pktq_pdel(struct pktq *pq, void *p, int prec);
 
 extern int pktq_mlen(struct pktq *pq, uint prec_bmp);
 extern void *pktq_mdeq(struct pktq *pq, uint prec_bmp, int *prec_out);
+extern void *pktq_mpeek(struct pktq *pq, uint prec_bmp, int *prec_out);
 
 
 
-#define pktq_len(pq)                    ((int)(pq)->len)
-#define pktq_max(pq)                    ((int)(pq)->max)
-#define pktq_avail(pq)                  ((int)((pq)->max - (pq)->len))
-#define pktq_full(pq)                   ((pq)->len >= (pq)->max)
-#define pktq_empty(pq)                  ((pq)->len == 0)
+#define pktq_len(pq)		((int)(pq)->len)
+#define pktq_max(pq)		((int)(pq)->max)
+#define pktq_avail(pq)		((int)((pq)->max - (pq)->len))
+#define pktq_full(pq)		((pq)->len >= (pq)->max)
+#define pktq_empty(pq)		((pq)->len == 0)
 
 
-#define pktenq(pq, p)		pktq_penq(((struct pktq *)pq), 0, (p))
-#define pktenq_head(pq, p)	pktq_penq_head(((struct pktq *)pq), 0, (p))
-#define pktdeq(pq)		pktq_pdeq(((struct pktq *)pq), 0)
-#define pktdeq_tail(pq)		pktq_pdeq_tail(((struct pktq *)pq), 0)
-#define pktqinit(pq, len) pktq_init(((struct pktq *)pq), 1, len)
+#define pktenq(pq, p)		pktq_penq(((struct pktq *)(void *)pq), 0, (p))
+#define pktenq_head(pq, p)	pktq_penq_head(((struct pktq *)(void *)pq), 0, (p))
+#define pktdeq(pq)		pktq_pdeq(((struct pktq *)(void *)pq), 0)
+#define pktdeq_tail(pq)		pktq_pdeq_tail(((struct pktq *)(void *)pq), 0)
+#define pktqinit(pq, len)	pktq_init(((struct pktq *)(void *)pq), 1, len)
 
 extern void pktq_init(struct pktq *pq, int num_prec, int max_len);
+extern void pktq_set_max_plen(struct pktq *pq, int prec, int max_len);
+
 
 extern void *pktq_deq(struct pktq *pq, int *prec_out);
 extern void *pktq_deq_tail(struct pktq *pq, int *prec_out);
@@ -293,18 +328,21 @@ extern uint pktfrombuf(osl_t *osh, void *p, uint offset, int len, uchar *buf);
 extern uint pkttotlen(osl_t *osh, void *p);
 extern void *pktlast(osl_t *osh, void *p);
 extern uint pktsegcnt(osl_t *osh, void *p);
+extern uint pktsegcnt_war(osl_t *osh, void *p);
+extern uint8 *pktoffset(osl_t *osh, void *p,  uint offset);
 
+
+#define	PKTPRIO_VDSCP	0x100		
+#define	PKTPRIO_VLAN	0x200		
+#define	PKTPRIO_UPD	0x400		
+#define	PKTPRIO_DSCP	0x800		
 
 extern uint pktsetprio(void *pkt, bool update_vtag);
-#define	PKTPRIO_VDSCP	0x100
-#define	PKTPRIO_VLAN	0x200
-#define	PKTPRIO_UPD	0x400
-#define	PKTPRIO_DSCP	0x800
 
 
-extern int bcm_atoi(char *s);
-extern ulong bcm_strtoul(char *cp, char **endp, uint base);
-extern char *bcmstrstr(char *haystack, char *needle);
+extern int bcm_atoi(const char *s);
+extern ulong bcm_strtoul(const char *cp, char **endp, uint base);
+extern char *bcmstrstr(const char *haystack, const char *needle);
 extern char *bcmstrcat(char *dest, const char *src);
 extern char *bcmstrncat(char *dest, const char *src, uint size);
 extern ulong wchar2ascii(char *abuf, ushort *wbuf, ushort wbuflen, ulong abuflen);
@@ -315,7 +353,7 @@ int bcmstrnicmp(const char* s1, const char* s2, int cnt);
 
 
 extern char *bcm_ether_ntoa(const struct ether_addr *ea, char *buf);
-extern int bcm_ether_atoe(char *p, struct ether_addr *ea);
+extern int bcm_ether_atoe(const char *p, struct ether_addr *ea);
 
 
 struct ipv4_addr;
@@ -323,6 +361,8 @@ extern char *bcm_ip_ntoa(struct ipv4_addr *ia, char *buf);
 
 
 extern void bcm_mdelay(uint ms);
+
+#define NVRAM_RECLAIM_CHECK(name)
 
 extern char *getvar(char *vars, const char *name);
 extern int getintvar(char *vars, const char *name);
@@ -338,6 +378,7 @@ extern uint getgpiopin(char *vars, char *pin_name, uint def_pin);
 #define bcmtslog(tstamp, fmt, a1, a2)
 #define bcmprinttslogs()
 #define bcmprinttstamp(us)
+#define bcmdumptslog(buf, size)
 
 extern char *bcm_nvram_vars(uint *length);
 extern int bcm_nvram_cache(void *sih);
@@ -361,7 +402,7 @@ typedef struct bcm_iovar {
 
 
 #define IOV_GVAL(id)		((id)*2)
-#define IOV_SVAL(id)		(((id)*2)+IOV_SET)
+#define IOV_SVAL(id)		((id) * 2 + IOV_SET)
 #define IOV_ISSET(actionid)	((actionid & IOV_SET) == IOV_SET)
 #define IOV_ID(actionid)	(actionid >> 1)
 
@@ -526,11 +567,21 @@ extern int bcm_format_ssid(char* buf, const uchar ssid[], uint ssid_len);
 #define	ISALIGNED(a, x)		(((uintptr)(a) & ((x)-1)) == 0)
 #define ALIGN_ADDR(addr, boundary) (void *)(((uintptr)(addr) + (boundary) - 1) \
 	                                         & ~((boundary) - 1))
-#define	ISPOWEROF2(x)		((((x)-1)&(x)) == 0)
+#define ALIGN_SIZE(size, boundary) (((size) + (boundary) - 1) \
+	                                         & ~((boundary) - 1))
+#define	ISPOWEROF2(x)		((((x) - 1) & (x)) == 0)
 #define VALID_MASK(mask)	!((mask) & ((mask) + 1))
+
 #ifndef OFFSETOF
-#define	OFFSETOF(type, member)	((uint)offsetof(type, member))
-#endif
+#ifdef __ARMCC_VERSION
+
+#include <stddef.h>
+#define	OFFSETOF(type, member)	offsetof(type, member)
+#else
+#define	OFFSETOF(type, member)	((uint)(uintptr)&((type *)0)->member)
+#endif 
+#endif 
+
 #ifndef ARRAYSIZE
 #define ARRAYSIZE(a)		(sizeof(a)/sizeof(a[0]))
 #endif
@@ -585,6 +636,21 @@ extern void *_bcmutils_dummy_fn;
 #define CRC32_INIT_VALUE 0xffffffff
 #define CRC32_GOOD_VALUE 0xdebb20e3
 
+
+#define MACF				"%02x:%02x:%02x:%02x:%02x:%02x"
+#define ETHERP_TO_MACF(ea)	((struct ether_addr *) (ea))->octet[0], \
+							((struct ether_addr *) (ea))->octet[1], \
+							((struct ether_addr *) (ea))->octet[2], \
+							((struct ether_addr *) (ea))->octet[3], \
+							((struct ether_addr *) (ea))->octet[4], \
+							((struct ether_addr *) (ea))->octet[5]
+
+#define ETHER_TO_MACF(ea) 	(ea).octet[0], \
+							(ea).octet[1], \
+							(ea).octet[2], \
+							(ea).octet[3], \
+							(ea).octet[4], \
+							(ea).octet[5]
 
 typedef struct bcm_bit_desc {
 	uint32	bit;
@@ -657,17 +723,14 @@ extern bcm_tlv_t *bcm_parse_ordered_tlvs(void *buf, int buflen, uint key);
 
 
 extern const char *bcmerrorstr(int bcmerror);
+extern bcm_tlv_t *bcm_parse_tlvs(void *buf, int buflen, uint key);
 
 
 typedef uint32 mbool;
-#define mboolset(mb, bit)		((mb) |= (bit))
-#define mboolclr(mb, bit)		((mb) &= ~(bit))
-#define mboolisset(mb, bit)		(((mb) & (bit)) != 0)
+#define mboolset(mb, bit)		((mb) |= (bit))		
+#define mboolclr(mb, bit)		((mb) &= ~(bit))	
+#define mboolisset(mb, bit)		(((mb) & (bit)) != 0)	
 #define	mboolmaskset(mb, mask, val)	((mb) = (((mb) & ~(mask)) | (val)))
-
-
-extern uint16 bcm_qdbm_to_mw(uint8 qdbm);
-extern uint8 bcm_mw_to_qdbm(uint16 mw);
 
 
 struct fielddesc {
@@ -677,21 +740,23 @@ struct fielddesc {
 };
 
 extern void bcm_binit(struct bcmstrbuf *b, char *buf, uint size);
-extern int bcm_bprintf(struct bcmstrbuf *b, const char *fmt, ...);
+extern void bcm_bprhex(struct bcmstrbuf *b, const char *msg, bool newline, uint8 *buf, int len);
+
 extern void bcm_inc_bytes(uchar *num, int num_bytes, uint8 amount);
-extern int bcm_cmp_bytes(uchar *arg1, uchar *arg2, uint8 nbytes);
-extern void bcm_print_bytes(char *name, const uchar *cdata, int len);
+extern int bcm_cmp_bytes(const uchar *arg1, const uchar *arg2, uint8 nbytes);
+extern void bcm_print_bytes(const char *name, const uchar *cdata, int len);
 
 typedef  uint32 (*bcmutl_rdreg_rtn)(void *arg0, uint arg1, uint32 offset);
 extern uint bcmdumpfields(bcmutl_rdreg_rtn func_ptr, void *arg0, uint arg1, struct fielddesc *str,
                           char *buf, uint32 bufsize);
-
-extern uint bcm_mkiovar(char *name, char *data, uint datalen, char *buf, uint len);
 extern uint bcm_bitcount(uint8 *bitmap, uint bytelength);
 
+extern int bcm_bprintf(struct bcmstrbuf *b, const char *fmt, ...);
 
 
-#define SSID_FMT_BUF_LEN	((4 * DOT11_MAX_SSID_LEN) + 1)
+extern uint16 bcm_qdbm_to_mw(uint8 qdbm);
+extern uint8 bcm_mw_to_qdbm(uint16 mw);
+extern uint bcm_mkiovar(char *name, char *data, uint datalen, char *buf, uint len);
 
 unsigned int process_nvram_vars(char *varbuf, unsigned int len);
 

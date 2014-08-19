@@ -51,11 +51,6 @@ __BEGIN_DECLS
 #define LIGHT_ID_BLUETOOTH          "bluetooth"
 #define LIGHT_ID_WIFI               "wifi"
 
-//CL-47490: Add ID for t328t
-#ifdef HTC_MSM7X27A_CHIP
-#define LIGHT_ID_DUALLED            "dualled"
-#endif
-
 /* ************************************************************************
  * Flash modes for the flashMode field of light_state_t.
  */

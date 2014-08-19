@@ -1,0 +1,104 @@
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" >
+
+    <Button
+        android:id="@+id/buttonSave"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentRight="true"
+        android:layout_marginBottom="25dp"
+        android:layout_marginRight="25dp"
+        android:text="@string/save" />
+
+    <TextView
+        android:id="@+id/textLABC"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentTop="true"
+        android:layout_marginLeft="20dp"
+        android:layout_marginTop="20dp"
+        android:text="@string/LABC"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+    <TextView
+        android:id="@+id/textLABCLevel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textLABC"
+        android:layout_alignRight="@+id/buttonSave"
+        android:layout_alignTop="@+id/textLABC"
+        android:padding="@dimen/padding_medium"
+        android:text="@string/power" />
+
+    <SeekBar
+        android:id="@+id/seekBarLABC"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_below="@+id/textLABCLevel"
+        android:max="@integer/MAX_LABC_LEVEL" />
+
+    <TextView
+        android:id="@+id/textCABC"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/textLABC"
+        android:layout_below="@+id/seekBarLABC"
+        android:layout_marginTop="40dp"
+        android:text="@string/CABC"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+
+    <TextView
+        android:id="@+id/textCABCLevel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textCABC"
+        android:layout_alignRight="@+id/textLABCLevel"
+        android:layout_alignTop="@+id/textCABC"
+        android:padding="@dimen/padding_medium"
+        android:text="@string/power" />
+
+    <SeekBar
+        android:id="@+id/seekBarCABC"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_below="@+id/textCABCLevel"
+        android:max="@integer/MAX_CABC_LEVEL" />
+
+    <TextView
+        android:id="@+id/textDRE"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignLeft="@+id/textCABC"
+        android:layout_below="@+id/seekBarCABC"
+        android:layout_marginTop="40dp"
+        android:text="@string/DRE"
+        android:textAppearance="?android:attr/textAppearanceLarge" />
+
+    <TextView
+        android:id="@+id/textDRELevel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/textDRE"
+        android:layout_alignRight="@+id/textLABCLevel"
+        android:layout_alignTop="@+id/textDRE"
+        android:padding="@dimen/padding_medium"
+        android:text="@string/power" />
+
+
+    <SeekBar
+        android:id="@+id/seekBarDRE"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentLeft="true"
+        android:layout_below="@+id/textDRE"
+        android:max="@integer/MAX_DRE_LEVEL" />
+
+
+</RelativeLayout>

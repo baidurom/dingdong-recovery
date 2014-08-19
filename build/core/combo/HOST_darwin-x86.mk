@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 #
 # Copyright (C) 2006 The Android Open Source Project
 #
@@ -17,33 +48,67 @@
 # Configuration for Darwin (Mac OS X) on x86.
 # Included by combo/select.mk
 
-# We build everything in 32-bit, because some host tools are
-# 32-bit-only anyway (emulator, acc), and because it gives us
+ifneq ($(strip $(BUILD_HOST_64bit)),)
+# By default we build everything in 32-bit, because it gives us
 # more consistency between the host tools and the target.
+# BUILD_HOST_64bit=1 overrides it for tool like emulator
+# which can benefit from 64-bit host arch.
+HOST_GLOBAL_CFLAGS += -m64
+HOST_GLOBAL_LDFLAGS += -m64
+else
 HOST_GLOBAL_CFLAGS += -m32
 HOST_GLOBAL_LDFLAGS += -m32
+endif # BUILD_HOST_64bit
 
-# Use the Mac OSX SDK 10.5 if the build host is 10.6
+ifneq ($(strip $(BUILD_HOST_static)),)
+# Statically-linked binaries are desirable for sandboxed environment
+HOST_GLOBAL_LDFLAGS += -static
+endif # BUILD_HOST_static
+
 build_mac_version := $(shell sw_vers -productVersion)
-ifneq ($(filter 10.6.%, $(build_mac_version)),)
-sdk_105_root := /Developer/SDKs/MacOSX10.5.sdk
-ifeq ($(wildcard $(sdk_105_root)),)
+
+ifneq ($(strip $(BUILD_MAC_SDK_EXPERIMENTAL)),)
+# SDK 10.7 and higher is not fully compatible with Android.
+mac_sdk_versions_supported :=  10.7 10.8
+else
+mac_sdk_versions_supported :=  10.6
+endif # BUILD_MAC_SDK_EXPERIMENTAL
+mac_sdk_versions_installed := $(shell xcodebuild -showsdks |grep macosx | sort | sed -e "s/.*macosx//g")
+mac_sdk_version := $(firstword $(filter $(mac_sdk_versions_installed), $(mac_sdk_versions_supported)))
+ifeq ($(mac_sdk_version),)
+mac_sdk_version := $(firstword $(mac_sdk_versions_supported))
+endif
+
+mac_sdk_path := $(shell xcode-select -print-path)
+ifeq ($(findstring /Applications,$(mac_sdk_path)),)
+# Legacy Xcode
+mac_sdk_root := /Developer/SDKs/MacOSX$(mac_sdk_version).sdk
+else
+#  Xcode 4.4(App Store) or higher
+# /Applications/Xcode*.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.?.sdk
+mac_sdk_root := $(mac_sdk_path)/Platforms/MacOSX.platform/Developer/SDKs/MacOSX$(mac_sdk_version).sdk
+endif
+
+ifeq ($(wildcard $(mac_sdk_root)),)
 $(warning *****************************************************)
-$(warning * You are building on Mac OSX 10.6.)
-$(warning * Can not find SDK 10.5 at $(sdk_105_root))
+$(warning * Cannot find SDK $(mac_sdk_version) at $(mac_sdk_root))
+ifeq ($(strip $(BUILD_MAC_SDK_EXPERIMENTAL)),)
+$(warning * If you wish to build using higher version of SDK, )
+$(warning * try setting BUILD_MAC_SDK_EXPERIMENTAL=1 before )
+$(warning * rerunning this command )
+endif
 $(warning *****************************************************)
 $(error Stop.)
 endif
 
-HOST_GLOBAL_CFLAGS += -isysroot $(sdk_105_root) -mmacosx-version-min=10.5
-HOST_GLOBAL_LDFLAGS += -isysroot $(sdk_105_root) -mmacosx-version-min=10.5
-endif # build_mac_version is 10.6
+HOST_GLOBAL_CFLAGS += -isysroot $(mac_sdk_root) -mmacosx-version-min=$(mac_sdk_version) -DMACOSX_DEPLOYMENT_TARGET=$(mac_sdk_version)
+HOST_GLOBAL_LDFLAGS += -isysroot $(mac_sdk_root) -Wl,-syslibroot,$(mac_sdk_root) -mmacosx-version-min=$(mac_sdk_version)
 
-HOST_GLOBAL_CFLAGS += -fPIC
+HOST_GLOBAL_CFLAGS += -fPIC -funwind-tables
 HOST_NO_UNDEFINED_LDFLAGS := -Wl,-undefined,error
 
-HOST_CC := $(CC)
-HOST_CXX := $(CXX)
+HOST_CC := gcc
+HOST_CXX := g++
 HOST_AR := $(AR)
 HOST_STRIP := $(STRIP)
 HOST_STRIP_COMMAND = $(HOST_STRIP) --strip-debug $< -o $@
@@ -53,7 +118,13 @@ HOST_JNILIB_SUFFIX := .jnilib
 
 HOST_GLOBAL_CFLAGS += \
 	-include $(call select-android-config-h,darwin-x86)
-HOST_RUN_RANLIB_AFTER_COPYING := true
+
+ifneq ($(filter 10.7 10.7.% 10.8 10.8.%, $(build_mac_version)),)
+       HOST_RUN_RANLIB_AFTER_COPYING := false
+else
+       HOST_RUN_RANLIB_AFTER_COPYING := true
+       PRE_LION_DYNAMIC_LINKER_OPTIONS := -Wl,-dynamic
+endif
 HOST_GLOBAL_ARFLAGS := cqs
 
 HOST_CUSTOM_LD_COMMAND := true
@@ -64,21 +135,24 @@ $(hide) $(PRIVATE_CXX) \
         $(HOST_GLOBAL_LD_DIRS) \
         $(HOST_GLOBAL_LDFLAGS) \
         $(PRIVATE_ALL_OBJECTS) \
+        $(addprefix -force_load , $(PRIVATE_ALL_WHOLE_STATIC_LIBRARIES)) \
         $(call normalize-host-libraries,$(PRIVATE_ALL_SHARED_LIBRARIES)) \
-        $(call normalize-host-libraries,$(PRIVATE_ALL_WHOLE_STATIC_LIBRARIES)) \
         $(if $(PRIVATE_GROUP_STATIC_LIBRARIES),-Wl$(comma)--start-group) \
         $(call normalize-host-libraries,$(PRIVATE_ALL_STATIC_LIBRARIES)) \
         $(if $(PRIVATE_GROUP_STATIC_LIBRARIES),-Wl$(comma)--end-group) \
         $(PRIVATE_LDLIBS) \
         -o $@ \
+        -install_name @rpath/$(notdir $@) \
+        -Wl,-rpath,@loader_path/../lib \
         $(PRIVATE_LDFLAGS) \
         $(HOST_LIBGCC)
 endef
 
 define transform-host-o-to-executable-inner
 $(hide) $(PRIVATE_CXX) \
+        -Wl,-rpath,@loader_path/../lib \
         -o $@ \
-        -Wl,-dynamic -headerpad_max_install_names \
+        $(PRE_LION_DYNAMIC_LINKER_OPTIONS) -headerpad_max_install_names \
         $(HOST_GLOBAL_LD_DIRS) \
         $(HOST_GLOBAL_LDFLAGS) \
         $(call normalize-host-libraries,$(PRIVATE_ALL_SHARED_LIBRARIES)) \

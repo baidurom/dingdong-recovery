@@ -45,7 +45,7 @@ parse_len(const char *str, uint64_t *plen)
     tmp[sizeof(tmp)-1] = '\0';
     len_str = strlen(tmp);
     if (!len_str) {
-        LOGE("Invalid disk length specified.");
+        ALOGE("Invalid disk length specified.");
         return 1;
     }
 
@@ -64,13 +64,13 @@ parse_len(const char *str, uint64_t *plen)
 
     *plen = strtoull(tmp, NULL, 0);
     if (!*plen) {
-        LOGE("Invalid length specified: %s", str);
+        ALOGE("Invalid length specified: %s", str);
         return 1;
     }
 
     if (*plen == (uint64_t)-1) {
         if (multiple > 1) {
-            LOGE("Size modifier illegal when len is -1");
+            ALOGE("Size modifier illegal when len is -1");
             return 1;
         }
     } else {
@@ -80,7 +80,7 @@ parse_len(const char *str, uint64_t *plen)
         *plen *= multiple;
 
         if (*plen > 0xffffffffULL) {
-            LOGE("Length specified is too large!: %llu KB", *plen);
+            ALOGE("Length specified is too large!: %llu KB", *plen);
             return 1;
         }
     }
@@ -108,7 +108,7 @@ load_partitions(cnode *root, struct disk_info *dinfo)
             pinfo->flags |= PART_ACTIVE_FLAG;
 
         if (!(tmp = config_str(partnode, "type", NULL))) {
-            LOGE("Partition type required: %s", pinfo->name);
+            ALOGE("Partition type required: %s", pinfo->name);
             return 1;
         }
 
@@ -118,7 +118,7 @@ load_partitions(cnode *root, struct disk_info *dinfo)
         } else if (!strcmp(tmp, "fat32")) {
             pinfo->type = PC_PART_TYPE_FAT32;
         } else {
-            LOGE("Unsupported partition type found: %s", tmp);
+            ALOGE("Unsupported partition type found: %s", tmp);
             return 1;
         }
 
@@ -146,13 +146,13 @@ load_diskconfig(const char *fn, char *path_override)
     const char *tmp;
 
     if (!(dinfo = malloc(sizeof(struct disk_info)))) {
-        LOGE("Could not malloc disk_info");
+        ALOGE("Could not malloc disk_info");
         return NULL;
     }
     memset(dinfo, 0, sizeof(struct disk_info));
 
     if (!(dinfo->part_lst = malloc(MAX_NUM_PARTS * sizeof(struct part_info)))) {
-        LOGE("Could not malloc part_lst");
+        ALOGE("Could not malloc part_lst");
         goto fail;
     }
     memset(dinfo->part_lst, 0,
@@ -160,33 +160,33 @@ load_diskconfig(const char *fn, char *path_override)
 
     config_load_file(root, fn);
     if (root->first_child == NULL) {
-        LOGE("Could not read config file %s", fn);
+        ALOGE("Could not read config file %s", fn);
         goto fail;
     }
 
     if (!(devroot = config_find(root, "device"))) {
-        LOGE("Could not find device section in config file '%s'", fn);
+        ALOGE("Could not find device section in config file '%s'", fn);
         goto fail;
     }
 
 
     if (!(tmp = config_str(devroot, "path", path_override))) {
-        LOGE("device path is requried");
+        ALOGE("device path is requried");
         goto fail;
     }
     dinfo->device = strdup(tmp);
 
     /* find the partition scheme */
     if (!(tmp = config_str(devroot, "scheme", NULL))) {
-        LOGE("partition scheme is required");
+        ALOGE("partition scheme is required");
         goto fail;
     } else if (!strcmp(tmp, "mbr")) {
         dinfo->scheme = PART_SCHEME_MBR;
     } else if (!strcmp(tmp, "gpt")) {
-        LOGE("'gpt' partition scheme not supported yet.");
+        ALOGE("'gpt' partition scheme not supported yet.");
         goto fail;
     } else {
-        LOGE("Unknown partition scheme specified: %s", tmp);
+        ALOGE("Unknown partition scheme specified: %s", tmp);
         goto fail;
     }
 
@@ -194,30 +194,30 @@ load_diskconfig(const char *fn, char *path_override)
     tmp = config_str(devroot, "sector_size", "512");
     dinfo->sect_size = strtol(tmp, NULL, 0);
     if (!dinfo->sect_size) {
-        LOGE("Invalid sector size: %s", tmp);
+        ALOGE("Invalid sector size: %s", tmp);
         goto fail;
     }
 
     /* first lba where the partitions will start on disk */
     if (!(tmp = config_str(devroot, "start_lba", NULL))) {
-        LOGE("start_lba must be provided");
+        ALOGE("start_lba must be provided");
         goto fail;
     }
 
     if (!(dinfo->skip_lba = strtol(tmp, NULL, 0))) {
-        LOGE("Invalid starting LBA (or zero): %s", tmp);
+        ALOGE("Invalid starting LBA (or zero): %s", tmp);
         goto fail;
     }
 
     /* Number of LBAs on disk */
     if (!(tmp = config_str(devroot, "num_lba", NULL))) {
-        LOGE("num_lba is required");
+        ALOGE("num_lba is required");
         goto fail;
     }
     dinfo->num_lba = strtoul(tmp, NULL, 0);
 
     if (!(partnode = config_find(devroot, "partitions"))) {
-        LOGE("Device must specify partition list");
+        ALOGE("Device must specify partition list");
         goto fail;
     }
 
@@ -244,14 +244,19 @@ sync_ptable(int fd)
     sync();
 
     if (fstat(fd, &stat)) {
-       LOGE("Cannot stat, errno=%d.", errno);
+       ALOGE("Cannot stat, errno=%d.", errno);
        return -1;
     }
 
-    if (S_ISBLK(stat.st_mode) && ((rv = ioctl(fd, BLKRRPART, NULL)) < 0)) {
-        LOGE("Could not re-read partition table. REBOOT!. (errno=%d)", errno);
-        return -1;
+	ALOGI("sync_ptable() : S_ISBLK") ;
+    if (S_ISBLK(stat.st_mode)) {
+		ALOGI("sync_ptable() : ioctl(BLKRRPART)") ;
+		if((rv = ioctl(fd, BLKRRPART, NULL)) < 0) {
+        	ALOGE("Could not re-read partition table. REBOOT!. (errno=%d)", errno);
+        	return -1;
+		}
     }
+	ALOGI("sync_ptable() : after ioctl(BLKRRPART)") ;
 
     return 0;
 }
@@ -277,51 +282,61 @@ validate(struct disk_info *dinfo)
     int cnt;
     struct stat stat;
 
+	ALOGI("Enter validate()");
+
     if (!dinfo)
         return -1;
 
+	ALOGI("Enter validate() : open dinfo->device");
     if ((fd = open(dinfo->device, O_RDWR)) < 0) {
-        LOGE("Cannot open device '%s' (errno=%d)", dinfo->device, errno);
+        ALOGE("Cannot open device '%s' (errno=%d)", dinfo->device, errno);
         return -1;
     }
+	ALOGI("Enter validate() : after open");
 
+	ALOGI("Enter validate() : fstat(fd..)");
     if (fstat(fd, &stat)) {
-        LOGE("Cannot stat file '%s', errno=%d.", dinfo->device, errno);
+        ALOGE("Cannot stat file '%s', errno=%d.", dinfo->device, errno);
         goto fail;
     }
-
+	ALOGI("Enter validate() : after fstat(..)");
 
     /* XXX: Some of the code below is kind of redundant and should probably
      * be refactored a little, but it will do for now. */
 
     /* Verify that we can operate on the device that was requested.
      * We presently only support block devices and regular file images. */
+    ALOGI("Enter validate() : call S_ISBLK()");
     if (S_ISBLK(stat.st_mode)) {
         /* get the sector size and make sure we agree */
+		ALOGI("Enter validate() : calls ioctl(BLKSSZGET)");
         if (ioctl(fd, BLKSSZGET, &sect_sz) < 0) {
-            LOGE("Cannot get sector size (errno=%d)", errno);
+            ALOGE("Cannot get sector size (errno=%d)", errno);
             goto fail;
         }
+		ALOGI("Enter validate() : after ioctl(BLKSSZET)");
 
         if (!sect_sz || sect_sz != dinfo->sect_size) {
-            LOGE("Device sector size is zero or sector sizes do not match!");
+            ALOGE("Device sector size is zero or sector sizes do not match!");
             goto fail;
         }
 
         /* allow the user override the "disk size" if they provided num_lba */
         if (!dinfo->num_lba) {
+			ALOGI("Enter validate() : calls ioctl(BLKGETSIZE64)");
             if (ioctl(fd, BLKGETSIZE64, &disk_size) < 0) {
-                LOGE("Could not get block device size (errno=%d)", errno);
+                ALOGE("Could not get block device size (errno=%d)", errno);
                 goto fail;
             }
+			ALOGI("Enter validate() : after ioctl(BLKGETSIZE64)");
             /* XXX: we assume that the disk has < 2^32 sectors :-) */
             dinfo->num_lba = (uint32_t)(disk_size / (uint64_t)dinfo->sect_size);
         } else
             disk_size = (uint64_t)dinfo->num_lba * (uint64_t)dinfo->sect_size;
     } else if (S_ISREG(stat.st_mode)) {
-        LOGI("Requesting operation on a regular file, not block device.");
+        ALOGI("Requesting operation on a regular file, not block device.");
         if (!dinfo->sect_size) {
-            LOGE("Sector size for regular file images cannot be zero");
+            ALOGE("Sector size for regular file images cannot be zero");
             goto fail;
         }
         if (dinfo->num_lba)
@@ -331,12 +346,12 @@ validate(struct disk_info *dinfo)
             disk_size = (uint64_t)stat.st_size;
         }
     } else {
-        LOGE("Device does not refer to a regular file or a block device!");
+        ALOGE("Device does not refer to a regular file or a block device!");
         goto fail;
     }
 
 #if 1
-    LOGV("Device/file %s: size=%llu bytes, num_lba=%u, sect_size=%d",
+    ALOGV("Device/file %s: size=%llu bytes, num_lba=%u, sect_size=%d",
          dinfo->device, disk_size, dinfo->num_lba, dinfo->sect_size);
 #endif
 
@@ -350,12 +365,12 @@ validate(struct disk_info *dinfo)
         if (part->len_kb != (uint32_t)-1) {
             total_size += part->len_kb * 1024;
         } else if (part->len_kb == 0) {
-            LOGE("Zero-size partition '%s' is invalid.", part->name);
+            ALOGE("Zero-size partition '%s' is invalid.", part->name);
             goto fail;
         } else {
             /* the partition requests the rest of the disk. */
             if (cnt + 1 != dinfo->num_parts) {
-                LOGE("Only the last partition in the list can request to fill "
+                ALOGE("Only the last partition in the list can request to fill "
                      "the rest of disk.");
                 goto fail;
             }
@@ -363,22 +378,25 @@ validate(struct disk_info *dinfo)
 
         if ((part->type != PC_PART_TYPE_LINUX) &&
             (part->type != PC_PART_TYPE_FAT32)) {
-            LOGE("Unknown partition type (0x%x) encountered for partition "
+            ALOGE("Unknown partition type (0x%x) encountered for partition "
                  "'%s'\n", part->type, part->name);
             goto fail;
         }
     }
 
     /* only matters for disks, not files */
+	ALOGI("Enter validate() : calls S_ISBLK(stat.st_mode())");
     if (S_ISBLK(stat.st_mode) && total_size > disk_size) {
-        LOGE("Total requested size of partitions (%llu) is greater than disk "
+        ALOGE("Total requested size of partitions (%llu) is greater than disk "
              "size (%llu).", total_size, disk_size);
         goto fail;
     }
+	ALOGI("Enter validate() : after calls S_ISBLK(stat.st_mode())");
 
     return fd;
 
 fail:
+	ALOGI("Exit validate()");
     close(fd);
     return -1;
 }
@@ -389,20 +407,25 @@ validate_and_config(struct disk_info *dinfo, int *fd, struct write_list **lst)
     *lst = NULL;
     *fd = -1;
 
+	ALOGE("validate_and_config() : calls validate()");
     if ((*fd = validate(dinfo)) < 0)
         return 1;
+	ALOGE("validate_and_config() : exit validate()");
 
     switch (dinfo->scheme) {
         case PART_SCHEME_MBR:
+			ALOGE("validate_and_config() : calls config_mbr()");
             *lst = config_mbr(dinfo);
+			ALOGE("validate_and_config() : exit config_mbr()");
             return *lst == NULL;
         case PART_SCHEME_GPT:
             /* not supported yet */
         default:
-            LOGE("Uknown partition scheme.");
+            ALOGE("Uknown partition scheme.");
             break;
     }
 
+	ALOGE("validate_and_config() : close fd");
     close(*fd);
     *lst = NULL;
     return 1;
@@ -437,22 +460,31 @@ apply_disk_config(struct disk_info *dinfo, int test)
     struct write_list *wr_lst = NULL;
     int rv;
 
+	ALOGI("Call validate_and_config()");
     if (validate_and_config(dinfo, &fd, &wr_lst) != 0) {
-        LOGE("Configuration is invalid.");
+        ALOGE("Configuration is invalid.");
         goto fail;
     }
+	ALOGI("Exit validate_and_config()");
 
+	ALOGI("Call wlist_commit()");
     if ((rv = wlist_commit(fd, wr_lst, test)) >= 0)
         rv = test ? 0 : sync_ptable(fd);
+	ALOGI("Exit wlist_commit()");
 
+	ALOGI("apply_disk_config() : close fd");
     close(fd);
+	ALOGI("apply_disk_config() : calls wlist_free()");
     wlist_free(wr_lst);
     return rv;
 
 fail:
+	ALOGI("apply_disk_config() : fail exit, calls close(fd)");	
     close(fd);
-    if (wr_lst)
+    if (wr_lst) {
+		ALOGI("apply_disk_config() : fail exit, calls wlist_free()");	
         wlist_free(wr_lst);
+    }
     return 1;
 }
 
@@ -523,10 +555,10 @@ find_part_device(struct disk_info *dinfo, const char *name)
         case PART_SCHEME_MBR:
             return find_mbr_part(dinfo, name);
         case PART_SCHEME_GPT:
-            LOGE("GPT is presently not supported");
+            ALOGE("GPT is presently not supported");
             break;
         default:
-            LOGE("Unknown partition table scheme");
+            ALOGE("Unknown partition table scheme");
             break;
     }
 

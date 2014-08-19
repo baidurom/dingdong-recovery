@@ -1,3 +1,0 @@
-require board=tuna
-require version-bootloader=PRIMELA03
-

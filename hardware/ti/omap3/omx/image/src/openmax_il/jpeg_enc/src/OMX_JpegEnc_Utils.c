@@ -3254,7 +3254,7 @@ void LinkedList_AddElement(LinkedList *LinkedList, void *pValue) {
         pthread_mutex_unlock(&LinkedList->lock);
     }
     else {
-         LOGE("Linked list memory allocation failed.\n" );
+         ALOGE("Linked list memory allocation failed.\n" );
     }
 }
 

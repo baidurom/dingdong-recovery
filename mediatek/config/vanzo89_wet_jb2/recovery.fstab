@@ -1,0 +1,13 @@
+# mount point	fstype		device			[device2]
+
+/boot		emmc		boot
+/cache		ext4		/dev/block/mmcblk0p6
+/data		ext4		/dev/block/mmcblk0p7
+/misc		emmc		misc
+/recovery	emmc		recovery
+/sdcard		vfat		/dev/block/mmcblk0p8
+# Vanzo:songlixin on: Wed, 22 Feb 2012 18:31:03 +0800
+# To support external sdcard
+/sdcard2	vfat		/dev/block/mmcblk1p1	/dev/block/mmcblk1
+# End of Vanzo:songlixin
+/system		ext4		/dev/block/mmcblk0p5

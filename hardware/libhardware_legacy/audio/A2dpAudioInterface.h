@@ -37,6 +37,28 @@ public:
     virtual             ~A2dpAudioInterface();
     virtual status_t    initCheck();
 
+
+    /////////////////////////////////////////////////////////////////////////
+    //    for PCMxWay Interface API ...   Stan
+    /////////////////////////////////////////////////////////////////////////
+    virtual int xWayPlay_Start(int sample_rate);
+    virtual int xWayPlay_Stop(void);
+    virtual int xWayPlay_Write(void *buffer, int size_bytes);
+    virtual int xWayPlay_GetFreeBufferCount(void);
+    virtual int xWayRec_Start(int sample_rate);
+    virtual int xWayRec_Stop(void);
+    virtual int xWayRec_Read(void *buffer, int size_bytes);
+    //add by wendy
+    virtual int ReadRefFromRing(void*buf, uint32_t datasz,void* DLtime);
+    virtual int GetVoiceUnlockULTime( void* ULtime);
+    virtual int SetVoiceUnlockSRC(uint outSR, uint outChannel) ;
+    virtual bool startVoiceUnlockDL();
+    virtual bool stopVoiceUnlockDL();
+    virtual void freeVoiceUnlockDLInstance();
+    virtual int GetVoiceUnlockDLLatency();
+    virtual bool getVoiceUnlockDLInstance();
+
+
     virtual status_t    setVoiceVolume(float volume);
     virtual status_t    setMasterVolume(float volume);
 
@@ -48,6 +70,21 @@ public:
 
     virtual status_t    setParameters(const String8& keyValuePairs);
     virtual String8     getParameters(const String8& keys);
+
+    // add by chipeng to add EM parameter
+    virtual status_t SetEMParameter(void *ptr , int len);
+    virtual status_t GetEMParameter(void *ptr , int len);
+    virtual status_t SetAudioCommand(int par1 , int par2);
+    virtual status_t GetAudioCommand(int par1);
+    virtual status_t SetAudioData(int par1,size_t len,void *ptr);
+    virtual status_t GetAudioData(int par1,size_t len,void *ptr);
+
+    // item needs to do when mode change
+    virtual void A2dpAudiosetMode(int mode);
+
+    // add by Tina to set ACF Preview parameter
+    virtual status_t SetACFPreviewParameter(void *ptr , int len);
+    virtual status_t SetHCFPreviewParameter(void *ptr , int len);
 
     virtual size_t      getInputBufferSize(uint32_t sampleRate, int format, int channelCount);
 
@@ -68,7 +105,7 @@ public:
                                 status_t *status,
                                 AudioSystem::audio_in_acoustics acoustics);
     virtual    void        closeInputStream(AudioStreamIn* in);
-//    static AudioHardwareInterface* createA2dpInterface();
+    static AudioHardwareInterface* createA2dpInterface();
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);
@@ -89,6 +126,7 @@ private:
         virtual int         format() const { return AudioSystem::PCM_16_BIT; }
         virtual uint32_t    latency() const { return ((1000*bufferSize())/frameSize())/sampleRate() + 200; }
         virtual status_t    setVolume(float left, float right) { return INVALID_OPERATION; }
+        virtual status_t    setMuteModeNormal(int Mutecount);
         virtual ssize_t     write(const void* buffer, size_t bytes);
                 status_t    standby();
         virtual status_t    dump(int fd, const Vector<String16>& args);
@@ -120,6 +158,12 @@ private:
                 bool        mSuspended;
                 nsecs_t     mLastWriteTime;
                 uint32_t    mBufferDurationUs;
+        // add by chipeng
+        uint32_t WriteMuteCounter;
+        bool        mIncallSuspened;
+#ifdef DUMP_A2DPSTREAMOUT
+        FILE  *pA2dpinputFile;
+#endif
     };
 
     friend class A2dpAudioStreamOut;
@@ -129,10 +173,13 @@ private:
     char        mA2dpAddress[20];
     bool        mBluetoothEnabled;
     bool        mSuspended;
+    // add by chipeng
+    bool        mIncallSuspened;
 };
 
-
 // ----------------------------------------------------------------------------
+
+extern "C" AudioHardwareInterface* createA2DPAudioHardware(void);
 
 }; // namespace android
 

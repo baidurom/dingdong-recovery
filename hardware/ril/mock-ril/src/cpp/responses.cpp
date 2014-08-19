@@ -35,7 +35,7 @@
 //#define RESPONSES_DEBUG
 #ifdef  RESPONSES_DEBUG
 
-#define DBG(...) LOGD(__VA_ARGS__)
+#define DBG(...) ALOGD(__VA_ARGS__)
 
 #else
 
@@ -341,29 +341,12 @@ RIL_Errno RspOperator(
 
 // ----------------- Handle unsolicited response ----------------------------------------
  /**
- * Handle RIL_UNSOL_RESPONSE_NEW_SMS response
- */
-void UnsolRspNewSMS(int cmd, Buffer* buffer) {
-
-	DBG("UnsolRspNewSMS E");
-	LOGE("unsolicited response command: %d", cmd);
-	// Retrieve response from response message
-	ril_proto::RilSMS *rsp = new ril_proto::RilSMS();
-	rsp->ParseFromArray(buffer->data(), buffer->length());
-	char *pdu = (char *) rsp->ackpdu().c_str();
-	//const char *pdu = "0891683110102105F0240D91685110410273F500002110116103132305C8329BFD06";
-	DBG("ackpdu = %s", pdu);DBG("ackpdulen = %d", strlen(pdu));
-	s_rilenv->OnUnsolicitedResponse(cmd, pdu, strlen(pdu));
-	DBG("UnsolRspNewSMS X");
-}
-
-/**
  * Handle RIL_UNSOL_SIGNAL_STRENGTH response
  */
 void UnsolRspSignalStrength(int cmd, Buffer* buffer) {
 
     DBG("UnsolRspSignalStrength E");
-    LOGE("unsolicited response command: %d", cmd);
+    ALOGE("unsolicited response command: %d", cmd);
     // Retrieve response from response message
     ril_proto::RspSignalStrength *rsp = new ril_proto::RspSignalStrength();
     rsp->ParseFromArray(buffer->data(), buffer->length());
@@ -412,7 +395,7 @@ v8::Handle<v8::Value> SendRilRequestComplete(const v8::Arguments& args) {
      */
     if (args.Length() < REQUEST_COMPLETE_REQUIRED_CMDS) {
         // Expecting a cmd, ERROR and token
-        LOGE("SendRilRequestComplete X %d parameters"
+        ALOGE("SendRilRequestComplete X %d parameters"
              " expecting at least %d: rilErrno, cmd, and token",
                 args.Length(), REQUEST_COMPLETE_REQUIRED_CMDS);
         return v8::Undefined();
@@ -447,7 +430,7 @@ v8::Handle<v8::Value> SendRilRequestComplete(const v8::Arguments& args) {
             rilErrno = RIL_E_SUCCESS;
         } else {
             // There was a buffer but we don't support the resonse yet.
-            LOGE("SendRilRequestComplete: No conversion routine for cmd %d,"
+            ALOGE("SendRilRequestComplete: No conversion routine for cmd %d,"
                     " return RIL_E_REQUEST_NOT_SUPPORTED", cmd);
             rilErrno = RIL_E_REQUEST_NOT_SUPPORTED;
         }
@@ -473,14 +456,13 @@ v8::Handle<v8::Value> SendRilUnsolicitedResponse(const v8::Arguments& args) {
 
     int cmd;
     Buffer* buffer;
-    char* pdu;
 
     /**
      * Get the cmd number and data arguments
      */
     if (args.Length() < UNSOL_RESPONSE_REQUIRED_CMDS) {
         // Expecting a cmd
-        LOGE("SendRilUnsolicitedResponse X %d parameters"
+        ALOGE("SendRilUnsolicitedResponse X %d parameters"
              " expecting at least a cmd",
                 args.Length());
         return v8::Undefined();
@@ -506,7 +488,7 @@ v8::Handle<v8::Value> SendRilUnsolicitedResponse(const v8::Arguments& args) {
             datalen = 0;
         } else {
             // There was a buffer but we don't support the response yet.
-            LOGE("SendRilUnsolicitedResponse: No conversion routine for cmd %d,"
+            ALOGE("SendRilUnsolicitedResponse: No conversion routine for cmd %d,"
                     " return RIL_E_REQUEST_NOT_SUPPORTED", cmd);
             data = NULL;
             datalen = 0;
@@ -519,7 +501,7 @@ v8::Handle<v8::Value> SendRilUnsolicitedResponse(const v8::Arguments& args) {
 }
 
 int responsesInit(v8::Handle<v8::Context> context) {
-    LOGD("responsesInit E");
+    ALOGD("responsesInit E");
     int status = STATUS_OK;
 
     rilRspConversionMap[RIL_REQUEST_GET_SIM_STATUS] = RspGetSimStatus; // 1
@@ -536,7 +518,6 @@ int responsesInit(v8::Handle<v8::Context> context) {
     rilRspConversionMap[RIL_REQUEST_VOICE_REGISTRATION_STATE] = RspStrings; // 20
     rilRspConversionMap[RIL_REQUEST_DATA_REGISTRATION_STATE] = RspStrings; // 21
     rilRspConversionMap[RIL_REQUEST_OPERATOR] = RspOperator; // 22
-    rilRspConversionMap[RIL_REQUEST_SMS_ACKNOWLEDGE] = RspWithNoData; //37
     rilRspConversionMap[RIL_REQUEST_GET_IMEI] = RspString; // 38
     rilRspConversionMap[RIL_REQUEST_GET_IMEISV] = RspString; // 39
     rilRspConversionMap[RIL_REQUEST_ANSWER] = RspWithNoData; // 39
@@ -547,10 +528,9 @@ int responsesInit(v8::Handle<v8::Context> context) {
     rilRspConversionMap[RIL_REQUEST_SET_MUTE] = RspWithNoData;  // 53
     rilRspConversionMap[RIL_REQUEST_SCREEN_STATE] = RspWithNoData; // 61
 
-    unsolRilRspConversionMap[RIL_UNSOL_RESPONSE_NEW_SMS] = UnsolRspNewSMS; // 1003
     unsolRilRspConversionMap[RIL_UNSOL_SIGNAL_STRENGTH] = UnsolRspSignalStrength;  // 1009
 
 
-    LOGD("responsesInit X: status=%d", status);
+    ALOGD("responsesInit X: status=%d", status);
     return STATUS_OK;
 }

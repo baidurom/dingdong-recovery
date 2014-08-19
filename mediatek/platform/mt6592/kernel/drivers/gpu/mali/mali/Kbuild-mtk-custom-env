@@ -1,0 +1,67 @@
+#clouds add
+VER:=eng
+ifneq ($(strip $(TARGET_BUILD_VARIANT)),)
+ifneq ($(strip $(TARGET_BUILD_VARIANT)),eng)
+VER:=user
+endif
+endif
+#----------------------------------------------------------
+#[Section:Manual modify]
+
+FLAG_MTK_BUILD_SYS := 1
+USING_GPU_UTILIZATION := 1
+
+#----------------------------------------------------------
+#[Section:Should add to alps project config (TODO)]
+#Not yet move to "alps/mediatek/config/mt6582/autoconfig/kconfig/platform"
+#due to the mechanism
+
+#Debug version (BUILD := debug not eatten by kbuild)
+CONFIG_MALI400 := m
+ifeq ($(VER),eng)
+CONFIG_MALI400_DEBUG := y
+ccflags-y += -DDEBUG
+else
+CONFIG_MALI400_DEBUG := n
+ccflags-y += -UDEBUG
+endif
+
+ccflags-y += -DANR_ERROR_HANDLING
+
+#CONFIG_PM_RUNTIME := y
+CONFIG_DMA_SHARED_BUFFER := y
+#CONFIG_MALI400_UMP := y
+#CONFIG_MALI400_PROFILING := y
+#CONFIG_MALI400_INTERNAL_PROFILING := y
+
+ifeq ($(strip $(MTK_NATIVE_FENCE_SUPPORT)),yes)
+CONFIG_SYNC_MTK := y
+ccflags-y += -DCONFIG_SYNC_MTK
+else
+CONFIG_SYNC_MTK := n
+endif
+
+ccflags-$(CONFIG_MALI400_PROFILING) += -DCONFIG_MALI400_PROFILING
+
+#----------------------------------------------------------
+#[Section:Hard-Core]
+#[Legacy] CONFIG := mt6582
+
+#[Legacy] TARGET_PLATFORM := mt6582
+
+#[Legacy] BUILD := debug 
+
+#[Legacy] USING_UMP := 1
+
+
+#----------------------------------------------------------
+#Define CONFIG_MALI_DMA_BUF_MAP_ON_ATTACH
+ccflags-y += -DCONFIG_MALI_DMA_BUF_MAP_ON_ATTACH
+
+
+#----------------------------------------------------------
+MTK_DEBUG := $(CONFIG_MALI400_DEBUG)
+MTK_DEBUG_PROC_PRINT := $(MTK_DEBUG)
+
+ccflags-$(MTK_DEBUG) += -DMTK_DEBUG
+ccflags-$(MTK_DEBUG_PROC_PRINT) += -DMTK_DEBUG_PROC_PRINT

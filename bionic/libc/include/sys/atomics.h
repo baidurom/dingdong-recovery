@@ -33,10 +33,48 @@
 
 __BEGIN_DECLS
 
-extern int __atomic_cmpxchg(int old, int _new, volatile int *ptr);
-extern int __atomic_swap(int _new, volatile int *ptr);
-extern int __atomic_dec(volatile int *ptr);
-extern int __atomic_inc(volatile int *ptr);
+/* Note: atomic operations that were exported by the C library didn't
+ *       provide any memory barriers, which created potential issues on
+ *       multi-core devices. We now define them as inlined calls to
+ *       GCC sync builtins, which always provide a full barrier.
+ *
+ *       NOTE: The C library still exports atomic functions by the same
+ *              name to ensure ABI stability for existing NDK machine code.
+ *
+ *       If you are an NDK developer, we encourage you to rebuild your
+ *       unmodified sources against this header as soon as possible.
+ */
+#define __ATOMIC_INLINE__ static __inline__ __attribute__((always_inline))
+
+__ATOMIC_INLINE__ int
+__atomic_cmpxchg(int old_value, int new_value, volatile int* ptr)
+{
+    /* We must return 0 on success */
+    return __sync_val_compare_and_swap(ptr, old_value, new_value) != old_value;
+}
+
+__ATOMIC_INLINE__ int
+__atomic_swap(int new_value, volatile int *ptr)
+{
+    int old_value;
+    do {
+        old_value = *ptr;
+    } while (__sync_val_compare_and_swap(ptr, old_value, new_value) != old_value);
+    return old_value;
+}
+
+__ATOMIC_INLINE__ int
+__atomic_dec(volatile int *ptr)
+{
+  return __sync_fetch_and_sub (ptr, 1);
+}
+
+__ATOMIC_INLINE__ int
+__atomic_inc(volatile int *ptr)
+{
+  return __sync_fetch_and_add (ptr, 1);
+}
+
 
 int __futex_wait(volatile void *ftx, int val, const struct timespec *timeout);
 int __futex_wake(volatile void *ftx, int count);

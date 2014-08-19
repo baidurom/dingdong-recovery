@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -13,7 +13,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: typedefs.h,v 1.103.2.1 2010-05-11 18:19:28 Exp $
+ * $Id: typedefs.h 286783 2011-09-29 06:18:57Z $
  */
 
 
@@ -255,7 +255,7 @@ typedef float64 float_t;
 
 
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) || defined(__lint)
 	#define BWL_COMPILER_GNU
 #elif defined(__CC_ARM) && __CC_ARM
 	#define BWL_COMPILER_ARMCC
@@ -299,6 +299,8 @@ typedef float64 float_t;
 
 #define UNUSED_PARAMETER(x) (void)(x)
 
+
+#define DISCARD_QUAL(ptr, type) ((type *)(uintptr)(ptr))
 
 #include <bcmdefs.h>
 #endif

@@ -23,13 +23,17 @@ struct action;
 
 struct action *action_remove_queue_head(void);
 void action_add_queue_tail(struct action *act);
+void action_add_queue_head(struct action *act);
 void action_for_each_trigger(const char *trigger,
                              void (*func)(struct action *act));
 int action_queue_empty(void);
 void queue_property_triggers(const char *name, const char *value);
 void queue_all_property_triggers();
+void queue_early_property_triggers();
+void queue_fs_property_triggers();
 void queue_builtin_action(int (*func)(int nargs, char **args), char *name);
 
 int init_parse_config_file(const char *fn);
+int expand_props(char *dst, const char *src, int len);
 
 #endif

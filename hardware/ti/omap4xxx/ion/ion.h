@@ -18,8 +18,8 @@
  *  limitations under the License.
  */
 
-#include <linux/ion.h>
-#include <linux/omap_ion.h>
+#include "linux_ion.h"
+#include "omap_ion.h"
 
 int ion_open();
 int ion_close(int fd);

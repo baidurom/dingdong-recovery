@@ -740,7 +740,7 @@ static TI_STATUS hwInit_BootSm (TI_HANDLE hHwInit)
         /* Then, move it 4 places to the right, to alter Fref relevant bits in register 0x2c */
         clkVal = pHwInit->aHwInitTxn[pHwInit->uTxnIndex].uData;
         pHwInit->uTxnIndex = 0; /* Reset index only after getting the last read value! */
-        clkVal |= (pGenParams->RefClk << 1) << 4;
+        clkVal |= ((pGenParams->RefClk & 0x3)<< 1) << 4;
         if ((pGenParams->GeneralSettings & DRPw_MASK_CHECK) > 0)
         {
             clkVal |= DRPw_MASK_SET;

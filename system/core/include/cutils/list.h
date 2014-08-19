@@ -19,6 +19,10 @@
 
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
 struct listnode
 {
     struct listnode *next;
@@ -41,11 +45,16 @@ struct listnode
     for (node = (list)->prev; node != (list); node = node->prev)
 
 void list_init(struct listnode *list);
+void list_add_head(struct listnode *list, struct listnode *item);
 void list_add_tail(struct listnode *list, struct listnode *item);
 void list_remove(struct listnode *item);
 
 #define list_empty(list) ((list) == (list)->next)
 #define list_head(list) ((list)->next)
 #define list_tail(list) ((list)->prev)
+
+#ifdef __cplusplus
+};
+#endif /* __cplusplus */
 
 #endif

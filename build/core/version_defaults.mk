@@ -1,3 +1,38 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+#
+# The following software/firmware and/or related documentation ("MediaTek Software")
+# have been modified by MediaTek Inc. All revisions are subject to any receiver's
+# applicable license agreements with MediaTek Inc.
+
+
 #
 # Copyright (C) 2008 The Android Open Source Project
 #
@@ -41,7 +76,7 @@ ifeq "" "$(PLATFORM_VERSION)"
   # which is the version that we reveal to the end user.
   # Update this value when the platform version changes (rather
   # than overriding it somewhere else).  Can be an arbitrary string.
-  PLATFORM_VERSION := 4.0.4
+  PLATFORM_VERSION := 4.2.1
 endif
 
 ifeq "" "$(PLATFORM_SDK_VERSION)"
@@ -53,7 +88,7 @@ ifeq "" "$(PLATFORM_SDK_VERSION)"
   # intermediate builds).  During development, this number remains at the
   # SDK version the branch is based on and PLATFORM_VERSION_CODENAME holds
   # the code-name of the new development work.
-  PLATFORM_SDK_VERSION := 15
+  PLATFORM_SDK_VERSION := 17
 endif
 
 ifeq "" "$(PLATFORM_VERSION_CODENAME)"
@@ -94,6 +129,10 @@ ifeq "" "$(BUILD_NUMBER)"
   # If no BUILD_NUMBER is set, create a useful "I am an engineering build
   # from this date/time" value.  Make it start with a non-digit so that
   # anyone trying to parse it as an integer will probably get "0".
-  BUILD_NUMBER := eng.$(USER).$(shell date +%Y%m%d.%H%M%S)
-endif
+#  BUILD_NUMBER := eng.$(USER).$(shell date +%Y%m%d.%H%M%S)
 
+  # use the format "seconds since 1970-01-01 00:00:00 UTC" as timestamp
+  # to reduce the length of build number & reserve more quota for related properties
+  DATE_INFO := $(shell date +%s)
+  BUILD_NUMBER := eng.$(USER).$(DATE_INFO)
+endif

@@ -25,6 +25,11 @@
 #include "contents.h"
 #include "extent.h"
 #include "indirect.h"
+#include "xattr.h"
+
+#ifdef USE_MINGW
+#define S_IFLNK 0  /* used by make_link, not needed under mingw */
+#endif
 
 static u32 dentry_size(u32 entries, struct dentry *dentries)
 {
@@ -83,6 +88,8 @@ static struct ext4_dir_entry_2 *add_dentry(u8 *data, u32 *offset,
    of each directory entry into dentries[i].inode, to be filled in later
    when the inode for the entry is allocated.  Returns the inode number of the
    new directory */
+#define REC_LEN_FOR_END 8
+
 u32 make_directory(u32 dir_inode_num, u32 entries, struct dentry *dentries,
 	u32 dirs)
 {
@@ -94,6 +101,9 @@ u32 make_directory(u32 dir_inode_num, u32 entries, struct dentry *dentries,
 	u8 *data;
 	unsigned int i;
 	struct ext4_dir_entry_2 *dentry;
+	struct ext4_dir_entry_2 *prev;
+    u32 start_block;
+    u32 end_block;
 
 	blocks = DIV_ROUND_UP(dentry_size(entries, dentries), info.block_size);
 	len = blocks * info.block_size;
@@ -153,6 +163,19 @@ u32 make_directory(u32 dir_inode_num, u32 entries, struct dentry *dentries,
 			error("failed to add directory");
 			return EXT4_ALLOCATE_FAILED;
 		}
+	}
+// fix bug for make image
+    prev = dentry;
+	start_block = offset / info.block_size;
+	end_block = (offset + REC_LEN_FOR_END - 1) / info.block_size;
+	if (start_block != end_block) {
+		/* Adding this dentry will cross a block boundary, so pad the previous
+		   dentry to the block boundary */
+		if (!prev)
+			critical_error("no prev");
+		prev->rec_len += end_block * info.block_size - offset;
+		offset = end_block * info.block_size;
+        printf("fix bug for make image\n");
 	}
 
 	dentry = (struct ext4_dir_entry_2 *)(data + offset);
@@ -244,3 +267,52 @@ int inode_set_permissions(u32 inode_num, u16 mode, u16 uid, u16 gid, u32 mtime)
 
 	return 0;
 }
+
+#ifdef HAVE_SELINUX
+#define XATTR_SELINUX_SUFFIX "selinux"
+
+/* XXX */
+#define cpu_to_le32(x) (x)
+#define cpu_to_le16(x) (x)
+
+int inode_set_selinux(u32 inode_num, const char *secon)
+{
+	struct ext4_inode *inode = get_inode(inode_num);
+	u32 *hdr;
+	struct ext4_xattr_entry *entry;
+	size_t name_len = strlen(XATTR_SELINUX_SUFFIX);
+	size_t value_len;
+	size_t size, min_offs;
+	char *val;
+
+	if (!secon)
+		return 0;
+
+	if (!inode)
+		return -1;
+
+	hdr = (u32 *) (inode + 1);
+	*hdr = cpu_to_le32(EXT4_XATTR_MAGIC);
+	entry = (struct ext4_xattr_entry *) (hdr+1);
+	memset(entry, 0, EXT4_XATTR_LEN(name_len));
+	entry->e_name_index = EXT4_XATTR_INDEX_SECURITY;
+	entry->e_name_len = name_len;
+	memcpy(entry->e_name, XATTR_SELINUX_SUFFIX, name_len);
+	value_len = strlen(secon)+1;
+	entry->e_value_size = cpu_to_le32(value_len);
+	min_offs = (char *)inode + info.inode_size - (char*) entry;
+	size = EXT4_XATTR_SIZE(value_len);
+	val = (char *)entry + min_offs - size;
+	entry->e_value_offs = cpu_to_le16(min_offs - size);
+	memset(val + size - EXT4_XATTR_PAD, 0, EXT4_XATTR_PAD);
+	memcpy(val, secon, value_len);
+	inode->i_extra_isize = cpu_to_le16(sizeof(struct ext4_inode) - EXT4_GOOD_OLD_INODE_SIZE);
+
+	return 0;
+}
+#else
+int inode_set_selinux(u32 inode_num, const char *secon)
+{
+	return 0;
+}
+#endif

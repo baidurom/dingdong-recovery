@@ -18,8 +18,7 @@
 
 #include <dlfcn.h>
 
-#include <media/stagefright/HardwareAPI.h>
-#include <media/stagefright/MediaDebug.h>
+#include <HardwareAPI.h>
 
 namespace android {
 
@@ -37,7 +36,7 @@ TIOMXPlugin::TIOMXPlugin()
       mGetRolesOfComponentHandle(NULL) {
     if (mLibHandle != NULL) {
         mInit = (InitFunc)dlsym(mLibHandle, "TIOMX_Init");
-        mDeinit = (DeinitFunc)dlsym(mLibHandle, "TIOMX_DeInit");
+        mDeinit = (DeinitFunc)dlsym(mLibHandle, "TIOMX_Deinit");
 
         mComponentNameEnum =
             (ComponentNameEnumFunc)dlsym(mLibHandle, "TIOMX_ComponentNameEnum");
@@ -124,12 +123,15 @@ OMX_ERRORTYPE TIOMXPlugin::getRolesOfComponent(
         err = (*mGetRolesOfComponentHandle)(
                 const_cast<OMX_STRING>(name), &numRoles2, array);
 
-        CHECK_EQ(err, OMX_ErrorNone);
-        CHECK_EQ(numRoles, numRoles2);
+        if (err == OMX_ErrorNone && numRoles != numRoles2) {
+            err = OMX_ErrorUndefined;
+        }
 
         for (OMX_U32 i = 0; i < numRoles; ++i) {
-            String8 s((const char *)array[i]);
-            roles->push(s);
+            if (err == OMX_ErrorNone) {
+                String8 s((const char *)array[i]);
+                roles->push(s);
+            }
 
             delete[] array[i];
             array[i] = NULL;
@@ -139,7 +141,7 @@ OMX_ERRORTYPE TIOMXPlugin::getRolesOfComponent(
         array = NULL;
     }
 
-    return OMX_ErrorNone;
+    return err;
 }
 
 }  // namespace android

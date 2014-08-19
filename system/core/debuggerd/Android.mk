@@ -1,16 +1,20 @@
 # Copyright 2005 The Android Open Source Project
 
-ifneq ($(filter arm x86,$(TARGET_ARCH)),)
+ifneq ($(filter arm mips x86,$(TARGET_ARCH)),)
 
 LOCAL_PATH:= $(call my-dir)
+ifneq ($(HAVE_AEE_FEATURE),yes)
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES:= debuggerd.c utility.c getevent.c $(TARGET_ARCH)/machine.c $(TARGET_ARCH)/unwind.c symbol_table.c
-ifeq ($(TARGET_ARCH),arm)
-LOCAL_SRC_FILES += $(TARGET_ARCH)/pr-support.c
-endif
+LOCAL_SRC_FILES:= \
+	backtrace.c \
+	debuggerd.c \
+	getevent.c \
+	tombstone.c \
+	utility.c \
+	$(TARGET_ARCH)/machine.c
 
-LOCAL_CFLAGS := -Wall
+LOCAL_CFLAGS := -Wall -Wno-unused-parameter -std=gnu99
 LOCAL_MODULE := debuggerd
 
 ifeq ($(ARCH_ARM_HAVE_VFP),true)
@@ -20,9 +24,16 @@ ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
 LOCAL_CFLAGS += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
-LOCAL_STATIC_LIBRARIES := libcutils libc
+LOCAL_SHARED_LIBRARIES := libcutils libc libcorkscrew
+
+ifeq ($(HAVE_SELINUX),true)
+LOCAL_SHARED_LIBRARIES += libselinux
+LOCAL_C_INCLUDES += external/libselinux/include
+LOCAL_CFLAGS += -DHAVE_SELINUX
+endif
 
 include $(BUILD_EXECUTABLE)
+endif # HAVE_AEE_FEATURE
 
 include $(CLEAR_VARS)
 LOCAL_SRC_FILES := crasher.c

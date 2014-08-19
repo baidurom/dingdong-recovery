@@ -55,17 +55,17 @@ static size_t out_get_buffer_size(const struct audio_stream *stream)
     return 4096;
 }
 
-static uint32_t out_get_channels(const struct audio_stream *stream)
+static audio_channel_mask_t out_get_channels(const struct audio_stream *stream)
 {
     return AUDIO_CHANNEL_OUT_STEREO;
 }
 
-static int out_get_format(const struct audio_stream *stream)
+static audio_format_t out_get_format(const struct audio_stream *stream)
 {
     return AUDIO_FORMAT_PCM_16_BIT;
 }
 
-static int out_set_format(struct audio_stream *stream, int format)
+static int out_set_format(struct audio_stream *stream, audio_format_t format)
 {
     return 0;
 }
@@ -126,6 +126,12 @@ static int out_remove_audio_effect(const struct audio_stream *stream, effect_han
     return 0;
 }
 
+static int out_get_next_write_timestamp(const struct audio_stream_out *stream,
+                                        int64_t *timestamp)
+{
+    return -EINVAL;
+}
+
 /** audio_stream_in implementation **/
 static uint32_t in_get_sample_rate(const struct audio_stream *stream)
 {
@@ -142,17 +148,17 @@ static size_t in_get_buffer_size(const struct audio_stream *stream)
     return 320;
 }
 
-static uint32_t in_get_channels(const struct audio_stream *stream)
+static audio_channel_mask_t in_get_channels(const struct audio_stream *stream)
 {
     return AUDIO_CHANNEL_IN_MONO;
 }
 
-static int in_get_format(const struct audio_stream *stream)
+static audio_format_t in_get_format(const struct audio_stream *stream)
 {
     return AUDIO_FORMAT_PCM_16_BIT;
 }
 
-static int in_set_format(struct audio_stream *stream, int format)
+static int in_set_format(struct audio_stream *stream, audio_format_t format)
 {
     return 0;
 }
@@ -208,8 +214,10 @@ static int in_remove_audio_effect(const struct audio_stream *stream, effect_hand
 }
 
 static int adev_open_output_stream(struct audio_hw_device *dev,
-                                   uint32_t devices, int *format,
-                                   uint32_t *channels, uint32_t *sample_rate,
+                                   audio_io_handle_t handle,
+                                   audio_devices_t devices,
+                                   audio_output_flags_t flags,
+                                   struct audio_config *config,
                                    struct audio_stream_out **stream_out)
 {
     struct stub_audio_device *ladev = (struct stub_audio_device *)dev;
@@ -236,6 +244,7 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
     out->stream.set_volume = out_set_volume;
     out->stream.write = out_write;
     out->stream.get_render_position = out_get_render_position;
+    out->stream.get_next_write_timestamp = out_get_next_write_timestamp;
 
     *stream_out = &out->stream;
     return 0;
@@ -278,7 +287,22 @@ static int adev_set_master_volume(struct audio_hw_device *dev, float volume)
     return -ENOSYS;
 }
 
-static int adev_set_mode(struct audio_hw_device *dev, int mode)
+static int adev_get_master_volume(struct audio_hw_device *dev, float *volume)
+{
+    return -ENOSYS;
+}
+
+static int adev_set_master_mute(struct audio_hw_device *dev, bool muted)
+{
+    return -ENOSYS;
+}
+
+static int adev_get_master_mute(struct audio_hw_device *dev, bool *muted)
+{
+    return -ENOSYS;
+}
+
+static int adev_set_mode(struct audio_hw_device *dev, audio_mode_t mode)
 {
     return 0;
 }
@@ -294,16 +318,15 @@ static int adev_get_mic_mute(const struct audio_hw_device *dev, bool *state)
 }
 
 static size_t adev_get_input_buffer_size(const struct audio_hw_device *dev,
-                                         uint32_t sample_rate, int format,
-                                         int channel_count)
+                                         const struct audio_config *config)
 {
     return 320;
 }
 
-static int adev_open_input_stream(struct audio_hw_device *dev, uint32_t devices,
-                                  int *format, uint32_t *channels,
-                                  uint32_t *sample_rate,
-                                  audio_in_acoustics_t acoustics,
+static int adev_open_input_stream(struct audio_hw_device *dev,
+                                  audio_io_handle_t handle,
+                                  audio_devices_t devices,
+                                  struct audio_config *config,
                                   struct audio_stream_in **stream_in)
 {
     struct stub_audio_device *ladev = (struct stub_audio_device *)dev;
@@ -356,29 +379,6 @@ static int adev_close(hw_device_t *device)
     return 0;
 }
 
-static uint32_t adev_get_supported_devices(const struct audio_hw_device *dev)
-{
-    return (/* OUT */
-            AUDIO_DEVICE_OUT_EARPIECE |
-            AUDIO_DEVICE_OUT_SPEAKER |
-            AUDIO_DEVICE_OUT_WIRED_HEADSET |
-            AUDIO_DEVICE_OUT_WIRED_HEADPHONE |
-            AUDIO_DEVICE_OUT_AUX_DIGITAL |
-            AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET |
-            AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
-            AUDIO_DEVICE_OUT_ALL_SCO |
-            AUDIO_DEVICE_OUT_DEFAULT |
-            /* IN */
-            AUDIO_DEVICE_IN_COMMUNICATION |
-            AUDIO_DEVICE_IN_AMBIENT |
-            AUDIO_DEVICE_IN_BUILTIN_MIC |
-            AUDIO_DEVICE_IN_WIRED_HEADSET |
-            AUDIO_DEVICE_IN_AUX_DIGITAL |
-            AUDIO_DEVICE_IN_BACK_MIC |
-            AUDIO_DEVICE_IN_ALL_SCO |
-            AUDIO_DEVICE_IN_DEFAULT);
-}
-
 static int adev_open(const hw_module_t* module, const char* name,
                      hw_device_t** device)
 {
@@ -393,14 +393,16 @@ static int adev_open(const hw_module_t* module, const char* name,
         return -ENOMEM;
 
     adev->device.common.tag = HARDWARE_DEVICE_TAG;
-    adev->device.common.version = 0;
+    adev->device.common.version = AUDIO_DEVICE_API_VERSION_2_0;
     adev->device.common.module = (struct hw_module_t *) module;
     adev->device.common.close = adev_close;
 
-    adev->device.get_supported_devices = adev_get_supported_devices;
     adev->device.init_check = adev_init_check;
     adev->device.set_voice_volume = adev_set_voice_volume;
     adev->device.set_master_volume = adev_set_master_volume;
+    adev->device.get_master_volume = adev_get_master_volume;
+    adev->device.set_master_mute = adev_set_master_mute;
+    adev->device.get_master_mute = adev_get_master_mute;
     adev->device.set_mode = adev_set_mode;
     adev->device.set_mic_mute = adev_set_mic_mute;
     adev->device.get_mic_mute = adev_get_mic_mute;
@@ -425,8 +427,8 @@ static struct hw_module_methods_t hal_module_methods = {
 struct audio_module HAL_MODULE_INFO_SYM = {
     .common = {
         .tag = HARDWARE_MODULE_TAG,
-        .version_major = 1,
-        .version_minor = 0,
+        .module_api_version = AUDIO_MODULE_API_VERSION_0_1,
+        .hal_api_version = HARDWARE_HAL_API_VERSION,
         .id = AUDIO_HARDWARE_MODULE_ID,
         .name = "Default audio HW HAL",
         .author = "The Android Open Source Project",

@@ -1,4 +1,0 @@
-sys.cpu arm1136j
-sys.jtagclock rtck
-data.load.elf ../boot/irqtest.elf
-go

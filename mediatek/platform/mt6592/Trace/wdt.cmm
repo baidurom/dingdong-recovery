@@ -1,0 +1,2 @@
+;AP WDT disable
+d.s asd:0x10000500 %le %long 0x22000000

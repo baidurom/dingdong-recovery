@@ -345,8 +345,9 @@ NOTE: We only support packets coming from within the DS (i.e. From DS = 0)
 /* mgmt body max length */
 #define MAX_MGMT_BODY_LENGTH                2312
 /* maximal length of beacon body - note that actual beacons may actually be longer
-   than this size, at least according to the spec, but so far no larger beacon was seen */
-#define MAX_BEACON_BODY_LENGTH              350
+   than this size, at least according to the spec, but so far no larger beacon was seen 
+  Note: 1500 is the recommended size by the Motorola Standard team. TI recommendation is 700*/
+#define MAX_BEACON_BODY_LENGTH              1500
 
 /* general mgmt frame structure */
 typedef struct

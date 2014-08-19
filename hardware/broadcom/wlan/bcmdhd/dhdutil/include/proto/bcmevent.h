@@ -1,7 +1,7 @@
 /*
  * Broadcom Event  protocol definitions
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -17,7 +17,7 @@
  *
  * Dependencies: proto/bcmeth.h
  *
- * $Id: bcmevent.h,v 9.64.2.9 2011-02-01 06:24:21 Exp $
+ * $Id: bcmevent.h 326276 2012-04-06 23:16:42Z $
  *
  */
 
@@ -138,11 +138,11 @@ typedef BWL_PRE_PACKED_STRUCT struct bcm_event {
 #define WLC_E_UNICAST_DECODE_ERROR 50
 #define WLC_E_MULTICAST_DECODE_ERROR 51
 #define WLC_E_TRACE		52
-#define WLC_E_BTA_HCI_EVENT	53
-#define WLC_E_IF		54
-#ifdef WLP2P
-#define WLC_E_P2P_DISC_LISTEN_COMPLETE 	55
+#ifdef WLBTAMP
+#define WLC_E_BTA_HCI_EVENT	53	
 #endif
+#define WLC_E_IF		54	
+#define WLC_E_P2P_DISC_LISTEN_COMPLETE	55	
 #define WLC_E_RSSI		56
 #define WLC_E_PFN_SCAN_COMPLETE	57
 #define WLC_E_EXTLOG_MSG	58
@@ -158,10 +158,8 @@ typedef BWL_PRE_PACKED_STRUCT struct bcm_event {
 #define WLC_E_WAI_MSG 		68
 #define WLC_E_ESCAN_RESULT 	69
 #define WLC_E_ACTION_FRAME_OFF_CHAN_COMPLETE 	70
-#if defined(WLP2P)
 #define WLC_E_PROBRESP_MSG	71
 #define WLC_E_P2P_PROBREQ_MSG	72
-#endif
 #define WLC_E_DCS_REQUEST 73
 
 #define WLC_E_FIFO_CREDIT_MAP	74
@@ -175,7 +173,18 @@ typedef BWL_PRE_PACKED_STRUCT struct bcm_event {
 #define WLC_E_EXCESS_PM_WAKE_EVENT	81
 #define WLC_E_PFN_SCAN_NONE		82
 #define WLC_E_PFN_SCAN_ALLGONE	83
-#define WLC_E_LAST		84
+#define WLC_E_GTK_PLUMBED 		84
+#define WLC_E_ASSOC_IND_NDIS		85	
+#define WLC_E_REASSOC_IND_NDIS		86	
+#define WLC_E_ASSOC_REQ_IE 		87
+#define WLC_E_ASSOC_RESP_IE 		88
+#define WLC_E_ASSOC_RECREATED	89	
+#define WLC_E_ACTION_FRAME_RX_NDIS	90	
+#define WLC_E_AUTH_REQ		91	
+#define WLC_E_TDLS_PEER_EVENT 	92	
+#define WLC_E_SPEEDY_RECREATE_FAIL	93	
+#define WLC_E_LAST			94	
+
 
 
 typedef struct {
@@ -219,6 +228,8 @@ extern const int		bcmevent_names_size;
 #define WLC_E_REASON_TSPEC_REJECTED	7
 #define WLC_E_REASON_BETTER_AP		8
 
+
+#define WLC_E_REASON_REQUESTED_ROAM 11	
 
 #define WLC_E_PRUNE_ENCR_MISMATCH	1
 #define WLC_E_PRUNE_BCAST_BSSID		2
@@ -286,19 +297,25 @@ typedef struct wl_event_data_if {
 #define WLC_E_IF_ROLE_WDS		2
 #define WLC_E_IF_ROLE_P2P_GO		3
 #define WLC_E_IF_ROLE_P2P_CLIENT	4
-#define WLC_E_IF_ROLE_BTA_CREATOR	5
-#define WLC_E_IF_ROLE_BTA_ACCEPTOR	6
+#ifdef WLBTAMP
+#define WLC_E_IF_ROLE_BTA_CREATOR	5	
+#define WLC_E_IF_ROLE_BTA_ACCEPTOR	6	
+#endif
 
 
-#define WLC_E_LINK_BCN_LOSS	1
-#define WLC_E_LINK_DISASSOC	2
-#define WLC_E_LINK_ASSOC_REC	3
-#define WLC_E_LINK_BSSCFG_DIS	4
+#define WLC_E_LINK_BCN_LOSS	1	
+#define WLC_E_LINK_DISASSOC	2	
+#define WLC_E_LINK_ASSOC_REC	3	
+#define WLC_E_LINK_BSSCFG_DIS	4	
 
 
-#define WLC_E_OVL_DOWNLOAD	0
-#define WLC_E_OVL_UPDATE_IND	1
+#define WLC_E_OVL_DOWNLOAD		0	
+#define WLC_E_OVL_UPDATE_IND	1	
 
+
+#define WLC_E_TDLS_PEER_DISCOVERED		0	
+#define WLC_E_TDLS_PEER_CONNECTED		1
+#define WLC_E_TDLS_PEER_DISCONNECTED	2
 
 #include <packed_section_end.h>
 

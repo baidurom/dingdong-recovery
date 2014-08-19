@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999-2011, Broadcom Corporation
+ * Copyright (C) 1999-2012, Broadcom Corporation
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,7 +15,7 @@
  *
  * Fundamental constants relating to IP Protocol
  *
- * $Id: bcmip.h,v 9.19 2009-11-10 20:08:33 Exp $
+ * $Id: bcmip.h 290206 2011-10-17 19:13:51Z $
  */
 
 
@@ -41,8 +41,10 @@
 	((((uint8 *)(ip_body))[IP_VER_OFFSET] & IP_VER_MASK) >> IP_VER_SHIFT)
 
 #define IP_PROT_ICMP		0x1
-#define IP_PROT_TCP		0x6
-#define IP_PROT_UDP		0x11
+#define IP_PROT_IGMP		0x2	
+#define IP_PROT_TCP		0x6	
+#define IP_PROT_UDP		0x11	
+#define IP_PROT_ICMP6		0x3a	
 
 
 #define IPV4_VER_HL_OFFSET	0

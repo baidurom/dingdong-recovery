@@ -4,22 +4,32 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 #define LOG_TAG "SocketClient"
 #include <cutils/log.h>
 
 #include <sysutils/SocketClient.h>
 
-SocketClient::SocketClient(int socket, bool owned)
-        : mSocket(socket)
-        , mSocketOwned(owned)
-        , mPid(-1)
-        , mUid(-1)
-        , mGid(-1)
-        , mRefCount(1)
-{
+SocketClient::SocketClient(int socket, bool owned) {
+    init(socket, owned, false);
+}
+
+SocketClient::SocketClient(int socket, bool owned, bool useCmdNum) {
+    init(socket, owned, useCmdNum);
+}
+
+void SocketClient::init(int socket, bool owned, bool useCmdNum) {
+    mSocket = socket;
+    mSocketOwned = owned;
+    mUseCmdNum = useCmdNum;
     pthread_mutex_init(&mWriteMutex, NULL);
     pthread_mutex_init(&mRefCountMutex, NULL);
+    mPid = -1;
+    mUid = -1;
+    mGid = -1;
+    mRefCount = 1;
+    mCmdNum = 0;
 
     struct ucred creds;
     socklen_t szCreds = sizeof(creds);
@@ -41,34 +51,87 @@ SocketClient::~SocketClient()
 }
 
 int SocketClient::sendMsg(int code, const char *msg, bool addErrno) {
-    char *buf;
-    const char* arg;
-    const char* fmt;
-    char tmp[1];
-    int  len;
-
-    if (addErrno) {
-        fmt = "%.3d %s (%s)";
-        arg = strerror(errno);
-    } else {
-        fmt = "%.3d %s";
-        arg = NULL;
-    }
-    /* Measure length of required buffer */
-    len = snprintf(tmp, sizeof tmp, fmt, code, msg, arg);
-    /* Allocate in the stack, then write to it */
-    buf = (char*)alloca(len+1);
-    snprintf(buf, len+1, fmt, code, msg, arg);
-    /* Send the zero-terminated message */
-    return sendMsg(buf);
+    return sendMsg(code, msg, addErrno, mUseCmdNum);
 }
 
-int SocketClient::sendMsg(const char *msg) {
-    if (mSocket < 0) {
-        errno = EHOSTUNREACH;
-        return -1;
-    }
+int SocketClient::sendMsg(int code, const char *msg, bool addErrno, bool useCmdNum) {
+    char *buf;
+    int ret = 0;
+	SLOGD("SocketClient msg = %s", msg);
 
+    if (addErrno) {
+        if (useCmdNum) {
+            ret = asprintf(&buf, "%d %d %s (%s)", code, getCmdNum(), msg, strerror(errno));
+        } else {
+            ret = asprintf(&buf, "%d %s (%s)", code, msg, strerror(errno));
+        }
+    } else {
+        if (useCmdNum) {
+            ret = asprintf(&buf, "%d %d %s", code, getCmdNum(), msg);
+        } else {
+            ret = asprintf(&buf, "%d %s", code, msg);
+        }
+    }
+    /* Send the zero-terminated message */
+    if (ret != -1) {
+        ret = sendMsg(buf);
+        free(buf);
+    }
+    return ret;
+}
+
+/** send 3-digit code, null, binary-length, binary data */
+int SocketClient::sendBinaryMsg(int code, const void *data, int len) {
+
+    /* 4 bytes for the code & null + 4 bytes for the len */
+    char buf[8];
+    /* Write the code */
+    snprintf(buf, 4, "%.3d", code);
+    /* Write the len */
+    uint32_t tmp = htonl(len);
+    memcpy(buf + 4, &tmp, sizeof(uint32_t));
+
+    pthread_mutex_lock(&mWriteMutex);
+    int result = sendDataLocked(buf, sizeof(buf));
+    if (result == 0 && len > 0) {
+        result = sendDataLocked(data, len);
+    }
+    pthread_mutex_unlock(&mWriteMutex);
+
+    return result;
+}
+
+// Sends the code (c-string null-terminated).
+int SocketClient::sendCode(int code) {
+    char buf[4];
+    snprintf(buf, sizeof(buf), "%.3d", code);
+    return sendData(buf, sizeof(buf));
+}
+
+char *SocketClient::quoteArg(const char *arg) {
+    int len = strlen(arg);
+    char *result = (char *)malloc(len * 2 + 3);
+    char *current = result;
+    const char *end = arg + len;
+
+    *(current++) = '"';
+    while (arg < end) {
+        switch (*arg) {
+        case '\\':
+        case '"':
+            *(current++) = '\\'; // fallthrough
+        default:
+            *(current++) = *(arg++);
+        }
+    }
+    *(current++) = '"';
+    *(current++) = '\0';
+    result = (char *)realloc(result, current-result);
+    return result;
+}
+
+
+int SocketClient::sendMsg(const char *msg) {
     // Send the message including null character
     if (sendData(msg, strlen(msg) + 1) != 0) {
         SLOGW("Unable to send msg '%s'", msg);
@@ -77,18 +140,31 @@ int SocketClient::sendMsg(const char *msg) {
     return 0;
 }
 
-int SocketClient::sendData(const void* data, int len) {
+int SocketClient::sendData(const void *data, int len) {
+
+    pthread_mutex_lock(&mWriteMutex);
+    int rc = sendDataLocked(data, len);
+    pthread_mutex_unlock(&mWriteMutex);
+
+    return rc;
+}
+
+int SocketClient::sendDataLocked(const void *data, int len) {
     int rc = 0;
     const char *p = (const char*) data;
     int brtw = len;
+
+    if (mSocket < 0) {
+        errno = EHOSTUNREACH;
+        return -1;
+    }
 
     if (len == 0) {
         return 0;
     }
 
-    pthread_mutex_lock(&mWriteMutex);
     while (brtw > 0) {
-        rc = write(mSocket, p, brtw);
+        rc = send(mSocket, p, brtw, MSG_NOSIGNAL);
         if (rc > 0) {
             p += rc;
             brtw -= rc;
@@ -98,7 +174,6 @@ int SocketClient::sendData(const void* data, int len) {
         if (rc < 0 && errno == EINTR)
             continue;
 
-        pthread_mutex_unlock(&mWriteMutex);
         if (rc == 0) {
             SLOGW("0 length write :(");
             errno = EIO;
@@ -107,7 +182,7 @@ int SocketClient::sendData(const void* data, int len) {
         }
         return -1;
     }
-    pthread_mutex_unlock(&mWriteMutex);
+    SLOGD("SocketClient sendDatalocked done: %s", data);
     return 0;
 }
 

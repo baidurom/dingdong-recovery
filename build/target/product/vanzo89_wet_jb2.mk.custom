@@ -1,0 +1,23 @@
+PRODUCT_BRAND  := UMI_X1S
+PRODUCT_LOCALES :=  \
+        zh_CN \
+        ar_EG \
+        bn_IN \
+        de_DE \
+        en_US \
+        es_ES \
+        fa_IR \
+        fr_FR \
+        hi_IN \
+        in_ID \
+        it_IT \
+        ms_MY \
+        pt_PT \
+        ru_RU \
+        th_TH \
+        vi_VN \
+        zh_TW \
+        xhdpi \
+        hdpi
+PRODUCT_PROPERTY_OVERRIDES += \
+        qemu.hw.mainkeys=1

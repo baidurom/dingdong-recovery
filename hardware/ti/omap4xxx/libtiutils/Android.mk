@@ -19,7 +19,6 @@ LOCAL_SHARED_LIBRARIES:= \
     libcutils
 
 LOCAL_C_INCLUDES += \
-	frameworks/base/include/utils \
 	bionic/libc/include \
 	hardware/ti/omap4xxx/domx/omx_core/inc \
 	hardware/ti/omap4xxx/domx/mm_osal/inc

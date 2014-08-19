@@ -28,10 +28,12 @@ PRODUCT_PACKAGES := \
         libI420colorconvert \
 	libtiutils \
 	libcamera \
-	libion \
+	libion_ti \
 	camera.omap4 \
 	libomxcameraadapter \
 	hwcomposer.omap4 \
 	smc_pa_ctrl \
-	tf_daemon
+	tf_daemon \
+	libtf_crypto_sst
 
+PRODUCT_VENDOR_KERNEL_HEADERS := hardware/ti/omap4xxx/kernel-headers

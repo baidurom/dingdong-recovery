@@ -30,6 +30,14 @@ void list_add_tail(struct listnode *head, struct listnode *item)
     head->prev = item;
 }
 
+void list_add_head(struct listnode *head, struct listnode *item)
+{
+    item->next = head->next;
+    item->prev = head->next->prev;
+    head->next->prev = item;
+    head->next = item;
+}
+
 void list_remove(struct listnode *item)
 {
     item->next->prev = item->prev;

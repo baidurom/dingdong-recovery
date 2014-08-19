@@ -193,6 +193,7 @@ status_t OMXCameraAdapter::setParametersEXIF(const CameraParameters &params,
     if( ( valstr = params.get(TICameraParameters::KEY_EXIF_MODEL ) ) != NULL )
         {
         CAMHAL_LOGVB("EXIF Model: %s", valstr);
+        strncpy(mEXIFData.mModel, valstr, EXIF_MODEL_SIZE - 1);
         mEXIFData.mModelValid= true;
         }
     else
@@ -203,12 +204,25 @@ status_t OMXCameraAdapter::setParametersEXIF(const CameraParameters &params,
     if( ( valstr = params.get(TICameraParameters::KEY_EXIF_MAKE ) ) != NULL )
         {
         CAMHAL_LOGVB("EXIF Make: %s", valstr);
+        strncpy(mEXIFData.mMake, valstr, EXIF_MAKE_SIZE - 1);
         mEXIFData.mMakeValid = true;
         }
     else
         {
         mEXIFData.mMakeValid= false;
         }
+
+
+    if( ( valstr = params.get(CameraParameters::KEY_FOCAL_LENGTH) ) != NULL ) {
+        CAMHAL_LOGVB("EXIF Focal length: %s", valstr);
+        ExifElementsTable::stringToRational(valstr,
+                                            &mEXIFData.mFocalNum,
+                                            &mEXIFData.mFocalDen);
+    } else {
+        mEXIFData.mFocalNum = 0;
+        mEXIFData.mFocalDen = 0;
+    }
+
 
     LOG_FUNCTION_NAME_EXIT;
 
@@ -293,7 +307,7 @@ status_t OMXCameraAdapter::setupEXIF()
               ( mEXIFData.mModelValid ) )
             {
             strncpy(( char * ) sharedPtr,
-                    ( char * ) mParams.get(TICameraParameters::KEY_EXIF_MODEL ),
+                    mEXIFData.mModel,
                     EXIF_MODEL_SIZE - 1);
 
             exifTags->pModelBuff = ( OMX_S8 * ) ( sharedPtr - sharedBuffer.pSharedBuff );
@@ -306,8 +320,8 @@ status_t OMXCameraAdapter::setupEXIF()
                ( mEXIFData.mMakeValid ) )
              {
              strncpy( ( char * ) sharedPtr,
-                          ( char * ) mParams.get(TICameraParameters::KEY_EXIF_MAKE ),
-                          EXIF_MAKE_SIZE - 1);
+                      mEXIFData.mMake,
+                      EXIF_MAKE_SIZE - 1);
 
              exifTags->pMakeBuff = ( OMX_S8 * ) ( sharedPtr - sharedBuffer.pSharedBuff );
              exifTags->ulMakeBuffSizeBytes = strlen((char*)sharedPtr) + 1;
@@ -317,12 +331,9 @@ status_t OMXCameraAdapter::setupEXIF()
 
         if ( ( OMX_TI_TagReadWrite == exifTags->eStatusFocalLength ))
         {
-            unsigned int numerator = 0, denominator = 0;
-            ExifElementsTable::stringToRational(mParams.get(CameraParameters::KEY_FOCAL_LENGTH),
-                                                &numerator, &denominator);
-            if (numerator || denominator) {
-                exifTags->ulFocalLength[0] = (OMX_U32) numerator;
-                exifTags->ulFocalLength[1] = (OMX_U32) denominator;
+            if (mEXIFData.mFocalNum || mEXIFData.mFocalDen ) {
+                exifTags->ulFocalLength[0] = (OMX_U32) mEXIFData.mFocalNum;
+                exifTags->ulFocalLength[1] = (OMX_U32) mEXIFData.mFocalDen;
                 CAMHAL_LOGVB("exifTags->ulFocalLength = [%u] [%u]",
                              (unsigned int)(exifTags->ulFocalLength[0]),
                              (unsigned int)(exifTags->ulFocalLength[1]));
@@ -497,7 +508,9 @@ status_t OMXCameraAdapter::setupEXIF()
     return ret;
 }
 
-status_t OMXCameraAdapter::setupEXIF_libjpeg(ExifElementsTable* exifTable)
+status_t OMXCameraAdapter::setupEXIF_libjpeg(ExifElementsTable* exifTable,
+                                             OMX_TI_ANCILLARYDATATYPE* pAncillaryData,
+                                             OMX_TI_WHITEBALANCERESULTTYPE* pWhiteBalanceData)
 {
     status_t ret = NO_ERROR;
     OMX_ERRORTYPE eError = OMX_ErrorNone;
@@ -510,22 +523,21 @@ status_t OMXCameraAdapter::setupEXIF_libjpeg(ExifElementsTable* exifTable)
     capData = &mCameraAdapterParameters.mCameraPortParams[mCameraAdapterParameters.mImagePortIndex];
 
     if ((NO_ERROR == ret) && (mEXIFData.mModelValid)) {
-        ret = exifTable->insertElement(TAG_MODEL, mParams.get(TICameraParameters::KEY_EXIF_MODEL));
+        ret = exifTable->insertElement(TAG_MODEL, mEXIFData.mModel);
     }
 
      if ((NO_ERROR == ret) && (mEXIFData.mMakeValid)) {
-        ret = exifTable->insertElement(TAG_MAKE, mParams.get(TICameraParameters::KEY_EXIF_MAKE));
+        ret = exifTable->insertElement(TAG_MAKE, mEXIFData.mMake);
      }
 
     if ((NO_ERROR == ret)) {
-        unsigned int numerator = 0, denominator = 0;
-        ExifElementsTable::stringToRational(mParams.get(CameraParameters::KEY_FOCAL_LENGTH),
-                                            &numerator, &denominator);
-        if (numerator || denominator) {
+        if (mEXIFData.mFocalNum || mEXIFData.mFocalDen) {
             char temp_value[256]; // arbitrarily long string
             snprintf(temp_value,
-                 sizeof(temp_value)/sizeof(char),
-                 "%u/%u", numerator, denominator);
+                    sizeof(temp_value)/sizeof(char),
+                    "%u/%u",
+                    mEXIFData.mFocalNum,
+                    mEXIFData.mFocalDen);
             ret = exifTable->insertElement(TAG_FOCALLENGTH, temp_value);
 
         }
@@ -544,7 +556,6 @@ status_t OMXCameraAdapter::setupEXIF_libjpeg(ExifElementsTable* exifTable)
                      pTime->tm_hour,
                      pTime->tm_min,
                      pTime->tm_sec );
-
             ret = exifTable->insertElement(TAG_DATETIME, temp_value);
         }
      }
@@ -617,8 +628,8 @@ status_t OMXCameraAdapter::setupEXIF_libjpeg(ExifElementsTable* exifTable)
 
         memcpy(temp_value, ExifAsciiPrefix, sizeof(ExifAsciiPrefix));
         memcpy(temp_value + sizeof(ExifAsciiPrefix),
-               mParams.get(CameraParameters::KEY_GPS_PROCESSING_METHOD),
-               (GPS_PROCESSING_SIZE - sizeof(ExifAsciiPrefix)));
+                mEXIFData.mGPSData.mProcMethod,
+                (GPS_PROCESSING_SIZE - sizeof(ExifAsciiPrefix)));
         ret = exifTable->insertElement(TAG_GPS_PROCESSING_METHOD, temp_value);
     }
 
@@ -649,12 +660,135 @@ status_t OMXCameraAdapter::setupEXIF_libjpeg(ExifElementsTable* exifTable)
         ret = exifTable->insertElement(TAG_GPS_DATESTAMP, mEXIFData.mGPSData.mDatestamp);
     }
 
-    if ((NO_ERROR == ret) && mParams.get(CameraParameters::KEY_ROTATION) ) {
+    if (NO_ERROR == ret) {
         const char* exif_orient =
-           ExifElementsTable::degreesToExifOrientation(mParams.get(CameraParameters::KEY_ROTATION));
+                ExifElementsTable::degreesToExifOrientation(mPictureRotation);
 
         if (exif_orient) {
            ret = exifTable->insertElement(TAG_ORIENTATION, exif_orient);
+        }
+    }
+
+    // fill in short and ushort tags
+    if (NO_ERROR == ret) {
+        char temp_value[2];
+        temp_value[1] = '\0';
+
+        // AWB
+        if (mParameters3A.WhiteBallance == OMX_WhiteBalControlAuto) {
+            temp_value[0] = '0';
+        } else {
+            temp_value[0] = '1';
+        }
+        exifTable->insertElement(TAG_WHITEBALANCE, temp_value);
+
+        // MeteringMode
+        // TODO(XXX): only supporting this metering mode at the moment, may change in future
+        temp_value[0] = '2';
+        exifTable->insertElement(TAG_METERING_MODE, temp_value);
+
+        // ExposureProgram
+        // TODO(XXX): only supporting this exposure program at the moment, may change in future
+        temp_value[0] = '3';
+        exifTable->insertElement(TAG_EXPOSURE_PROGRAM, temp_value);
+
+        // ColorSpace
+        temp_value[0] = '1';
+        exifTable->insertElement(TAG_COLOR_SPACE, temp_value);
+
+        temp_value[0] = '2';
+        exifTable->insertElement(TAG_SENSING_METHOD, temp_value);
+
+        temp_value[0] = '1';
+        exifTable->insertElement(TAG_CUSTOM_RENDERED, temp_value);
+    }
+
+    if (pAncillaryData && (NO_ERROR == ret)) {
+        unsigned int numerator = 0, denominator = 0;
+        char temp_value[256];
+        unsigned int temp_num = 0;
+
+        // DigitalZoomRatio
+        snprintf(temp_value,
+                 sizeof(temp_value)/sizeof(char),
+                 "%u/%u",
+                 pAncillaryData->nDigitalZoomFactor, 1024);
+        exifTable->insertElement(TAG_DIGITALZOOMRATIO, temp_value);
+
+        // ExposureTime
+        snprintf(temp_value,
+                 sizeof(temp_value)/sizeof(char),
+                 "%u/%u",
+                 pAncillaryData->nExposureTime, 1000000);
+        exifTable->insertElement(TAG_EXPOSURETIME, temp_value);
+
+        // ApertureValue and FNumber
+        snprintf(temp_value,
+                 sizeof(temp_value)/sizeof(char),
+                 "%u/%u",
+                 pAncillaryData->nApertureValue, 100);
+        exifTable->insertElement(TAG_FNUMBER, temp_value);
+        exifTable->insertElement(TAG_APERTURE, temp_value);
+
+        // ISO
+        snprintf(temp_value,
+                 sizeof(temp_value)/sizeof(char),
+                 "%u,0,0",
+                 pAncillaryData->nCurrentISO);
+        exifTable->insertElement(TAG_ISO_EQUIVALENT, temp_value);
+
+        // ShutterSpeed
+        snprintf(temp_value,
+                 sizeof(temp_value)/sizeof(char),
+                 "%f",
+                 log(pAncillaryData->nExposureTime) / log(2));
+        ExifElementsTable::stringToRational(temp_value, &numerator, &denominator);
+        snprintf(temp_value, sizeof(temp_value)/sizeof(char), "%u/%u", numerator, denominator);
+        exifTable->insertElement(TAG_SHUTTERSPEED, temp_value);
+
+        // Flash
+        if (mParameters3A.FlashMode == OMX_IMAGE_FlashControlAuto) {
+            if(pAncillaryData->nFlashStatus) temp_num = 0x19; // Flash fired, auto mode
+            else temp_num = 0x18; // Flash did not fire, auto mode
+        } else if (mParameters3A.FlashMode == OMX_IMAGE_FlashControlOn) {
+            if(pAncillaryData->nFlashStatus) temp_num = 0x9; // Flash fired, compulsory flash mode
+            else temp_num = 0x10; // Flash did not fire, compulsory flash mode
+        } else if(pAncillaryData->nFlashStatus) {
+            temp_num = 0x1; // Flash fired
+        } else {
+            temp_num = 0x0; // Flash did not fire
+        }
+        snprintf(temp_value,
+                 sizeof(temp_value)/sizeof(char),
+                 "%u", temp_num);
+        exifTable->insertElement(TAG_FLASH, temp_value);
+
+        if (pWhiteBalanceData) {
+            unsigned int lightsource = 0;
+            unsigned int colourtemp = pWhiteBalanceData->nColorTemperature;
+            bool flash_fired = (temp_num & 0x1); // value from flash above
+
+            // stole this from framework/tools_library/src/tools_sys_exif_tags.c
+            if( colourtemp <= 3200 ) {
+                lightsource = 3; // Tungsten
+            } else if( colourtemp > 3200 && colourtemp <= 4800 ) {
+                lightsource = 2; // Fluorescent
+            } else if( colourtemp > 4800 && colourtemp <= 5500 ) {
+                lightsource = 1; // Daylight
+            } else if( colourtemp > 5500 && colourtemp <= 6500 ) {
+                lightsource = 9; // Fine weather
+            } else if( colourtemp > 6500 ) {
+                lightsource = 10; // Cloudy weather
+            }
+
+            if(flash_fired) {
+                lightsource = 4; // Flash
+            }
+
+            snprintf(temp_value,
+                    sizeof(temp_value)/sizeof(char),
+                    "%u", lightsource);
+            exifTable->insertElement(TAG_LIGHT_SOURCE, temp_value);
         }
     }
 
@@ -675,7 +809,7 @@ status_t OMXCameraAdapter::convertGPSCoord(double coord,
 
     if ( coord == 0 ) {
 
-        LOGE("Invalid GPS coordinate");
+        ALOGE("Invalid GPS coordinate");
 
         return -EINVAL;
     }

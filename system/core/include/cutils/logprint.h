@@ -44,8 +44,9 @@ typedef struct AndroidLogEntry_t {
     time_t tv_sec;
     long tv_nsec;
     android_LogPriority priority;
-    pid_t pid;
-    pthread_t tid;
+    int msg_type;
+    int32_t pid;
+    int32_t tid;
     const char * tag;
     size_t messageLen;
     const char * message;

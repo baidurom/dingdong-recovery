@@ -290,7 +290,7 @@ struct OMX_TI_Debug
     #define OMX_DBG_PRINT(file, domain, level, mask, format, list...) \
         do {\
             if ((file) && (OMX_U32) (level * domain) >= (OMX_U32) ((mask) & (domain * OMX_DBG_MAX_LEVEL))) \
-                LOGD(OMX_DBG_FN_FMT OMX_DBG_LINE_FMT OMX_DBG_FMT \
+                ALOGD(OMX_DBG_FN_FMT OMX_DBG_LINE_FMT OMX_DBG_FMT \
                     format OMX_DBG_FN OMX_DBG_LINE, ##list); \
         } while (0)
 #else
@@ -298,7 +298,7 @@ struct OMX_TI_Debug
         do {\
             if ((file) && (OMX_U32) (level * domain) >= (OMX_U32) ((mask) & (domain * OMX_DBG_MAX_LEVEL))) { \
                 if (file == stderr || file == stdout) { \
-                    LOGD(OMX_DBG_FN_FMT OMX_DBG_LINE_FMT OMX_DBG_FMT \
+                    ALOGD(OMX_DBG_FN_FMT OMX_DBG_LINE_FMT OMX_DBG_FMT \
                         format OMX_DBG_FN OMX_DBG_LINE, ##list); \
                 } else { \
                 fprintf((file), \

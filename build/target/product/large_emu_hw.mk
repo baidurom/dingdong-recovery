@@ -22,19 +22,15 @@ PRODUCT_POLICY := android.policy_mid
 PRODUCT_PACKAGES := \
     CarHome \
     DeskClock \
-    AlarmProvider \
     Bluetooth \
     Calculator \
     Calendar \
-    Camera \
     CertInstaller \
     DrmProvider \
-    Email \
-    Exchange \
+    Email2 \
+    Exchange2 \
     Gallery2 \
-    LatinIME \
-    Launcher2 \
-    Music \
+    HomePro \
     Provision \
     QuickSearchBox \
     Settings \

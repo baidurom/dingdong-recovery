@@ -42,6 +42,7 @@
 
 #include <arpa/inet.h>
 #include "resolv_private.h"
+#include "resolv_iface.h"
 
 /* This code implements a small and *simple* DNS resolver cache.
  *
@@ -137,9 +138,19 @@
  *
  * The system property ro.net.dns_cache_size can be used to override the default
  * value with a custom value
+ *
+ *
+ * ******************************************
+ * * NOTE - this has changed.
+ * * 1) we've added IPv6 support so each dns query results in 2 responses
+ * * 2) we've made this a system-wide cache, so the cost is less (it's not
+ * *    duplicated in each process) and the need is greater (more processes
+ * *    making different requests).
+ * * Upping by 2x for IPv6
+ * * Upping by another 5x for the centralized nature
+ * *****************************************
  */
-#define  CONFIG_MAX_ENTRIES    64
-
+#define  CONFIG_MAX_ENTRIES    64 * 2 * 5
 /* name of the system property that can be used to set the cache size */
 #define  DNS_CACHE_SIZE_PROP_NAME   "ro.net.dns_cache_size"
 
@@ -1159,6 +1170,15 @@ entry_equals( const Entry*  e1, const Entry*  e2 )
  * inlined in the Entry structure.
  */
 
+/* Maximum time for a thread to wait for an pending request */
+#define PENDING_REQUEST_TIMEOUT 20;
+
+typedef struct pending_req_info {
+    unsigned int                hash;
+    pthread_cond_t              cond;
+    struct pending_req_info*    next;
+} PendingReqInfo;
+
 typedef struct resolv_cache {
     int              max_entries;
     int              num_entries;
@@ -1167,6 +1187,7 @@ typedef struct resolv_cache {
     unsigned         generation;
     int              last_id;
     Entry*           entries;
+    PendingReqInfo   pending_requests;
 } Cache;
 
 typedef struct resolv_cache_info {
@@ -1179,6 +1200,107 @@ typedef struct resolv_cache_info {
 } CacheInfo;
 
 #define  HTABLE_VALID(x)  ((x) != NULL && (x) != HTABLE_DELETED)
+
+static void
+_cache_flush_pending_requests_locked( struct resolv_cache* cache )
+{
+    struct pending_req_info *ri, *tmp;
+    if (cache) {
+        ri = cache->pending_requests.next;
+
+        while (ri) {
+            tmp = ri;
+            ri = ri->next;
+            pthread_cond_broadcast(&tmp->cond);
+
+            pthread_cond_destroy(&tmp->cond);
+            free(tmp);
+        }
+
+        cache->pending_requests.next = NULL;
+    }
+}
+
+/* return 0 if no pending request is found matching the key
+ * if a matching request is found the calling thread will wait
+ * and return 1 when released */
+static int
+_cache_check_pending_request_locked( struct resolv_cache* cache, Entry* key )
+{
+    struct pending_req_info *ri, *prev;
+    int exist = 0;
+
+    if (cache && key) {
+        ri = cache->pending_requests.next;
+        prev = &cache->pending_requests;
+        while (ri) {
+            if (ri->hash == key->hash) {
+                exist = 1;
+                break;
+            }
+            prev = ri;
+            ri = ri->next;
+        }
+
+        if (!exist) {
+            ri = calloc(1, sizeof(struct pending_req_info));
+            if (ri) {
+                ri->hash = key->hash;
+                pthread_cond_init(&ri->cond, NULL);
+                prev->next = ri;
+            }
+        } else {
+            struct timespec ts = {0,0};
+            ts.tv_sec = _time_now() + PENDING_REQUEST_TIMEOUT;
+            int rv = pthread_cond_timedwait(&ri->cond, &cache->lock, &ts);
+        }
+    }
+
+    return exist;
+}
+
+/* notify any waiting thread that waiting on a request
+ * matching the key has been added to the cache */
+static void
+_cache_notify_waiting_tid_locked( struct resolv_cache* cache, Entry* key )
+{
+    struct pending_req_info *ri, *prev;
+
+    if (cache && key) {
+        ri = cache->pending_requests.next;
+        prev = &cache->pending_requests;
+        while (ri) {
+            if (ri->hash == key->hash) {
+                pthread_cond_broadcast(&ri->cond);
+                break;
+            }
+            prev = ri;
+            ri = ri->next;
+        }
+
+        // remove item from list and destroy
+        if (ri) {
+            prev->next = ri->next;
+            pthread_cond_destroy(&ri->cond);
+            free(ri);
+        }
+    }
+}
+
+/* notify the cache that the query failed */
+void
+_resolv_cache_query_failed( struct resolv_cache* cache,
+                   const void* query,
+                   int         querylen)
+{
+    Entry    key[1];
+
+    if (cache && entry_init_key(key, query, querylen)) {
+        pthread_mutex_lock(&cache->lock);
+        _cache_notify_waiting_tid_locked(cache, key);
+        pthread_mutex_unlock(&cache->lock);
+    }
+}
 
 static void
 _cache_flush_locked( Cache*  cache )
@@ -1196,6 +1318,9 @@ _cache_flush_locked( Cache*  cache )
             entry_free(node);
         }
     }
+
+    // flush pending request
+    _cache_flush_pending_requests_locked(cache);
 
     cache->mru_list.mru_next = cache->mru_list.mru_prev = &cache->mru_list;
     cache->num_entries       = 0;
@@ -1216,6 +1341,16 @@ _res_cache_get_max_entries( void )
 {
     int result = -1;
     char cache_size[PROP_VALUE_MAX];
+
+    const char* cache_mode = getenv("ANDROID_DNS_MODE");
+
+    if (cache_mode == NULL || strcmp(cache_mode, "local") != 0) {
+        // Don't use the cache in local mode.  This is used by the
+        // proxy itself.
+        // TODO - change this to 0 when all dns stuff uses proxy (5918973)
+        XLOG("setup cache for non-cache process. size=1");
+        return 1;
+    }
 
     if (__system_property_get(DNS_CACHE_SIZE_PROP_NAME, cache_size) > 0) {
         result = atoi(cache_size);
@@ -1412,6 +1547,27 @@ _cache_remove_oldest( Cache*  cache )
     _cache_remove_p(cache, lookup);
 }
 
+/* Remove all expired entries from the hash table.
+ */
+static void _cache_remove_expired(Cache* cache) {
+    Entry* e;
+    time_t now = _time_now();
+
+    for (e = cache->mru_list.mru_next; e != &cache->mru_list;) {
+        // Entry is old, remove
+        if (now >= e->expires) {
+            Entry** lookup = _cache_lookup_p(cache, e);
+            if (*lookup == NULL) { /* should not happen */
+                XLOG("%s: ENTRY NOT IN HTABLE ?", __FUNCTION__);
+                return;
+            }
+            e = e->mru_next;
+            _cache_remove_p(cache, lookup);
+        } else {
+            e = e->mru_next;
+        }
+    }
+}
 
 ResolvCacheStatus
 _resolv_cache_lookup( struct resolv_cache*  cache,
@@ -1449,7 +1605,17 @@ _resolv_cache_lookup( struct resolv_cache*  cache,
 
     if (e == NULL) {
         XLOG( "NOT IN CACHE");
-        goto Exit;
+        // calling thread will wait if an outstanding request is found
+        // that matching this query
+        if (!_cache_check_pending_request_locked(cache, key)) {
+            goto Exit;
+        } else {
+            lookup = _cache_lookup_p(cache, key);
+            e = *lookup;
+            if (e == NULL) {
+                goto Exit;
+            }
+        }
     }
 
     now = _time_now();
@@ -1526,7 +1692,10 @@ _resolv_cache_add( struct resolv_cache*  cache,
     }
 
     if (cache->num_entries >= cache->max_entries) {
-        _cache_remove_oldest(cache);
+        _cache_remove_expired(cache);
+        if (cache->num_entries >= cache->max_entries) {
+            _cache_remove_oldest(cache);
+        }
         /* need to lookup again */
         lookup = _cache_lookup_p(cache, key);
         e      = *lookup;
@@ -1549,6 +1718,7 @@ _resolv_cache_add( struct resolv_cache*  cache,
     _cache_dump_mru(cache);
 #endif
 Exit:
+    _cache_notify_waiting_tid_locked(cache, key);
     pthread_mutex_unlock( &cache->lock );
 }
 

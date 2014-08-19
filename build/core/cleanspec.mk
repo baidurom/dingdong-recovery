@@ -1,3 +1,38 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+#
+# The following software/firmware and/or related documentation ("MediaTek Software")
+# have been modified by MediaTek Inc. All revisions are subject to any receiver's
+# applicable license agreements with MediaTek Inc.
+
+
 # Copyright (C) 2007 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,7 +98,35 @@ INTERNAL_CLEAN_BUILD_VERSION := 6
 # NEWER CLEAN STEPS MUST BE AT THE END OF THE LIST
 # ************************************************
 
+ifeq ($(ENABLE_CLEAN_SPEC),true)
+# Get the path of the top of the tree.
+# for example:
+# /home/bob/master/framework/base => /home/bob/master
+# See function gettop in build/envsetup.sh.
+define get-top-dir
+$(if $(1),$(if $(wildcard $(1)/build/core/envsetup.mk),$(1),$(strip \
+  $(call get-top-dir,$(patsubst %/,%,$(dir $(1)))))))
+endef
+
+ifneq ($(ONE_SHOT_MAKEFILE),)
+cs_subdirs := $(patsubst %/,%,$(dir $(ONE_SHOT_MAKEFILE)))
+abs_cs_subdirs := $(filter /%,$(cs_subdirs))
+ifneq ($(abs_cs_subdirs),)
+# Convert absolute path to relative path, e.g. when using mm.
+abs_top_path := $(call get-top-dir,$(word 1,$(abs_cs_subdirs)))
+cs_subdirs := $(filter-out /%,$(cs_subdirs)) \
+  $(patsubst $(abs_top_path)/%,%,$(abs_cs_subdirs))
+
+abs_top_path :=
+abs_cs_subdirs :=
+endif
+else
+cs_subdirs := .
+endif
+
 subdir_cleanspecs := \
-    $(shell build/tools/findleaves.py --prune=out --prune=.repo --prune=.git . CleanSpec.mk)
+    $(shell build/tools/findleaves.py --prune=out --prune=.repo --prune=.git $(cs_subdirs) CleanSpec.mk)
 include $(subdir_cleanspecs)
+cs_subdirs :=
 subdir_cleanspecs :=
+endif

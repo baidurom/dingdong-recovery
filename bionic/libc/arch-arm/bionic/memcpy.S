@@ -1,4 +1,4 @@
-/*
+/*  
  * Copyright (C) 2008 The Android Open Source Project
  * All rights reserved.
  *
@@ -27,33 +27,142 @@
  */
 
 #include <machine/cpu-features.h>
-#include <machine/asm.h>
 
 #if defined(__ARM_NEON__)
 
         .text
         .fpu    neon
 
-/* a prefetch distance of 4 cache-lines works best experimentally */
+/* Temporarily use memcpy */
+        .global vfp_copy_forward_not_align
+        .type vfp_copy_forward_not_align, %function
+        .align 4
+vfp_copy_forward_not_align:
+        .fnstart
+        stmfd   sp!, {r0-r3, lr}
+        mov     r3, r0
+        mov     r0, r1
+        mov     r1, r3
+        bl      memcpy
+        ldmfd   sp!, {r0-r3, lr}
+        bx      lr
+        .fnend
+ 
+        .global vfp_copy_backward_not_align
+        .type vfp_copy_backward_not_align, %function
+        .align 4
+vfp_copy_backward_not_align:
+        .fnstart  
+        stmfd   sp!, {r0-r5, lr}
+
+vfp_copy_backward_pld:
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        mov     r5, r1
+        sub     r5, r5, #0x100        
+        pld     [r5, #0x00]  
+        pld     [r5, #0x40] 
+        pld     [r5, #0x80] 
+        pld     [r5, #0xc0] 
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+vfp_copy_backward_start_copy:
+				mov     r5, r0
+        mov     r4, r1 
+				vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]!
+        //
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+        mov     r5, r0
+        mov     r4, r1 
+				vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]!
+        //
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+        mov     r5, r0
+        mov     r4, r1 
+				vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]!
+        //
+        subs    r2, r2, #0x40
+        blt     finish_vfp_copy_backward
+        sub     r1, r1, #0x40
+        sub     r0, r0, #0x40
+        mov     r5, r0  
+        mov     r4, r1 
+				vld1.8      {d0 - d3}, [r4]!
+        vld1.8      {d4 - d7}, [r4]!
+        vst1.8      {d0 - d3}, [r5, :128]!
+        vst1.8      {d4 - d7}, [r5, :128]! 
+        b       vfp_copy_backward_pld
+
+finish_vfp_copy_backward:
+				cmp         r3, #0x00  
+				beq finish_vfp_copy_backward_end
+        sub     r1, r1, #0x20
+        pld     [r1, #0x00]  
+				sub     r0, r0, #0x20 
+        vld1.8  {d0-d3}, [r1]!
+        vst1.8  {d0-d3}, [r0, :128]! 
+finish_vfp_copy_backward_end:				
+        ldmfd   sp!, {r0-r5, lr} 
+        bx      lr
+        .fnend
+        
+        .global memcpy
+        .type memcpy, %function
+        .align 4
+#ifdef HAVE_64_BYTE_CACHE_LINE  
+/* a prefetch distance of 4 cache-lines works best experimentally */  
 #define CACHE_LINE_SIZE     64
-#define PREFETCH_DISTANCE   (CACHE_LINE_SIZE*4)
+#else  
+/* a prefetch distance of 2 cache-lines */
+#define CACHE_LINE_SIZE     32  
+#endif
 
-ENTRY(memcpy)
+memcpy:
+        .fnstart
         .save       {r0, lr}
+        /* start preloading as early as possible */ 
+        pld         [r1, #(CACHE_LINE_SIZE * 0)]
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900000  // pldw         [r0, #(CACHE_LINE_SIZE * 0)]
+#endif
         stmfd       sp!, {r0, lr}
-
-        /* start preloading as early as possible */
-        pld         [r1, #(CACHE_LINE_SIZE*0)]
-        pld         [r1, #(CACHE_LINE_SIZE*1)]
-
+        pld         [r1, #(CACHE_LINE_SIZE * 1)]
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900040  // pldw         [r0, #(CACHE_LINE_SIZE * 1)]
+#endif 
+  
+/* If Neon supports unaligned access then remove the align code,  
+ * unless a size limit has been specified.  
+ */  
+#ifndef NEON_UNALIGNED_ACCESS //it is the path,for MT6575 Cortex A9
         /* do we have at least 16-bytes to copy (needed for alignment below) */
         cmp         r2, #16
         blo         5f
 
-        /* align destination to half cache-line for the write-buffer */
+        /* check if buffers are aligned. If so, run arm-only version */
+        eor         r3, r0, r1  
+        ands        r3, r3, #0x3  
+        beq         11f  
+  
+        /* align destination to cache-line for the write-buffer */  
         rsb         r3, r0, #0
         ands        r3, r3, #0xF
-        beq         0f
+        beq         2f
 
         /* copy up to 15-bytes (count in r3) */
         sub         r2, r2, r3
@@ -75,31 +184,39 @@ ENTRY(memcpy)
         vst1.8      {d0}, [r0, :64]!
 2:
 
-0:      /* preload immediately the next cache line, which we may need */
-        pld         [r1, #(CACHE_LINE_SIZE*0)]
-        pld         [r1, #(CACHE_LINE_SIZE*1)]
-
+        /* preload immediately the next cache line, which we may need */
+        pld         [r1, #(CACHE_LINE_SIZE * 0)]
+        pld         [r1, #(CACHE_LINE_SIZE * 1)]
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900000  // pldw         [r0, #(CACHE_LINE_SIZE * 0)]
+	.word 0xf5900040  // pldw         [r0, #(CACHE_LINE_SIZE * 1)]
+#endif
         /* make sure we have at least 64 bytes to copy */
         subs        r2, r2, #64
         blo         2f
 
-        /* preload all the cache lines we need.
-         * NOTE: the number of pld below depends on PREFETCH_DISTANCE,
-         * ideally would would increase the distance in the main loop to
-         * avoid the goofy code below. In practice this doesn't seem to make
-         * a big difference.
-         */
-        pld         [r1, #(CACHE_LINE_SIZE*2)]
-        pld         [r1, #(CACHE_LINE_SIZE*3)]
-        pld         [r1, #(PREFETCH_DISTANCE)]
-
+        /* preload all the cache lines we need. */
+        pld         [r1, #(CACHE_LINE_SIZE * 2)]
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900080  // pldw         [r0, #(CACHE_LINE_SIZE * 2)]
+	.word 0xf59000c0  // pldw         [r0, #(CACHE_LINE_SIZE * 3)]
+#endif
 1:      /* The main loop copies 64 bytes at a time */
-        vld1.8      {d0  - d3},   [r1]!
-        vld1.8      {d4  - d7},   [r1]!
-        pld         [r1, #(PREFETCH_DISTANCE)]
+        vld1.8      {d0 - d3}, [r1]!
+        vld1.8      {d4 - d7}, [r1]!
+#ifndef  HAVE_64_BYTE_CACHE_LINE  
+        pld         [r1, #(CACHE_LINE_SIZE * 2)]  
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]  
+	.word 0xf5900080  // pldw         [r0, #(CACHE_LINE_SIZE * 2)]
+        .word 0xf59000c0  // pldw         [r0, #(CACHE_LINE_SIZE * 3)]
+#else  
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]  
+#endif  
+
         subs        r2, r2, #64
-        vst1.8      {d0  - d3},   [r0, :128]!
-        vst1.8      {d4  - d7},   [r0, :128]!
+        vst1.8      {d0 - d3}, [r0, :128]!
+        vst1.8      {d4 - d7}, [r0, :128]!
         bhs         1b
 
 2:      /* fix-up the remaining count and make sure we have >= 32 bytes left */
@@ -108,9 +225,9 @@ ENTRY(memcpy)
         blo         4f
 
 3:      /* 32 bytes at a time. These cache lines were already preloaded */
-        vld1.8      {d0 - d3},  [r1]!
+        vld1.8      {d0 - d3}, [r1]!
         subs        r2, r2, #32
-        vst1.8      {d0 - d3},  [r0, :128]!
+        vst1.8      {d0 - d3}, [r0, :128]!
         bhs         3b
 
 4:      /* less than 32 left */
@@ -136,14 +253,196 @@ ENTRY(memcpy)
         strmib      r3, [r0], #1
         strcsb      ip, [r0], #1
         strcsb      lr, [r0], #1
+        VMOV        s0, s0 @ NOP for ARM Errata 754319 754320
 
         ldmfd       sp!, {r0, lr}
         bx          lr
-END(memcpy)
+#else   /* NEON_UNALIGNED_ACCESS */  
+
+        // Check so divider is at least 16 bytes, needed for alignment code.  
+        cmp         r2, #16  
+        blo         5f  
+  
+#ifdef MEMCPY_ALIGNMENT_DIVIDER  
+        /* Check the upper size limit for Neon unaligned memory access in memcpy */  
+#if MEMCPY_ALIGNMENT_DIVIDER >= 16  
+        cmp         r2, #MEMCPY_ALIGNMENT_DIVIDER  
+        blo         3f  
+#endif  
+        /* check if buffers are aligned. If so, run arm-only version */  
+        eor         r3, r0, r1  
+        ands        r3, r3, #0x3  
+        beq         11f  
+  
+        /* align destination to 16 bytes for the write-buffer */  
+        rsb         r3, r0, #0  
+        ands        r3, r3, #0xF  
+        beq         3f  
+  
+        /* copy up to 15-bytes (count in r3) */  
+        sub         r2, r2, r3  
+        movs        ip, r3, lsl #31  
+        ldrmib      lr, [r1], #1  
+        strmib      lr, [r0], #1  
+        ldrcsb      ip, [r1], #1  
+        ldrcsb      lr, [r1], #1  
+        strcsb      ip, [r0], #1  
+        strcsb      lr, [r0], #1  
+        movs        ip, r3, lsl #29  
+        bge         1f  
+        // copies 4 bytes, destination 32-bits aligned  
+        vld1.32     {d0[0]}, [r1]!  
+        vst1.32     {d0[0]}, [r0, :32]!  
+1:      bcc         2f  
+        // copies 8 bytes, destination 64-bits aligned  
+        vld1.8      {d0}, [r1]!  
+        vst1.8      {d0}, [r0, :64]!  
+2:  
+        /* preload immediately the next cache line, which we may need */  
+        pld         [r1, #(CACHE_LINE_SIZE * 0)]  
+        pld         [r1, #(CACHE_LINE_SIZE * 1)]  
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900000  // pldw         [r0, #(CACHE_LINE_SIZE * 0)]
+        .word 0xf5900040  // pldw         [r0, #(CACHE_LINE_SIZE * 1)]
+#endif
+3:  
+#endif  
+        /* make sure we have at least 64 bytes to copy */  
+        subs        r2, r2, #64  
+        blo         2f  
+  
+        /* preload all the cache lines we need */  
+        pld         [r1, #(CACHE_LINE_SIZE * 2)]  
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]  
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900080  // pldw         [r0, #(CACHE_LINE_SIZE * 2)]
+        .word 0xf59000c0  // pldw         [r0, #(CACHE_LINE_SIZE * 3)]
+#endif
+1:      /* The main loop copies 64 bytes at a time */  
+        vld1.8      {d0 - d3}, [r1]!  
+        vld1.8      {d4 - d7}, [r1]!  
+#ifndef  HAVE_64_BYTE_CACHE_LINE  
+        pld         [r1, #(CACHE_LINE_SIZE * 2)]  
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]  
+	.word 0xf5900080  // pldw         [r0, #(CACHE_LINE_SIZE * 2)]
+        .word 0xf59000c0  // pldw         [r0, #(CACHE_LINE_SIZE * 3)]
+#else  
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]  
+#endif  
+        subs        r2, r2, #64  
+        vst1.8      {d0 - d3}, [r0]!  
+        vst1.8      {d4 - d7}, [r0]!  
+        bhs         1b  
+  
+2:      /* fix-up the remaining count and make sure we have >= 32 bytes left */  
+        add         r2, r2, #64  
+        subs        r2, r2, #32  
+        blo         4f  
+  
+3:      /* 32 bytes at a time. These cache lines were already preloaded */  
+        vld1.8      {d0 - d3}, [r1]!  
+        subs        r2, r2, #32  
+        vst1.8      {d0 - d3}, [r0]!  
+        bhs         3b  
+  
+4:      /* less than 32 left */  
+        add         r2, r2, #32  
+        tst         r2, #0x10  
+        beq         5f  
+        // copies 16 bytes, 128-bits aligned  
+        vld1.8      {d0, d1}, [r1]!  
+        vst1.8      {d0, d1}, [r0]!  
+5:      /* copy up to 15-bytes (count in r2) */  
+        movs        ip, r2, lsl #29  
+        bcc         1f  
+        vld1.8      {d0}, [r1]!  
+        vst1.8      {d0}, [r0]!  
+1:      bge         2f  
+        vld1.32     {d0[0]}, [r1]!  
+        vst1.32     {d0[0]}, [r0]!  
+2:      movs        ip, r2, lsl #31  
+        ldrmib      r3, [r1], #1  
+        ldrcsb      ip, [r1], #1  
+        ldrcsb      lr, [r1], #1  
+        strmib      r3, [r0], #1  
+        strcsb      ip, [r0], #1  
+        strcsb      lr, [r0], #1  
+        VMOV        s0, s0 @ NOP for ARM Errata 754319 754320
+
+        ldmfd       sp!, {r0, lr}  
+        bx          lr  
+#endif  /* NEON_UNALIGNED_ACCESS */  
+11:  
+        /* Simple arm-only copy loop to handle aligned copy operations */  
+        stmfd       sp!, {r4, r5, r6, r7, r8}  
+        pld         [r1, #(CACHE_LINE_SIZE * 2)]  
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+ 	.word 0xf5900080  // pldw         [r0, #(CACHE_LINE_SIZE * 2)]
+#endif        		 
+        /* Check alignment */  
+        rsb         r3, r1, #0  
+        ands        r3, #3  
+        beq         2f  
+  
+        /* align source to 32 bits. We need to insert 2 instructions between  
+         * a ldr[b|h] and str[b|h] because byte and half-word instructions  
+         * stall 2 cycles.  
+         */  
+        movs        r12, r3, lsl #31  
+        sub         r2, r2, r3      /* we know that r3 <= r2 because r2 >= 4 */  
+        ldrmib      r3, [r1], #1  
+        ldrcsb      r4, [r1], #1  
+        ldrcsb      r5, [r1], #1  
+        strmib      r3, [r0], #1  
+        strcsb      r4, [r0], #1  
+        strcsb      r5, [r0], #1  
+2:  
+        subs        r2, #32  
+        blt         5f  
+        pld         [r1, #(CACHE_LINE_SIZE * 3)]  
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+        .word 0xf59000c0  // pldw         [r0, #(CACHE_LINE_SIZE * 3)]
+#endif
+3:      /* Main copy loop, copying 32 bytes at a time */  
+        pld         [r1, #(CACHE_LINE_SIZE * 4)]  
+#ifdef HAVE_64_BYTE_CACHE_LINE 
+	.word 0xf5900100  // pldw         [r0, #(CACHE_LINE_SIZE * 4)]
+#endif
+        ldmia       r1!, {r3, r4, r5, r6, r7, r8, r12, lr}  
+        subs        r2, r2, #32  
+        stmia       r0!, {r3, r4, r5, r6, r7, r8, r12, lr}  
+        bge         3b  
+5:      /* Handle any remaining bytes */  
+        adds        r2, #32  
+        beq         6f  
+  
+        movs        r12, r2, lsl #28  
+        ldmcsia     r1!, {r3, r4, r5, r6}   /* 16 bytes */  
+        ldmmiia     r1!, {r7, r8}           /*  8 bytes */  
+        stmcsia     r0!, {r3, r4, r5, r6}  
+        stmmiia     r0!, {r7, r8}  
+        movs        r12, r2, lsl #30  
+        ldrcs       r3, [r1], #4            /*  4 bytes */  
+        ldrmih      r4, [r1], #2            /*  2 bytes */  
+        strcs       r3, [r0], #4  
+        strmih      r4, [r0], #2  
+        tst         r2, #0x1  
+        ldrneb      r3, [r1]                /*  last byte  */  
+        strneb      r3, [r0]  
+6:  
+        ldmfd       sp!, {r4, r5, r6, r7, r8}  
+        ldmfd       sp!, {r0, pc} 
+       .fnend
 
 
 #else   /* __ARM_ARCH__ < 7 */
 
+
+	.text
+
+    .global memcpy
+    .type memcpy, %function
+    .align 4
 
 		/*
 		 * Optimized memcpy() for ARM.
@@ -152,11 +451,12 @@ END(memcpy)
 		 * so we have to preserve R0.
 		 */
 
-ENTRY(memcpy)
+memcpy:
 		/* The stack must always be 64-bits aligned to be compliant with the
 		 * ARM ABI. Since we have to save R0, we might as well save R4
 		 * which we can use for better pipelining of the reads below
 		 */
+        .fnstart
         .save       {r0, r4, lr}
         stmfd       sp!, {r0, r4, lr}
         /* Making room for r5-r11 which will be spilled later */
@@ -493,7 +793,10 @@ copy_last_3_and_return:
         add         sp,  sp, #28
 		ldmfd		sp!, {r0, r4, lr}
 		bx			lr
-END(memcpy)
+        .fnend
 
 
 #endif    /* __ARM_ARCH__ < 7 */
+
+
+

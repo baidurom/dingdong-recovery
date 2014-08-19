@@ -145,7 +145,7 @@ protected:
 
     // ---------------------Interface ends-----------------------------------
 
-    status_t notifyFocusSubscribers(bool status);
+    status_t notifyFocusSubscribers(CameraHalEvent::FocusStatus status);
     status_t notifyShutterSubscribers();
     status_t notifyZoomSubscribers(int zoomIdx, bool targetReached);
     status_t notifyFaceSubscribers(sp<CameraFDResult> &faces);

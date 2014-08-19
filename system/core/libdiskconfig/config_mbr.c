@@ -31,6 +31,7 @@ static void
 cfg_pentry(struct pc_partition *pentry, uint8_t status, uint8_t type,
            uint32_t start, uint32_t len)
 {
+   ALOGI("Enter cfg_pentry()") ;
     if (len > 0) {
         /* seems that somes BIOSens can get wedged on boot while verifying
          * the mbr if these are 0 */
@@ -47,7 +48,7 @@ cfg_pentry(struct pc_partition *pentry, uint8_t status, uint8_t type,
     pentry->start_lba = start;
     pentry->len_lba = len;
 
-    LOGI("Configuring pentry. status=0x%x type=0x%x start_lba=%u len_lba=%u",
+    ALOGI("Configuring pentry. status=0x%x type=0x%x start_lba=%u len_lba=%u",
          pentry->status, pentry->type, pentry->start_lba, pentry->len_lba);
 }
 
@@ -62,7 +63,7 @@ kb_to_lba(uint32_t len_kb, uint32_t sect_size)
     lba = (lba + (uint64_t)sect_size - 1) & ~((uint64_t)sect_size - 1);
     lba /= (uint64_t)sect_size;
     if (lba >= 0xffffffffULL)
-        LOGE("Error converting kb -> lba. 32bit overflow, expect weirdness");
+        ALOGE("Error converting kb -> lba. 32bit overflow, expect weirdness");
     return (uint32_t)(lba & 0xffffffffULL);
 }
 
@@ -74,15 +75,19 @@ mk_pri_pentry(struct disk_info *dinfo, struct part_info *pinfo, int pnum,
     struct write_list *item;
     struct pc_partition *pentry;
 
+	ALOGI("Enter mk_pri_entry()") ;
+
     if (pnum >= PC_NUM_BOOT_RECORD_PARTS) {
-        LOGE("Maximum number of primary partition exceeded.");
+        ALOGE("Maximum number of primary partition exceeded.");
         return NULL;
     }
 
+	ALOGI("mk_pri_entry() : calls alloc_wl()") ;
     if (!(item = alloc_wl(sizeof(struct pc_partition)))) {
-        LOGE("Unable to allocate memory for partition entry.");
+        ALOGE("Unable to allocate memory for partition entry.");
         return NULL;
     }
+	ALOGI("mk_pri_entry() : exits alloc_wl()") ;
 
     {
         /* DO NOT DEREFERENCE */
@@ -109,29 +114,35 @@ mk_pri_pentry(struct disk_info *dinfo, struct part_info *pinfo, int pnum,
             len_lba = dinfo->num_lba - *lba;
         }
 
+		ALOGI("mk_pri_entry() : calls cfg_pentry(PC_PART_ACTIVE)") ;
         cfg_pentry(pentry, ((pinfo->flags & PART_ACTIVE_FLAG) ?
                             PC_PART_ACTIVE : PC_PART_NORMAL),
                    pinfo->type, *lba, (uint32_t)len_lba);
+		ALOGI("mk_pri_entry() : calls cfg_pentry(PC_PART_ACTIVE)") ;
 
         pinfo->start_lba = *lba;
         *lba += (uint32_t)len_lba;
     } else {
         /* this should be made an extended partition, and should take
          * up the rest of the disk as a primary partition */
+        ALOGI("mk_pri_entry() : calls cfg_pentry(PC_PART_TYPE_EXTENDED)") ;
         cfg_pentry(pentry, PC_PART_NORMAL, PC_PART_TYPE_EXTENDED,
                    *lba, dinfo->num_lba - *lba);
+	    ALOGI("mk_pri_entry() : exits cfg_pentry(PC_PART_TYPE_EXTENDED)") ;
 
         /* note that we do not update the *lba because we now have to
          * create a chain of extended partition tables, and first one is at
          * *lba */
     }
 
+	ALOGI("Exit mk_pri_entry()") ;
+
     return item;
 }
 
 
 /* This function configures an extended boot record at the beginning of an
- * extended partition. This creates a logical partition and a pointer to
+ * extended partition. This creates a ALOGIcal partition and a pointer to
  * the next EBR.
  *
  * ext_lba == The start of the toplevel extended partition (pointed to by the
@@ -145,25 +156,31 @@ mk_ext_pentry(struct disk_info *dinfo, struct part_info *pinfo, uint32_t *lba,
     struct pc_boot_record *ebr;
     uint32_t len; /* in lba units */
 
+   ALOGI("mk_ext_pentry() : calls alloc_wl()") ;
     if (!(item = alloc_wl(sizeof(struct pc_boot_record)))) {
-        LOGE("Unable to allocate memory for EBR.");
+        ALOGE("Unable to allocate memory for EBR.");
         return NULL;
     }
+	ALOGI("mk_ext_pentry() : exit alloc_wl()") ;
 
     /* we are going to write the ebr at the current LBA, and then bump the
-     * lba counter since that is where the logical data partition will start */
-    item->offset = (*lba) * dinfo->sect_size;
+     * lba counter since that is where the ALOGIcal data partition will start */
+    item->offset = ((loff_t)(*lba)) * dinfo->sect_size;
     (*lba)++;
 
     ebr = (struct pc_boot_record *) &item->data;
     memset(ebr, 0, sizeof(struct pc_boot_record));
     ebr->mbr_sig = PC_BIOS_BOOT_SIG;
 
-    if (pinfo->len_kb != (uint32_t)-1)
+    if (pinfo->len_kb != (uint32_t)-1) {
+	  ALOGI("mk_ext_pentry() : calls kb_to_lba(pinfo->len_kb, dinfo->sect_size)") ;
         len = kb_to_lba(pinfo->len_kb, dinfo->sect_size);
-    else {
+		ALOGI("mk_ext_pentry() : exits kb_to_lba(pinfo->len_kb, dinfo->sect_size)") ;
+    }
+	else {
+		ALOGI("mk_ext_pentry() : pinfo->len_kb == (uint32_t)-1") ;
         if (pnext) {
-            LOGE("Only the last partition can be specified to fill the disk "
+            ALOGE("Only the last partition can be specified to fill the disk "
                  "(name = '%s')", pinfo->name);
             goto fail;
         }
@@ -175,8 +192,10 @@ mk_ext_pentry(struct disk_info *dinfo, struct part_info *pinfo, uint32_t *lba,
                        ((uint64_t)1024));
     }
 
+	ALOGI("mk_ext_pentry() : calls cfg_pentry(pinfo->type)") ;
     cfg_pentry(&ebr->ptable[PC_EBR_LOGICAL_PART], PC_PART_NORMAL,
                pinfo->type, 1, len);
+	ALOGI("mk_ext_pentry() : exits cfg_pentry(pinfo->type)") ;
 
     pinfo->start_lba = *lba;
     *lba += len;
@@ -192,12 +211,18 @@ mk_ext_pentry(struct disk_info *dinfo, struct part_info *pinfo, uint32_t *lba,
          * of the top-level extended partition */
         uint32_t next_start_lba = *lba - ext_lba;
         uint32_t next_len_lba;
-        if (pnext->len_kb != (uint32_t)-1)
+        if (pnext->len_kb != (uint32_t)-1) {
+			ALOGI("mk_ext_pentry() : calls kb_to_lba(pnext->len)") ;
             next_len_lba = 1 + kb_to_lba(pnext->len_kb, dinfo->sect_size);
+			ALOGI("mk_ext_pentry() : exits kb_to_lba(pnext->len)") ;
+        }
         else
             next_len_lba = dinfo->num_lba - *lba;
+
+		ALOGI("mk_ext_pentry() : calls cfg_pentry(PC_PART_TYPE_EXTENDED)") ;
         cfg_pentry(&ebr->ptable[PC_EBR_NEXT_PTR_PART], PC_PART_NORMAL,
                    PC_PART_TYPE_EXTENDED, next_start_lba, next_len_lba);
+		ALOGI("mk_ext_pentry() : exits cfg_pentry(PC_PART_TYPE_EXTENDED)") ;
     }
 
     return item;
@@ -219,6 +244,8 @@ config_mbr(struct disk_info *dinfo)
     int cnt = 0;
     int extended = 0;
 
+	ALOGI("Enter config_mbr()");
+
     if (!dinfo->part_lst)
         return NULL;
 
@@ -230,12 +257,17 @@ config_mbr(struct disk_info *dinfo)
             if (cnt + 1 < dinfo->num_parts) {
                 extended = 1;
                 ext_lba = cur_lba;
-                if ((temp_wr = mk_pri_pentry(dinfo, NULL, cnt, &cur_lba)))
+				ALOGI("config_mbr() : call mk_pri_pentry(dinfo, NULL...)") ;
+                if ((temp_wr = mk_pri_pentry(dinfo, NULL, cnt, &cur_lba))) {
+					ALOGI("config_mbr() : call mk_pri_pentry(dinfo, NULL...) : calls wlist_add()") ;
                     wlist_add(&wr_list, temp_wr);
-                else {
-                    LOGE("Cannot create primary extended partition.");
+					ALOGI("config_mbr() : call mk_pri_pentry(dinfo, NULL...) : exit wlist_add()") ;
+                }
+				else {
+                    ALOGE("Cannot create primary extended partition.");
                     goto fail;
                 }
+				ALOGI("config_mbr() : exit mk_pri_pentry(dinfo, NULL...)") ;
             }
         }
 
@@ -248,18 +280,27 @@ config_mbr(struct disk_info *dinfo)
                 goto nospace;
         }
 
-        if (!extended)
+        if (!extended) {
+			ALOGI("config_mbr() : !extended") ;
+			ALOGI("config_mbr() : call mk_pri_pentry(dinfo, pinfo, cnt, ..)") ;
             temp_wr = mk_pri_pentry(dinfo, pinfo, cnt, &cur_lba);
+			ALOGI("config_mbr() : exit mk_pri_pentry(dinfo, pinfo, cnt, ..)") ;
+        }
         else {
             struct part_info *pnext;
             pnext = cnt + 1 < dinfo->num_parts ? &dinfo->part_lst[cnt+1] : NULL;
+			ALOGI("config_mbr() : calls mk_ext_pentry(dinfo, pinfo, &cur_lba, ext_lba, pnext)") ;
             temp_wr = mk_ext_pentry(dinfo, pinfo, &cur_lba, ext_lba, pnext);
+			ALOGI("config_mbr() : exits mk_ext_pentry(dinfo, pinfo, &cur_lba, ext_lba, pnext)") ;
         }
 
-        if (temp_wr)
+        if (temp_wr) {
+ 		    ALOGI("config_mbr() : calls wlist_add()") ;
             wlist_add(&wr_list, temp_wr);
+			ALOGI("config_mbr() : exits wlist_add()") ;
+        }
         else {
-            LOGE("Cannot create partition %d (%s).", cnt, pinfo->name);
+            ALOGE("Cannot create partition %d (%s).", cnt, pinfo->name);
             goto fail;
         }
     }
@@ -269,17 +310,19 @@ config_mbr(struct disk_info *dinfo)
         struct part_info blank;
         cur_lba = 0;
         memset(&blank, 0, sizeof(struct part_info));
+		ALOGI("config_mbr() : for loop calls mk_pri_pentry()") ;
         if (!(temp_wr = mk_pri_pentry(dinfo, &blank, cnt, &cur_lba))) {
-            LOGE("Cannot create blank partition %d.", cnt);
+            ALOGE("Cannot create blank partition %d.", cnt);
             goto fail;
         }
+		ALOGI("config_mbr() : calls wlist_add()") ;
         wlist_add(&wr_list, temp_wr);
     }
 
     return wr_list;
 
 nospace:
-    LOGE("Not enough space to add parttion '%s'.", pinfo->name);
+    ALOGE("Not enough space to add parttion '%s'.", pinfo->name);
 
 fail:
     wlist_free(wr_list);
@@ -310,13 +353,13 @@ find_mbr_part(struct disk_info *dinfo, const char *name)
         num++;
 
     if (!(dev_name = malloc(MAX_NAME_LEN))) {
-        LOGE("Cannot allocate memory.");
+        ALOGE("Cannot allocate memory.");
         return NULL;
     }
 
     num = snprintf(dev_name, MAX_NAME_LEN, "%s%d", dinfo->device, num);
     if (num >= MAX_NAME_LEN) {
-        LOGE("Device name is too long?!");
+        ALOGE("Device name is too long?!");
         free(dev_name);
         return NULL;
     }

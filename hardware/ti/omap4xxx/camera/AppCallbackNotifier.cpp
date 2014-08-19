@@ -38,11 +38,23 @@ void AppCallbackNotifierEncoderCallback(void* main_jpeg,
                                         CameraFrame::FrameType type,
                                         void* cookie1,
                                         void* cookie2,
-                                        void* cookie3)
+                                        void* cookie3,
+                                        bool canceled)
 {
-    if (cookie1) {
+    if (cookie1 && !canceled) {
         AppCallbackNotifier* cb = (AppCallbackNotifier*) cookie1;
         cb->EncoderDoneCb(main_jpeg, thumb_jpeg, type, cookie2, cookie3);
+    }
+
+    if (main_jpeg) {
+        free(main_jpeg);
+    }
+
+    if (thumb_jpeg) {
+       if (((Encoder_libjpeg::params *) thumb_jpeg)->dst) {
+           free(((Encoder_libjpeg::params *) thumb_jpeg)->dst);
+       }
+       free(thumb_jpeg);
     }
 }
 
@@ -129,30 +141,17 @@ void AppCallbackNotifier::EncoderDoneCb(void* main_jpeg, void* thumb_jpeg, Camer
 
  exit:
 
-    if (main_jpeg) {
-        free(main_jpeg);
-    }
-
-    if (thumb_jpeg) {
-       if (((Encoder_libjpeg::params *) thumb_jpeg)->dst) {
-           free(((Encoder_libjpeg::params *) thumb_jpeg)->dst);
-       }
-       free(thumb_jpeg);
-    }
-
-    if (encoded_mem) {
-        encoded_mem->release(encoded_mem);
-    }
-
     if (picture) {
         picture->release(picture);
     }
 
-    if (cookie2) {
-        delete (ExifElementsTable*) cookie2;
-    }
-
     if (mNotifierState == AppCallbackNotifier::NOTIFIER_STARTED) {
+        if (encoded_mem) {
+            encoded_mem->release(encoded_mem);
+        }
+        if (cookie2) {
+            delete (ExifElementsTable*) cookie2;
+        }
         encoder = gEncoderQueue.valueFor(src);
         if (encoder.get()) {
             gEncoderQueue.removeItem(src);
@@ -285,7 +284,8 @@ bool AppCallbackNotifier::notificationThread()
         CAMHAL_LOGDA("Notification Thread received message from Camera HAL");
         shouldLive = processMessage();
         if(!shouldLive) {
-                CAMHAL_LOGDA("Notification Thread exiting.");
+          CAMHAL_LOGDA("Notification Thread exiting.");
+          return shouldLive;
         }
     }
 
@@ -311,8 +311,12 @@ void AppCallbackNotifier::notifyEvent()
     TIUTILS::Message msg;
     LOG_FUNCTION_NAME;
     {
-    Mutex::Autolock lock(mLock);
-    mEventQ.get(&msg);
+        Mutex::Autolock lock(mLock);
+        if(!mEventQ.isEmpty()) {
+            mEventQ.get(&msg);
+        } else {
+            return;
+        }
     }
     bool ret = true;
     CameraHalEvent *evt = NULL;
@@ -353,23 +357,36 @@ void AppCallbackNotifier::notifyEvent()
 
                 case CameraHalEvent::EVENT_FOCUS_LOCKED:
                 case CameraHalEvent::EVENT_FOCUS_ERROR:
-
                     focusEvtData = &evt->mEventData->focusEvent;
-                    if ( ( focusEvtData->focusLocked ) &&
-                          ( NULL != mCameraHal ) &&
-                          ( NULL != mNotifyCb ) &&
-                          ( mCameraHal->msgTypeEnabled(CAMERA_MSG_FOCUS) ) )
+                    if ( ( focusEvtData->focusStatus == CameraHalEvent::FOCUS_STATUS_SUCCESS ) &&
+                         ( NULL != mCameraHal ) &&
+                         ( NULL != mNotifyCb ) &&
+                         ( mCameraHal->msgTypeEnabled(CAMERA_MSG_FOCUS) ) )
                         {
+                         mCameraHal->disableMsgType(CAMERA_MSG_FOCUS);
                          mNotifyCb(CAMERA_MSG_FOCUS, true, 0, mCallbackCookie);
-                         mCameraHal->disableMsgType(CAMERA_MSG_FOCUS);
                         }
-                    else if ( focusEvtData->focusError &&
-                                ( NULL != mCameraHal ) &&
-                                ( NULL != mNotifyCb ) &&
-                                ( mCameraHal->msgTypeEnabled(CAMERA_MSG_FOCUS) ) )
+                    else if ( ( focusEvtData->focusStatus == CameraHalEvent::FOCUS_STATUS_FAIL ) &&
+                              ( NULL != mCameraHal ) &&
+                              ( NULL != mNotifyCb ) &&
+                              ( mCameraHal->msgTypeEnabled(CAMERA_MSG_FOCUS) ) )
                         {
-                         mNotifyCb(CAMERA_MSG_FOCUS, false, 0, mCallbackCookie);
                          mCameraHal->disableMsgType(CAMERA_MSG_FOCUS);
+                         mNotifyCb(CAMERA_MSG_FOCUS, false, 0, mCallbackCookie);
+                        }
+                    else if ( ( focusEvtData->focusStatus == CameraHalEvent::FOCUS_STATUS_PENDING ) &&
+                              ( NULL != mCameraHal ) &&
+                              ( NULL != mNotifyCb ) &&
+                              ( mCameraHal->msgTypeEnabled(CAMERA_MSG_FOCUS_MOVE) ) )
+                        {
+                         mNotifyCb(CAMERA_MSG_FOCUS_MOVE, true, 0, mCallbackCookie);
+                        }
+                    else if ( ( focusEvtData->focusStatus == CameraHalEvent::FOCUS_STATUS_DONE ) &&
+                              ( NULL != mCameraHal ) &&
+                              ( NULL != mNotifyCb ) &&
+                              ( mCameraHal->msgTypeEnabled(CAMERA_MSG_FOCUS_MOVE) ) )
+                        {
+                         mNotifyCb(CAMERA_MSG_FOCUS_MOVE, false, 0, mCallbackCookie);
                         }
 
                     break;
@@ -433,6 +450,21 @@ void AppCallbackNotifier::notifyEvent()
 
 }
 
+static void alignYV12(int width,
+                      int height,
+                      int &yStride,
+                      int &uvStride,
+                      int &ySize,
+                      int &uvSize,
+                      int &size)
+{
+    yStride = ( width + 0xF ) & ~0xF;
+    uvStride = ( yStride / 2 + 0xF ) & ~0xF;
+    ySize = yStride * height;
+    uvSize = uvStride * height / 2;
+    size = ySize + uvSize * 2;
+}
+
 static void copy2Dto1D(void *dst,
                        void *src,
                        int width,
@@ -451,11 +483,54 @@ static void copy2Dto1D(void *dst,
     unsigned int *y_uv = (unsigned int *)src;
 
     CAMHAL_LOGVB("copy2Dto1D() y= %p ; uv=%p.",y_uv[0], y_uv[1]);
-    CAMHAL_LOGVB("pixelFormat,= %d; offset=%d",*pixelFormat,offset);
+    CAMHAL_LOGVB("pixelFormat= %s; offset=%d", pixelFormat,offset);
 
     if (pixelFormat!=NULL) {
         if (strcmp(pixelFormat, CameraParameters::PIXEL_FORMAT_YUV422I) == 0) {
             bytesPerPixel = 2;
+            bufferSrc = ( unsigned char * ) y_uv[0] + offset;
+            uint32_t xOff = offset % stride;
+            uint32_t yOff = offset / stride;
+            uint8_t *bufferSrcUV = ((uint8_t*)y_uv[1] + (stride/2)*yOff + xOff);
+            uint8_t *bufferSrcUVEven = bufferSrcUV;
+
+            uint8_t *bufferDstY = ( uint8_t * ) dst;
+            uint8_t *bufferDstU = bufferDstY + 1;
+            uint8_t *bufferDstV = bufferDstY + 3;
+
+            // going to convert from NV12 here and return
+            for ( int i = 0 ; i < height; i ++ ) {
+                for ( int j = 0 ; j < width / 2 ; j++ ) {
+
+                    // Y
+                    *bufferDstY = *bufferSrc;
+                    bufferSrc++;
+                    bufferDstY += 2;
+
+                    *bufferDstY = *bufferSrc;
+                    bufferSrc++;
+                    bufferDstY += 2;
+
+                    // V
+                    *bufferDstV = *(bufferSrcUV + 1);
+                    bufferDstV += 4;
+
+                    // U
+                    *bufferDstU = *bufferSrcUV;
+                    bufferDstU += 4;
+
+                    bufferSrcUV += 2;
+                }
+                if ( i % 2 ) {
+                    bufferSrcUV += ( stride - width);
+                    bufferSrcUVEven = bufferSrcUV;
+                } else {
+                    bufferSrcUV = bufferSrcUVEven;
+                }
+                bufferSrc += ( stride - width);
+            }
+
+            return;
         } else if (strcmp(pixelFormat, CameraParameters::PIXEL_FORMAT_YUV420SP) == 0 ||
                    strcmp(pixelFormat, CameraParameters::PIXEL_FORMAT_YUV420P) == 0) {
             bytesPerPixel = 1;
@@ -539,8 +614,12 @@ static void copy2Dto1D(void *dst,
                 //            camera adapter to support YV12. Need to address for
                 //            USBCamera
 
-                bufferDst_V = (uint16_t *) (((uint8_t*)dst)+row*height);
-                bufferDst_U = (uint16_t *) (((uint8_t*)dst)+row*height+row*height/4);
+                int yStride, uvStride, ySize, uvSize, size;
+                alignYV12(width, height, yStride, uvStride, ySize, uvSize, size);
+
+                bufferDst_V = (uint16_t *) (((uint8_t*)dst) + ySize);
+                bufferDst_U = (uint16_t *) (((uint8_t*)dst) + ySize + uvSize);
+                int inc = (uvStride - width/2)/2;
 
                 for (int i = 0 ; i < height/2 ; i++, bufferSrc_UV += alignedRow/2) {
                     int n = width;
@@ -584,7 +663,11 @@ static void copy2Dto1D(void *dst,
                     : [src_stride] "r" (stride_bytes)
                     : "cc", "memory", "q0", "q1"
                     );
+
+                    bufferDst_U += inc;
+                    bufferDst_V += inc;
                 }
+
             }
             return ;
 
@@ -1206,7 +1289,7 @@ bool AppCallbackNotifier::processMessage()
       {
         case NotificationThread::NOTIFIER_EXIT:
           {
-            CAMHAL_LOGI("Received NOTIFIER_EXIT command from Camera HAL");
+            CAMHAL_LOGDA("Received NOTIFIER_EXIT command from Camera HAL");
             mNotifierState = AppCallbackNotifier::NOTIFIER_EXITED;
             ret = false;
             break;
@@ -1356,7 +1439,7 @@ status_t AppCallbackNotifier::startPreviewCallbacks(CameraParameters &params, vo
     sp<MemoryHeapBase> heap;
     sp<MemoryBase> buffer;
     unsigned int *bufArr;
-    size_t size = 0;
+    int size = 0;
 
     LOG_FUNCTION_NAME;
 
@@ -1386,8 +1469,7 @@ status_t AppCallbackNotifier::startPreviewCallbacks(CameraParameters &params, vo
         size = w*h*2;
         mPreviewPixelFormat = CameraParameters::PIXEL_FORMAT_YUV422I;
         }
-    else if(strcmp(mPreviewPixelFormat, (const char *) CameraParameters::PIXEL_FORMAT_YUV420SP) == 0 ||
-            strcmp(mPreviewPixelFormat, (const char *) CameraParameters::PIXEL_FORMAT_YUV420P) == 0)
+    else if(strcmp(mPreviewPixelFormat, (const char *) CameraParameters::PIXEL_FORMAT_YUV420SP) == 0 )
         {
         size = (w*h*3)/2;
         mPreviewPixelFormat = CameraParameters::PIXEL_FORMAT_YUV420SP;
@@ -1396,6 +1478,12 @@ status_t AppCallbackNotifier::startPreviewCallbacks(CameraParameters &params, vo
         {
         size = w*h*2;
         mPreviewPixelFormat = CameraParameters::PIXEL_FORMAT_RGB565;
+        }
+    else if(strcmp(mPreviewPixelFormat, (const char *) CameraParameters::PIXEL_FORMAT_YUV420P) == 0)
+        {
+        int yStride, uvStride, ySize, uvSize;
+        alignYV12(w, h, yStride, uvStride, ySize, uvSize, size);
+        mPreviewPixelFormat = CameraParameters::PIXEL_FORMAT_YUV420P;
         }
 
     mPreviewMemory = mRequestMemory(-1, size, AppCallbackNotifier::MAX_BUFFERS, NULL);
@@ -1664,7 +1752,7 @@ status_t AppCallbackNotifier::enableMsgType(int32_t msgType)
 
 status_t AppCallbackNotifier::disableMsgType(int32_t msgType)
 {
-    if(!mCameraHal->msgTypeEnabled(CAMERA_MSG_PREVIEW_FRAME | CAMERA_MSG_POSTVIEW_FRAME)) {
+    if( msgType & (CAMERA_MSG_PREVIEW_FRAME | CAMERA_MSG_POSTVIEW_FRAME) ) {
         mFrameProvider->disableFrameNotification(CameraFrame::PREVIEW_FRAME_SYNC);
     }
 
@@ -1732,9 +1820,20 @@ status_t AppCallbackNotifier::stop()
 
     while(!gEncoderQueue.isEmpty()) {
         sp<Encoder_libjpeg> encoder = gEncoderQueue.valueAt(0);
+        camera_memory_t* encoded_mem = NULL;
+        ExifElementsTable* exif = NULL;
+
         if(encoder.get()) {
             encoder->cancel();
-            encoder->join();
+
+            encoder->getCookies(NULL, (void**) &encoded_mem, (void**) &exif);
+            if (encoded_mem) {
+                encoded_mem->release(encoded_mem);
+            }
+            if (exif) {
+                delete exif;
+            }
+
             encoder.clear();
         }
         gEncoderQueue.removeItemsAt(0);

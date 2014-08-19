@@ -36,7 +36,7 @@ LOCAL_STATIC_LIBRARIES :=
 ifeq ($(TARGET_USERIMAGES_USE_EXT4), true)
 LOCAL_CFLAGS += -DUSE_EXT4
 LOCAL_C_INCLUDES += system/extras/ext4_utils
-LOCAL_STATIC_LIBRARIES += libext4_utils libz
+LOCAL_STATIC_LIBRARIES += libsparse libext4_utils libz
 endif
 
 # This binary is in the recovery ramdisk, which is otherwise a copy of root.
@@ -49,7 +49,7 @@ LOCAL_MODULE_TAGS := optional
 #LOCAL_C_INCLUDES += $(LOCAL_PATH)/include
 #LOCAL_LDLIBS += $(LOCAL_PATH)/lib
 
-LOCAL_STATIC_LIBRARIES += libext4_utils libz 
+LOCAL_STATIC_LIBRARIES += libsparse libext4_utils libz 
 LOCAL_STATIC_LIBRARIES += libminzip libunz libmtdutils libmincrypt
 #add static libraries
 LOCAL_STATIC_LIBRARIES += libedify libcrecovery libflashutils libmmcutils libbmlutils libminadbd 

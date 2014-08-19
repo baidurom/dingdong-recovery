@@ -36,6 +36,7 @@
 #include <linux/ipv6_route.h>
 #include <linux/rtnetlink.h>
 #include <linux/sockios.h>
+#include <linux/un.h>
 
 #include "netutils/ifc.h"
 
@@ -46,15 +47,16 @@
 #else
 #include <stdio.h>
 #include <string.h>
-#define LOGD printf
-#define LOGW printf
+#define ALOGD printf
+#define ALOGW printf
 #endif
 
 static int ifc_ctl_sock = -1;
 static int ifc_ctl_sock6 = -1;
+static int ifc_netd_sock = -1;
 void printerr(char *fmt, ...);
 
-#define DBG 0
+#define DBG 1
 #define INET_ADDRLEN 4
 #define INET6_ADDRLEN 16
 
@@ -75,9 +77,8 @@ in_addr_t prefixLengthToIpv4Netmask(int prefix_length)
 
 int ipv4NetmaskToPrefixLength(in_addr_t mask)
 {
-    mask = ntohl(mask);
     int prefixLength = 0;
-    uint32_t m = (uint32_t)mask;
+    uint32_t m = (uint32_t)ntohl(mask);
     while (m & 0x80000000) {
         prefixLength++;
         m = m << 1;
@@ -126,7 +127,7 @@ int ifc_init(void)
     }
 
     ret = ifc_ctl_sock < 0 ? -1 : 0;
-    if (DBG) printerr("ifc_init_returning %d", ret);
+    if (0) printerr("ifc_init_returning %d", ret);
     return ret;
 }
 
@@ -143,7 +144,7 @@ int ifc_init6(void)
 
 void ifc_close(void)
 {
-    if (DBG) printerr("ifc_close");
+    if (0) printerr("ifc_close");
     if (ifc_ctl_sock != -1) {
         (void)close(ifc_ctl_sock);
         ifc_ctl_sock = -1;
@@ -213,6 +214,46 @@ int ifc_down(const char *name)
     int ret = ifc_set_flags(name, 0, IFF_UP);
     if (DBG) printerr("ifc_down(%s) = %d", name, ret);
     return ret;
+}
+
+int ifc_enable_allmc(const char *ifname)
+{
+	int result;
+	
+	ifc_init();
+	result = ifc_set_flags(ifname, IFF_ALLMULTI, 0);
+	ifc_close();
+
+	ALOGD("ifc_enable_allmc(%s) = %d", ifname, result);
+	return result;
+}
+
+int ifc_disable_allmc(const char *ifname)
+{
+	int result;
+	
+	ifc_init();
+	result = ifc_set_flags(ifname, 0, IFF_ALLMULTI);
+	ifc_close();
+
+	ALOGD("ifc_disable_allmc(%s) = %d", ifname, result);
+	return result;
+}
+int ifc_is_up(const char *name, unsigned *isup)
+{
+    struct ifreq ifr;
+    ifc_init_ifr(name, &ifr);
+
+    if(ioctl(ifc_ctl_sock, SIOCGIFFLAGS, &ifr) < 0) {
+        printerr("ifc_is_up get flags error:%d(%s)", errno, strerror(errno));
+        return -1;
+    }
+    if(ifr.ifr_flags & IFF_UP)
+        *isup = 1;
+    else
+        *isup = 0;
+  
+    return 0;
 }
 
 static void init_sockaddr_in(struct sockaddr *sa, in_addr_t addr)
@@ -382,13 +423,14 @@ int ifc_clear_ipv6_addresses(const char *name) {
 
         ret = ifc_del_address(ifname, addrstr, prefixlen);
         if (ret) {
-            LOGE("Deleting address %s/%d on %s: %s", addrstr, prefixlen, ifname,
+            ALOGE("Deleting address %s/%d on %s: %s", addrstr, prefixlen, ifname,
                  strerror(-ret));
             lasterror = ret;
         }
     }
 
     fclose(f);
+	ALOGD("ifc_clear_ipv6_addresses return %d", lasterror);
     return lasterror;
 }
 
@@ -405,6 +447,7 @@ void ifc_clear_ipv4_addresses(const char *name) {
             ifc_set_addr(name, 0);
     }
     ifc_close();
+	ALOGD("ifc_clear_ipv4_addresses return");
 }
 
 /*
@@ -486,7 +529,7 @@ int ifc_get_info(const char *name, in_addr_t *addr, int *prefixLength, unsigned 
         if(ioctl(ifc_ctl_sock, SIOCGIFNETMASK, &ifr) < 0) {
             *prefixLength = 0;
         } else {
-            *prefixLength = ipv4NetmaskToPrefixLength((int)
+            *prefixLength = ipv4NetmaskToPrefixLength(
                     ((struct sockaddr_in*) &ifr.ifr_addr)->sin_addr.s_addr);
         }
     }
@@ -600,6 +643,44 @@ int ifc_disable(const char *ifname)
     return result;
 }
 
+
+int ifc_reset_connection_by_uid(int uid, int error)
+{
+#ifdef HAVE_ANDROID_OS
+
+    int tcp_ctl_sock;
+
+    int result = -1;
+    struct uid_err uid_e;
+
+	uid_e.appuid = uid;
+	uid_e.errorNum = error;
+    
+    tcp_ctl_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (tcp_ctl_sock < 0) {
+        printerr("socket() failed: %s\n", strerror(errno));
+        return -1;
+    }
+    
+    if(uid_e.appuid < 0){
+        ALOGE("ifc_reset_connection_by_uid, invalide uid: %d", uid_e.appuid);
+        return -1;
+    }
+    
+    ALOGD("ifc_reset_connection_by_uid, appuid = %d, error = %d ",
+		      uid_e.appuid, uid_e.errorNum);
+    result = ioctl(tcp_ctl_sock, SIOCKILLSOCK, &uid_e);
+    if(result < 0)
+        ALOGE("ifc_reset_connection_by_uid, result= %d, error =%s ", result, strerror(errno));
+
+	close(tcp_ctl_sock);
+    ALOGD("ifc_reset_connection_by_uid, result= %d ",result);
+    return result;
+#else
+    return 0;
+#endif
+}
+
 #define RESET_IPV4_ADDRESSES 0x01
 #define RESET_IPV6_ADDRESSES 0x02
 #define RESET_ALL_ADDRESSES  (RESET_IPV4_ADDRESSES | RESET_IPV6_ADDRESSES)
@@ -686,7 +767,7 @@ int ifc_remove_host_routes(const char *name)
         init_sockaddr_in(&rt.rt_genmask, mask);
         addr.s_addr = dest;
         if (ioctl(ifc_ctl_sock, SIOCDELRT, &rt) < 0) {
-            LOGD("failed to remove route for %s to %s: %s",
+            ALOGD("failed to remove route for %s to %s: %s",
                  ifname, inet_ntoa(addr), strerror(errno));
         }
     }
@@ -752,7 +833,7 @@ int ifc_set_default_route(const char *ifname, in_addr_t gateway)
     ifc_init();
     addr.s_addr = gateway;
     if ((result = ifc_create_default_route(ifname, gateway)) < 0) {
-        LOGD("failed to add %s as default route for %s: %s",
+        ALOGD("failed to add %s as default route for %s: %s",
              inet_ntoa(addr), ifname, strerror(errno));
     }
     ifc_close();
@@ -773,7 +854,7 @@ int ifc_remove_default_route(const char *ifname)
     rt.rt_flags = RTF_UP|RTF_GATEWAY;
     init_sockaddr_in(&rt.rt_dst, 0);
     if ((result = ioctl(ifc_ctl_sock, SIOCDELRT, &rt)) < 0) {
-        LOGD("failed to remove default route for %s: %s", ifname, strerror(errno));
+        ALOGD("failed to remove default route for %s: %s", ifname, strerror(errno));
     }
     ifc_close();
     return result;
@@ -969,3 +1050,83 @@ int ifc_remove_route(const char *ifname, const char*dst, int prefix_length, cons
 {
     return ifc_act_on_route(SIOCDELRT, ifname, dst, prefix_length, gw);
 }
+
+static int ifc_netd_sock_init(void)
+{
+    int ret;
+    const int one = 1;
+    struct sockaddr_un netd_addr;
+  
+    if(ifc_netd_sock == -1){
+        ifc_netd_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (ifc_netd_sock < 0) {
+            printerr("ifc_netd_sock_init: create socket failed");
+            return -1;
+        }
+  
+        setsockopt(ifc_netd_sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+        memset(&netd_addr, 0, sizeof(netd_addr));
+        netd_addr.sun_family = AF_UNIX;
+        strlcpy(netd_addr.sun_path, "/dev/socket/netd",
+            sizeof(netd_addr.sun_path));
+        if (TEMP_FAILURE_RETRY(connect(ifc_netd_sock,
+                     (const struct sockaddr*) &netd_addr,
+                     sizeof(netd_addr))) != 0) {
+            printerr("ifc_netd_sock_init: connect to netd failed, err: %d(%s)", 
+                errno, strerror(errno));
+            return -1;
+        }
+    }
+  
+    ret = ifc_netd_sock < 0 ? -1 : 0;
+    if (DBG) printerr("ifc_netd_sock_init return %d", ret);
+    return ret;
+}
+
+static void ifc_netd_sock_close(void)
+{
+    if (DBG) printerr("ifc_netd_sock_close");
+    if (ifc_netd_sock != -1) {
+        (void)close(ifc_netd_sock);
+        ifc_netd_sock = -1;
+    }
+}
+
+/*do not call this function in netd*/
+int ifc_set_throttle(const char *ifname, int rxKbps, int txKbps)
+{
+    FILE* fnetd = NULL;
+    int ret = -1;
+    int seq = 1;
+    char rcv_buf[24];
+	int nread = 0;
+    ALOGD("enter ifc_set_throttle: ifname = %s, rx = %d kbs, tx = %d kbs", ifname, rxKbps, txKbps);
+
+    if(ifc_netd_sock_init() != 0)
+        goto exit;
+    
+    // Send the request.
+    fnetd = fdopen(ifc_netd_sock, "r+");
+    if (fprintf(fnetd, "%d interface setthrottle %s %d %d", seq, ifname, rxKbps, txKbps) < 0) {
+        goto exit;
+    }
+    // literal NULL byte at end, required by FrameworkListener
+    if (fputc(0, fnetd) == EOF ||
+        fflush(fnetd) != 0) {
+        goto exit;
+    }
+    ret = 0;
+
+	//Todo: read the whole response from netd
+	nread = fread(rcv_buf, 1, 20, fnetd);
+	rcv_buf[23] = 0;
+	ALOGD("response: %s", rcv_buf);
+exit:
+    if (fnetd != NULL) {
+        fclose(fnetd);
+    }
+    ifc_netd_sock_close();
+  
+    return ret;
+}
+

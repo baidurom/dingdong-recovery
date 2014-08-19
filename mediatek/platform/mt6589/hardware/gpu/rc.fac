@@ -1,0 +1,12 @@
+#!/system/bin/sh
+
+echo enable 160  > /proc/clkmgr/clock_test
+echo enable 162  > /proc/clkmgr/clock_test
+echo enable 163  > /proc/clkmgr/clock_test
+echo enable 164  > /proc/clkmgr/clock_test
+echo enable 174  > /proc/clkmgr/clock_test
+echo enable 175  > /proc/clkmgr/clock_test
+echo enable 176  > /proc/clkmgr/clock_test
+echo enable 177  > /proc/clkmgr/clock_test
+echo enable 178  > /proc/clkmgr/clock_test
+echo enable 179  > /proc/clkmgr/clock_test

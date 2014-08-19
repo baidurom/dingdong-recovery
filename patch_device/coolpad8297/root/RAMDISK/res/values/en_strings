@@ -1,0 +1,212 @@
+﻿### LICENSE:
+#--- COMMON SYSTEM STRING RESOURCE
+#
+text_ok=OK
+text_next=Next >
+text_back=< Back
+text_yes=Yes
+text_no=No
+text_about=About
+text_calibrating=Calibrating Tools
+text_quit=Quit
+text_quit_msg=Are you sure to quit?
+text_done=done
+global_done=done
+text_menumain= Main Menu
+text_menuback= Back
+
+#
+#-- CUSTOM STRING RESOURCE
+#
+recovery.name=Dingdong Recovery
+default_desc=Are you sure to do this?
+default_wait=Running now, please wait...
+update_wait=Updating now, please wait...
+
+mainmenu.name=MAIN MENU
+mainmenu.title_name=MAIN MENU
+mainmenu.install.name=install from /sdcard
+mainmenu.tools.name=tools
+
+back.name=Back
+back.title_name=Back to previous step
+
+sd.back.name=Back
+sd.back.desc=Back to upper
+sd.log.save=Save logs
+
+batt.name=BATTARY
+time.name=TIME
+battery.tip.info=Current battery
+
+sd.name=Choose a zip file to update
+sd.title_name=Choose a zip file to update
+sd.title_desc=Operations
+sd.desc=Choose a zip file to update
+sd.wipe.alert=Are you sure to do it? Can not cancel it after confirm!
+sd.install.name=Choose a zip file from sdcard
+sdint.install.name=Choose a zip file from internal sdcard
+cache.install.name=Choose a zip file from cache
+sd.install.alert=Are you sure to install it?
+signature.setting.name=Check package signature
+signature.setting.alert=Are you sure to change it? Current
+signature.setting.alert.on=ON
+signature.setting.alert.off=OFF
+signature.setting.off=Done, current: OFF
+signature.setting.on=Done, current: ON
+install.progress.success.info=Updating succeed
+install.progress.fail.info=Updating failed, please retry!
+install.main.tip.info=File
+install.find.tip.info=Finding update package...
+install.mount.fail.info=Can't mount
+install.open.tip.info=Opening update package...
+install.open.fail.info=Can't open
+install.verify.tip.info=Verifying...
+install.verify.fail.info=Verify failed...
+install.loadkey.fail.info=Load keyfile failed!
+install.install.tip.info=Installing update...
+install.prepare.confirm.info=Install
+install.prepare.cancel.info=Reselect
+install.config.title=Choose options
+install.config.group.setting=Configure install
+install.config.wipe=Wipe data/cache after updating
+install.config.wipe.desc=Phone data will be wiped when selected. Please backup your data if need.
+
+power.name=Reboot/Poweroff
+power.title=Reboot/Poweroff
+power.title_desc=Reboot, Poweroff, Reboot into bootloader or recovery
+reboot.null=Reboot
+reboot.null.title=Reboot now
+reboot.recovery=Reboot into recovery
+reboot.bootloader=Reboot into bootloader
+reboot.poweroff=Poweroff
+
+alert.result=Error
+alert.desc=Error operation
+
+mount.name=Mount partition
+mount.title_desc=Mount partitions/Enable USB mode
+mount.title=Mount partitions/Enable USB mode
+mount.cache.name=Mount /cache
+mount.data.name=Mount /data
+mount.system.name=Mount /system
+mount.sdcard.name=Mount /sdcard
+mount.sdint.name=Mount internal /sdcard
+mount.toggle.name=Enable USB mode
+
+wipe.name=Wipe data/cache 
+wipe.title_desc=Wipe data/cache or format sdcard
+wipe.title=Wipe
+wipe.factory.name=Wipe data/cache to factory
+wipe.data.name=Wipe /data
+wipe.cache.name=Wipe /cache
+wipe.sdcard.name=Format /sdcard
+wipe.sdint.name=Format internal /sdcard
+wipe.partition.info=Fromatting
+wipe.partition.alert=Fromatting
+wipe.partition.success=Fromatting complete
+wipe.partition.fail=Some partition formatting failed, Please retry from main menu!
+
+backup.name=Backup/Restore
+backup.title_desc=Backup/Restore your phone or partition
+backup.title=Backup to sdcard/Restore from sdcard
+backup_path.setting.name=Set backup/restore path
+backup_path.checkout.name=Check current backup/restore path
+backup_path.setting.alert=Can't find sdcard, please check!
+backup_path.change.alert=Are you sure to change the path?
+backup_path.externalsd.name=Set backup/restore path on sdcard
+backup_path.internalsd.name=Set backup/restore path on internal sdcard
+backup_path.current.desc=Current path
+backup.backup.name=Backup the phone
+backup.restore.name=Restore the phone
+backup.manage.name=Manage backups
+backup.confirm.alert=Are you sure to backup?
+restore.confirm.alert=Are you sure to restore?
+advanced_backup.name=Advanced backup
+advanced_backup.cache.name=Backup cache
+advanced_backup.data.name=Backup data
+advanced_backup.system.name=Backup system
+advanced_backup.boot.name=Backup boot
+advanced_backup.recovery.name=Backup recovery
+advanced_backup.confirm.alert=Are you sure to backup this partition?
+advanced_restore.name=Advanced restore
+advanced_restore.cache.name=Restore cache
+advanced_restore.data.name=Restore data
+advanced_restore.system.name=Restore system
+advanced_restore.boot.name=Restore boot
+advanced_restore.recovery.name=Restore recovery
+advanced_restore.confirm.alert=Are you sure to restore this partition?
+backup_manage.name=Manage backups
+backup_manage.full.name=Manage full backup
+backup_manage.boot.name=Manage boot backup
+backup_manage.system.name=Manage system backup
+backup_manage.data.name=Manage data backup
+backup_manage.cache.name=Manage cache backup
+backup_manage.all.name=Delete all backups
+backup_manage.success.alert=Backup files delete complete
+backup_manage.fail.alert=Backup files delete failed, try again!
+backup_manage.confirm.alert=Are you sure to delete selected backups?
+backup.partition.info=Backing up
+backup.mount.error.info=Mount partition failed
+backup.path.info=Backup path
+backup.mount.fail.info=Can't mount backup path
+backup.backup.tip.info=Backing up the phone
+backup.sd.cap.info=SD Card space free
+backup.sd.alert.info=There may not be enough free space to complete backup... continuing...
+backup.partition.info=Backing up
+backup.partition.fail.info=Partiton backing up failed
+backup.partition.success.info=Partiton backing up complete
+backup.done.fail.info=Backing up failed
+backup.done.success.info=Backup complete
+backup.md5.gen.info=Generating md5 sum...
+backup.md5.error.info=Generating md5 sum failed!
+backup.progress.success.info=Backup done
+backup.progress.fail.info=Backup failed, try again!
+restore.battery.alert.info=Battery lower than 
+restore.battery.tip.info=Try again after connecting the usb or charging
+restore.restore.begin.info=Restoring
+restore.restore.tip.info=Don't poweroff or unplug the battery when restoring!
+restore.path.info=Restore path
+restore.md5.check.info=Checking MD5 sums...
+restore.md5.error.info=MD5 mismatch!
+restore.partition.info=Restoring
+restore.partition.fail.info=Restoring partition failed
+restore.format.fail.info=Formating partition failed
+restore.mount.fail.info=Can't mount 
+restore.image.lack.info=Not found, ignore the following partition: 
+restore.done.fail.info=Restore failed!
+restore.done.success.info=Restore complete
+restore.progress.success.info=Restore done
+restore.progress.fail.info=Restore failed, try again
+
+progress.savelog.button=Save Logs
+progress.success.info=Done
+progress.fail.info=Failed
+progress.running.info=Running, please wait...
+progress.installing.info=Installer running, please wait...
+progress.savelog.tip=Logs will be save at: 
+progress.savelog.alert=Are you sure to save the logs?
+progress.savelog.success=Save done
+
+tool.name=Advanced menu
+tool.title=Provide advanced operation
+tool.title_desc=Provide advanced operation
+tool.battary.name=Wipe battery statistics
+tool.log.name=Copy recovery logs to sdcard
+tool.log.desc=Are sure to copy recovery logs to 
+tool.permission.name=Fix permission
+tool.dalvik.name=Wipe dalvik cache
+tool.battery.wipe.info=Wipe battery statistics done
+tool.dalvik.wipe.info=Wipe dalvik cache done
+tool.permission.fixed.info=Fix permission done
+tool.log.copy.info=Copy recovery logs done
+tool.log.copy.alert=Copy recovery logs failed, please try again
+tool.title=About Dingdong recovery
+tool.mount.name=Check the storage information
+tool.logcheck.name=Check the recovery log
+tool.about.name=Software information
+
+about.device=Device:
+about.name=Name:
+about.version=Version:
+

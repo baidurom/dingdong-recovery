@@ -28,9 +28,55 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <stdlib.h>
+#include <private/logd.h>
 
 extern int  __openat(int, const char*, int, int);
 
+#ifdef _MTK_ENG_
+#include "../bionic/fdleak_debug_common.h"
+
+int openat(int fd, const char *pathname, int flags, ...)
+{
+    mode_t  mode = 0;
+    int tmpfd = -1;
+
+    flags |= O_LARGEFILE;
+
+    if (flags & O_CREAT)
+    {
+        va_list  args;
+
+        va_start(args, flags);
+        mode = (mode_t) va_arg(args, int);
+        va_end(args);
+    }
+    
+    tmpfd = __openat(fd, pathname, flags, mode);
+    if (fdleak_record_backtrace) {
+        fdleak_record_backtrace(tmpfd);
+    }
+    return tmpfd;
+}
+
+int __openat_2(int fd, const char *pathname, int flags)
+{
+    int tmpfd = -1;
+    if (flags & O_CREAT) {
+        __libc_android_log_print(ANDROID_LOG_FATAL, "libc",
+            "*** openat(O_CREAT) called without specifying a mode ***\n");
+        abort();
+    }
+
+    flags |= O_LARGEFILE;
+
+    tmpfd = __openat(fd, pathname, flags, 0);
+    if (fdleak_record_backtrace) {
+        fdleak_record_backtrace(tmpfd);
+    }
+    return tmpfd;
+}
+#else
 int openat(int fd, const char *pathname, int flags, ...)
 {
     mode_t  mode = 0;
@@ -49,3 +95,16 @@ int openat(int fd, const char *pathname, int flags, ...)
     return __openat(fd, pathname, flags, mode);
 }
 
+int __openat_2(int fd, const char *pathname, int flags)
+{
+    if (flags & O_CREAT) {
+        __libc_android_log_print(ANDROID_LOG_FATAL, "libc",
+            "*** openat(O_CREAT) called without specifying a mode ***\n");
+        abort();
+    }
+
+    flags |= O_LARGEFILE;
+
+    return __openat(fd, pathname, flags, 0);
+}
+#endif

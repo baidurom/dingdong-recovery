@@ -15,10 +15,6 @@
 #
 LOCAL_PATH := $(call my-dir)
 
-ifeq ($(TARGET_SIMULATOR),true)
-  $(error This makefile must not be included when building the simulator)
-endif
-
 ifndef WPA_SUPPLICANT_VERSION
 WPA_SUPPLICANT_VERSION := VER_0_5_X
 endif
@@ -48,7 +44,7 @@ TXN	= $(DK_ROOT)/Txn
 CUDK	= $(DK_ROOT)/CUDK
 LIB	= ../../lib
 
-include $(WPA_SUPPL_DIR)/.config
+include $(WPA_SUPPL_DIR)/android.config
 
 INCLUDES = $(STAD)/Export_Inc \
 	$(STAD)/src/Application \
@@ -71,9 +67,7 @@ L_CFLAGS += -DWPA_SUPPLICANT_$(WPA_SUPPLICANT_VERSION)
 OBJS = driver_ti.c $(LIB)/scanmerge.c $(LIB)/shlist.c
 
 # To force sizeof(enum) = 4
-ifneq ($(TARGET_SIMULATOR),true)
 L_CFLAGS += -mabi=aapcs-linux
-endif
 
 ifdef CONFIG_NO_STDOUT_DEBUG
 L_CFLAGS += -DCONFIG_NO_STDOUT_DEBUG

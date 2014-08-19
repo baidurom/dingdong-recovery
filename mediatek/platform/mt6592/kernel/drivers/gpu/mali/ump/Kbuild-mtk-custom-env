@@ -1,0 +1,26 @@
+#clouds add
+#[Section:Manual modify]
+
+FLAG_MTK_BUILD_SYS := 1
+
+#[Section:Should add to alps project config (TODO)]
+#Not yet move to "alps/mediatek/config/mt6582/autoconfig/kconfig/platform"
+#due to the mechanism
+
+CONFIG_UMP     := m
+
+CONFIG_UMP_DEBUG := y
+
+
+
+
+#[Section:Hard-Core]
+CONFIG := mt6582
+#CONFIG := $(CONFIG_MALI_CONFIG)
+
+#[Legacy] TARGET_PLATFORM := mt6582
+
+#[Legacy] BUILD := debug 
+
+#[Legacy] USING_UMP := 1
+

@@ -20,6 +20,7 @@
 #include <cutils/log.h>
 
 #include <sysutils/NetlinkEvent.h>
+#include <cutils/properties.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -31,6 +32,8 @@ const int QLOG_NL_EVENT  = 112;
 
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 const int NetlinkEvent::NlActionUnknown = 0;
 const int NetlinkEvent::NlActionAdd = 1;
@@ -38,6 +41,8 @@ const int NetlinkEvent::NlActionRemove = 2;
 const int NetlinkEvent::NlActionChange = 3;
 const int NetlinkEvent::NlActionLinkUp = 4;
 const int NetlinkEvent::NlActionLinkDown = 5;
+const int NetlinkEvent::NlActionIPv6Enable = 6;
+const int NetlinkEvent::NlActionIPv6Disable = 7;
 
 NetlinkEvent::NetlinkEvent() {
     mAction = NlActionUnknown;
@@ -61,6 +66,8 @@ NetlinkEvent::~NetlinkEvent() {
 
 void NetlinkEvent::dump() {
     int i;
+	SLOGD("NL action '%d'\n", mAction);
+	SLOGD("NL subsystem '%s'\n", mSubsystem);
 
     for (i = 0; i < NL_PARAMS_MAX; i++) {
         if (!mParams[i])
@@ -106,6 +113,36 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
                     mAction = (ifi->ifi_flags & IFF_LOWER_UP) ?
                       NlActionLinkUp : NlActionLinkDown;
                     mSubsystem = strdup("net");
+
+					/*mtk80842 for IPv6 tethering*/					
+					if(mAction == NlActionLinkDown){	
+						char prefix_prop_name[PROPERTY_KEY_MAX];	
+						char plen_prop_name[PROPERTY_KEY_MAX];	
+						char prop_value[PROPERTY_VALUE_MAX] = {'\0'};	
+						snprintf(prefix_prop_name, sizeof(prefix_prop_name), 
+							"net.ipv6.%s.prefix", (char *) RTA_DATA(rta));	
+						
+						if (property_get("net.ipv6.tether", prop_value, NULL)) {	
+							if(0 == strcmp(prop_value, ((char *)RTA_DATA(rta)))){		
+								if (property_get(prefix_prop_name, prop_value, NULL)) {	
+							        property_set("net.ipv6.lastprefix", prop_value);
+									SLOGD("set last prefix as %s\n", prop_value);
+							    }
+							} else	{
+								SLOGW("%s is not a tether interface\n", (char *)RTA_DATA(rta));
+							}	
+						}
+
+						if (property_get(prefix_prop_name, prop_value, NULL)) {	
+							property_set(prefix_prop_name, "");	
+						}	
+						snprintf(plen_prop_name, sizeof(plen_prop_name), 
+							"net.ipv6.%s.plen", (char *) RTA_DATA(rta));	
+						if (property_get(plen_prop_name, prop_value, NULL)) {	
+							property_set(plen_prop_name, "");	
+							}					
+						}
+					
                     break;
                 }
 
@@ -127,6 +164,91 @@ bool NetlinkEvent::parseBinaryNetlinkMessage(char *buffer, int size) {
             mSubsystem = strdup("qlog");
             mAction = NlActionChange;
 
+        } else if(nh->nlmsg_type == RTM_NEWPREFIX){
+
+				struct prefixmsg *prefix = (prefixmsg *)NLMSG_DATA(nh);
+				int len = nh->nlmsg_len;
+				struct rtattr * tb[RTA_MAX+1];
+				char if_name[IFNAMSIZ] = "";
+				
+				if (nh->nlmsg_type != RTM_NEWPREFIX) {
+					SLOGE("Not a prefix: %08x %08x %08x\n",
+						nh->nlmsg_len, nh->nlmsg_type, nh->nlmsg_flags);
+					continue;
+				}
+			
+				len -= NLMSG_LENGTH(sizeof(*prefix));
+				if (len < 0) {
+					SLOGE("BUG: wrong nlmsg len %d\n", len);
+					continue;
+				}
+					
+				if (prefix->prefix_family != AF_INET6) {
+					SLOGE("wrong family %d\n", prefix->prefix_family);
+					continue;
+				}
+				if (prefix->prefix_type != 3 /*prefix opt*/) {
+					SLOGE( "wrong ND type %d\n", prefix->prefix_type);
+					continue;
+				}
+				if_indextoname(prefix->prefix_ifindex, if_name);
+				
+				{ 
+					int max = RTA_MAX;
+				    struct rtattr *rta = RTM_RTA(prefix);
+					memset(tb, 0, sizeof(struct rtattr *) * (max + 1));
+					while (RTA_OK(rta, len)) {
+						if ((rta->rta_type <= max) && (!tb[rta->rta_type]))
+							tb[rta->rta_type] = rta;
+						rta = RTA_NEXT(rta,len);
+					}
+					if (len)
+						SLOGE("!!!Deficit %d, rta_len=%d\n", len, rta->rta_len);
+				}
+				if (tb[PREFIX_ADDRESS] && (0 == strncmp(if_name, "ccmni", 2))) {
+					struct in6_addr *pfx;
+					char abuf[256];
+					char prefix_prop_name[PROPERTY_KEY_MAX];
+					char plen_prop_name[PROPERTY_KEY_MAX];
+					char prefix_value[PROPERTY_VALUE_MAX] = {'\0'};
+					char plen_value[4]; 
+					
+					pfx = (struct in6_addr *)RTA_DATA(tb[PREFIX_ADDRESS]);
+			
+					memset(abuf, '\0', sizeof(abuf));
+					const char* addrStr = inet_ntop(AF_INET6, pfx, abuf, sizeof(abuf));
+
+					snprintf(prefix_prop_name, sizeof(prefix_prop_name), 
+						"net.ipv6.%s.prefix", if_name);
+					property_get(prefix_prop_name, prefix_value, NULL);
+					if(NULL != addrStr && strcmp(addrStr, prefix_value)){
+						SLOGI("%s new prefix: %s, len=%d\n", if_name, addrStr, prefix->prefix_len);  
+
+						property_set(prefix_prop_name, addrStr);
+						snprintf(plen_prop_name, sizeof(plen_prop_name), 
+								"net.ipv6.%s.plen", if_name);
+						snprintf(plen_value, sizeof(plen_value), 
+								"%d", prefix->prefix_len);						
+						property_set(plen_prop_name, plen_value);
+						{
+			                char buffer[16 + IFNAMSIZ];
+			                snprintf(buffer, sizeof(buffer), "INTERFACE=%s", if_name);
+			                mParams[0] = strdup(buffer);							
+						    mAction = NlActionIPv6Enable;
+							mSubsystem = strdup("net");
+						}
+					} else {
+						SLOGD("get an exist prefix: = %s\n", addrStr);
+					} 					
+				}else{
+					SLOGD("ignore prefix of %s\n", if_name);
+				}
+	/*		
+				if (prefix->prefix_flags & IF_PREFIX_ONLINK)
+					;
+				if (prefix->prefix_flags & IF_PREFIX_AUTOCONF)
+					;
+	*/	
         } else {
                 SLOGD("Unexpected netlink message. type=0x%x\n", nh->nlmsg_type);
         }

@@ -24,13 +24,13 @@
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) 
  * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
+   
 #include <string.h>
 
 /*
@@ -55,6 +55,12 @@ memcpy(void *dst0, const void *src0, size_t length)
 void *
 memmove(void *dst0, const void *src0, size_t length)
 #else
+
+#include <machine/cpu-features.h>
+#define VFP_COPY_LENGTH_THRESHOLD (1024)
+extern void vfp_copy_forward_not_align(void *dst, void *src, size_t length);
+extern void vfp_copy_backward_not_align(void *dst, void *src, size_t length,int flags);
+ 
 void
 bcopy(const void *src0, void *dst0, size_t length)
 #endif
@@ -72,7 +78,6 @@ bcopy(const void *src0, void *dst0, size_t length)
 	 */
 #define	TLOOP(s) if (t) TLOOP1(s)
 #define	TLOOP1(s) do { s; } while (--t)
-
 	if ((unsigned long)dst < (unsigned long)src) {
 		/*
 		 * Copy forward.
@@ -83,9 +88,27 @@ bcopy(const void *src0, void *dst0, size_t length)
 			 * Try to align operands.  This cannot be done
 			 * unless the low bits match.
 			 */
-			if ((t ^ (long)dst) & wmask || length < wsize)
+                        if (length < wsize) {
+                                t = length;
+                                TLOOP1(*dst++ = *src++);
+                                goto done;
+                        }
+
+                        /*
+                         * Src and dst not at same byte offset 
+                         */
+			if ((t ^ (long)dst) & wmask) {
 				t = length;
-			else
+#if !defined (MEMCOPY)
+#if defined(__ARM_NEON__)
+                                memcpy(dst0, src0, length);
+                                goto done;
+#else /* BCOPY without NEON */
+                                memcpy(dst0, src0, length);
+                                goto done;
+#endif /* __ARM_NEON__ */
+#endif /* !MEMCOPY */
+			} else
 				t = wsize - (t & wmask);
 			length -= t;
 			TLOOP1(*dst++ = *src++);
@@ -96,7 +119,7 @@ bcopy(const void *src0, void *dst0, size_t length)
 		t = length / wsize;
 		TLOOP(*(word *)dst = *(word *)src; src += wsize; dst += wsize);
 		t = length & wmask;
-		TLOOP(*dst++ = *src++);
+		TLOOP(*dst++ = *src++);  
 	} else {
 		/*
 		 * Copy backwards.  Otherwise essentially the same.
@@ -105,11 +128,48 @@ bcopy(const void *src0, void *dst0, size_t length)
 		 */
 		src += length;
 		dst += length;
-		t = (long)src;
+		t = (long)src; 
 		if ((t | (long)dst) & wmask) {
-			if ((t ^ (long)dst) & wmask || length <= wsize)
-				t = length;
-			else
+                        if (length < wsize) {
+                                t = length;
+                                TLOOP1(*--dst = *--src);
+                                goto done;
+                        }
+
+                        /** Src and dst not at same byte offset*/
+
+			if ((t ^ (long)dst) & wmask) {
+				t = length;  
+#if !defined (MEMCOPY)  
+#if defined(__ARM_NEON__)
+                                if (length >= VFP_COPY_LENGTH_THRESHOLD) {
+                                        unsigned long bytes, i, len;
+                                        /* Copy trailing bytes, align dst to 16 bytes */
+                                        /* Copy trailing bytes, align src to 32 bytes */
+                                        bytes = ((unsigned long)dst) & 15;  
+                                        if (bytes > 0) {
+                                                for (i = 0; i < bytes; i++) 
+                                                        *--dst = *--src;
+                                        }     
+  
+                                        /* Utilize VFP to copy multiple of 32 bytes */
+                                        /* Utilize VFP to copy multiple of 64 bytes */ 
+                                        len = (length - bytes) & ~31;//~63;//~31;  
+                                        vfp_copy_backward_not_align((void *) dst, (void *) src, len,(int)len&0x20/*Check If src 64bytes alignment only*/);
+
+                                        /* Copy remaining bytes */   
+                                        src -= len; 
+                                        dst -= len;
+                                        bytes = ((unsigned long) src) - ((unsigned long) src0);
+                                        if (bytes > 0) {
+                                                for (i = 0; i < bytes; i++)
+                                                        *--dst = *--src;
+                                        } 
+                                        goto done;
+                                }
+#endif /* __ARM_NEON__ */
+#endif /* !MEMCOPY */
+			} else
 				t &= wmask;
 			length -= t;
 			TLOOP1(*--dst = *--src);

@@ -1,9 +1,9 @@
 #ifndef CAMERA_TEST_H
 #define CAMERA_TEST_H
 
-#define PRINTOVER(arg...)     LOGD(#arg)
-#define LOG_FUNCTION_NAME         LOGD("%d: %s() ENTER", __LINE__, __FUNCTION__);
-#define LOG_FUNCTION_NAME_EXIT    LOGD("%d: %s() EXIT", __LINE__, __FUNCTION__);
+#define PRINTOVER(arg...)     ALOGD(#arg)
+#define LOG_FUNCTION_NAME         ALOGD("%d: %s() ENTER", __LINE__, __FUNCTION__);
+#define LOG_FUNCTION_NAME_EXIT    ALOGD("%d: %s() EXIT", __LINE__, __FUNCTION__);
 #define KEY_GBCE            "gbce"
 #define KEY_GLBCE           "glbce"
 #define KEY_CAMERA          "camera-index"

@@ -1,5 +1,5 @@
 # Copyright 2006 The Android Open Source Project
-
+ifeq (foo,bar)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
@@ -18,11 +18,14 @@ endif # arm
 LOCAL_CFLAGS := -DRIL_SHLIB
 
 LOCAL_MODULE:= rild
+LOCAL_MODULE_TAGS := optional
 
 include $(BUILD_EXECUTABLE)
+endif # (foo,bar)
 
 # For radiooptions binary
 # =======================
+ifeq (foo,bar)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES:= \
@@ -37,3 +40,4 @@ LOCAL_MODULE:= radiooptions
 LOCAL_MODULE_TAGS := debug
 
 include $(BUILD_EXECUTABLE)
+endif # (foo,bar)

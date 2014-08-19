@@ -27,15 +27,15 @@
 #define LOG_TAG "ion"
 #include <cutils/log.h>
 
-#include <linux/ion.h>
-#include <linux/omap_ion.h>
+#include "linux_ion.h"
+#include "omap_ion.h"
 #include "ion.h"
 
 int ion_open()
 {
         int fd = open("/dev/ion", O_RDWR);
         if (fd < 0)
-                LOGE("open /dev/ion failed!\n");
+                ALOGE("open /dev/ion failed!\n");
         return fd;
 }
 
@@ -48,7 +48,7 @@ static int ion_ioctl(int fd, int req, void *arg)
 {
         int ret = ioctl(fd, req, arg);
         if (ret < 0) {
-                LOGE("ioctl %d failed with code %d: %s\n", req,
+                ALOGE("ioctl %d failed with code %d: %s\n", req,
                        ret, strerror(errno));
                 return -errno;
         }
@@ -115,12 +115,12 @@ int ion_map(int fd, struct ion_handle *handle, size_t length, int prot,
                 return ret;
         *map_fd = data.fd;
         if (*map_fd < 0) {
-                LOGE("map ioctl returned negative fd\n");
+                ALOGE("map ioctl returned negative fd\n");
                 return -EINVAL;
         }
         *ptr = mmap(NULL, length, prot, flags, *map_fd, offset);
         if (*ptr == MAP_FAILED) {
-                LOGE("mmap failed: %s\n", strerror(errno));
+                ALOGE("mmap failed: %s\n", strerror(errno));
                 return -errno;
         }
         return ret;
@@ -137,7 +137,7 @@ int ion_share(int fd, struct ion_handle *handle, int *share_fd)
                 return ret;
         *share_fd = data.fd;
         if (*share_fd < 0) {
-                LOGE("map ioctl returned negative fd\n");
+                ALOGE("map ioctl returned negative fd\n");
                 return -EINVAL;
         }
         return ret;

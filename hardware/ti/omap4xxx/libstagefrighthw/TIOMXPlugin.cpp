@@ -18,8 +18,7 @@
 
 #include <dlfcn.h>
 
-#include <media/stagefright/HardwareAPI.h>
-#include <media/stagefright/MediaDebug.h>
+#include <HardwareAPI.h>
 
 namespace android {
 
@@ -43,7 +42,7 @@ TIOMXPlugin::TIOMXPlugin()
       mGetRolesOfComponentHandle(NULL) {
     if (mLibHandle != NULL) {
         mInit = (InitFunc)dlsym(mLibHandle, "TIOMX_Init");
-        mDeinit = (DeinitFunc)dlsym(mLibHandle, "TIOMX_DeInit");
+        mDeinit = (DeinitFunc)dlsym(mLibHandle, "TIOMX_Deinit");
 
         mComponentNameEnum =
             (ComponentNameEnumFunc)dlsym(mLibHandle, "TIOMX_ComponentNameEnum");
@@ -58,7 +57,7 @@ TIOMXPlugin::TIOMXPlugin()
         (*mInit)();
     }
     else
-        LOGE("%s: failed to load %s", __func__, LIBOMX);
+        ALOGE("%s: failed to load %s", __func__, LIBOMX);
 }
 
 TIOMXPlugin::~TIOMXPlugin() {
@@ -99,7 +98,7 @@ OMX_ERRORTYPE TIOMXPlugin::enumerateComponents(
         size_t size,
         OMX_U32 index) {
     if (mLibHandle == NULL) {
-	LOGE("mLibHandle is NULL!");
+	ALOGE("mLibHandle is NULL!");
         return OMX_ErrorUndefined;
     }
 
@@ -132,11 +131,11 @@ OMX_ERRORTYPE TIOMXPlugin::getRolesOfComponent(
         err = (*mGetRolesOfComponentHandle)(
                 const_cast<OMX_STRING>(name), &numRoles, array);
 
-        CHECK_EQ(err, OMX_ErrorNone);
-
         for (OMX_U32 i = 0; i < numRoles; ++i) {
-            String8 s((const char *)array[i]);
-            roles->push(s);
+            if (err == OMX_ErrorNone) {
+                String8 s((const char *)array[i]);
+                roles->push(s);
+            }
 
             delete[] array[i];
             array[i] = NULL;
@@ -146,7 +145,7 @@ OMX_ERRORTYPE TIOMXPlugin::getRolesOfComponent(
         array = NULL;
     }
 
-    return OMX_ErrorNone;
+    return err;
 }
 
 }  // namespace android

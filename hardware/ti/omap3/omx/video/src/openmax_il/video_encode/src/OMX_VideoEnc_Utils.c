@@ -349,7 +349,7 @@ void OMX_VIDENC_EmptyDataPipes (VIDENC_COMPONENT_PRIVATE *pComponentPrivate)
         pthread_cond_wait(&bufferReturned_condition, &bufferReturned_mutex);
     }
     pthread_mutex_unlock(&bufferReturned_mutex);
-    LOGI("Video encoder has returned all buffers");
+    ALOGI("Video encoder has returned all buffers");
 }
 
 void OMX_VIDENC_IncrementBufferCountByOne(OMX_U32 *count)
@@ -365,7 +365,7 @@ void OMX_VIDENC_SignalIfAllBuffersAreReturned(VIDENC_COMPONENT_PRIVATE *pCompone
     if ((pComponentPrivate->EmptythisbufferCount == pComponentPrivate->EmptybufferdoneCount) &&
         (pComponentPrivate->FillthisbufferCount  == pComponentPrivate->FillbufferdoneCount)) {
         pthread_cond_broadcast(&bufferReturned_condition);
-        LOGI("Sending pthread signal that video encoder has returned all buffers to app");
+        ALOGI("Sending pthread signal that video encoder has returned all buffers to app");
     }
     pthread_mutex_unlock(&bufferReturned_mutex);
 }
@@ -3956,7 +3956,7 @@ OMX_ERRORTYPE OMX_VIDENC_LCML_Callback(TUsnCodecEvent event,void* argsCb [10])
 #endif
             OMX_PRDSP1(pComponentPrivate->dbg, " [OUT] -> %p\n", pBufHead);
             if(pBufHead->nFilledLen > pBufHead->nAllocLen) {
-                LOGD("VE Warning!!! Output buffer overflow.");
+                ALOGD("VE Warning!!! Output buffer overflow.");
             }
             pBufferPrivate->eBufferOwner = VIDENC_BUFFER_WITH_COMPONENT;
             if (pComponentPrivate->bCodecStarted == OMX_TRUE)

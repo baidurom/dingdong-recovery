@@ -77,7 +77,7 @@
 #define LOCK_BUFFER_TRIES 5
 #define HAL_PIXEL_FORMAT_NV12 0x100
 
-#define CAMHAL_LOGI LOGI
+#define CAMHAL_LOGI ALOGI
 
 //Uncomment to enable more verbose/debug logs
 //#define DEBUG_LOG
@@ -90,8 +90,8 @@
 #define CAMHAL_LOGVA(str)
 #define CAMHAL_LOGVB(str, ...)
 
-#define CAMHAL_LOGEA LOGE
-#define CAMHAL_LOGEB LOGE
+#define CAMHAL_LOGEA ALOGE
+#define CAMHAL_LOGEB ALOGE
 
 #undef LOG_FUNCTION_NAME
 #undef LOG_FUNCTION_NAME_EXIT
@@ -331,6 +331,13 @@ public:
         ALL_EVENTS = 0xFFFF ///Maximum of 16 event types supported
     };
 
+    enum FocusStatus {
+        FOCUS_STATUS_SUCCESS = 0x1,
+        FOCUS_STATUS_FAIL = 0x2,
+        FOCUS_STATUS_PENDING = 0x4,
+        FOCUS_STATUS_DONE = 0x8,
+    };
+
     ///Class declarations
     ///@remarks Add a new class for a new event type added above
 
@@ -341,8 +348,7 @@ public:
 
     ///Focus event specific data
     typedef struct FocusEventData_t {
-        bool focusLocked;
-        bool focusError;
+        FocusStatus focusStatus;
         int currentFocusValue;
     } FocusEventData;
 
@@ -678,7 +684,7 @@ private:
 class MemoryManager : public BufferProvider, public virtual RefBase
 {
 public:
-    MemoryManager():mIonFd(0){ }
+    MemoryManager():mIonFd(-1){ }
 
     ///Initializes the memory manager creates any resources required
     status_t initialize() { return NO_ERROR; }

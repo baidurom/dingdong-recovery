@@ -1192,9 +1192,11 @@ static void TrafficMonitor_ChangeDownTimerStatus (TI_HANDLE hTrafficMonitor, TI_
     {
         pTrafficMonitor->DownTimerEnabled = TI_FALSE;
         tmr_StopTimer (pTrafficMonitor->hTrafficMonTimer);
+        os_wake_unlock(pTrafficMonitor->hOs);
     }
     else if ((downEventsFound > 0) && (pTrafficMonitor->DownTimerEnabled == TI_FALSE))
     {
+        os_wake_lock(pTrafficMonitor->hOs);
         pTrafficMonitor->DownTimerEnabled = TI_TRUE;
         /* Start the timer with user defined percentage of the the minimum interval discovered earlier */
         tmr_StartTimer (pTrafficMonitor->hTrafficMonTimer,

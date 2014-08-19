@@ -1,0 +1,8 @@
+#include "../cfgdefault/CFG_Custom1_Default.h"
+#include "../cfgdefault/CFG_Salesregflag_Default.h"
+#include "../cfgdefault/CFG_Audio_Default_Cust.h"
+#include "../cfgdefault/CFG_Model_Default.h"
+#include "../cfgdefault/CFG_GPS_Default.h"
+#include "../cfgdefault/CFG_PRODUCT_INFO_Default.h"
+#include "../cfgdefault/CFG_Psensor_Default.h"
+#include "../cfgdefault/CFG_WIFI_Default.h"

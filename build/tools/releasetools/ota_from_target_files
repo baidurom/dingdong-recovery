@@ -49,19 +49,23 @@ Usage:  ota_from_target_files [flags] input_target_files output_ota_package
   -e  (--extra_script)  <file>
       Insert the contents of file at the end of the update script.
 
+  -r  (--preloader)  <file>
+      Specify 'preloader.img' to upgrade.
+
+  -l  (--logo)  <file>
+      Specify 'logo.img' to upgrade.
+
+  -u  (--uboot)  <file>
+      Specify 'uboot.img' to upgrade.
+
+  -d  (--dsp)  <file>
+      Specify 'dsp_bl.img' to upgrade.
+
   -a  (--aslr_mode)  <on|off>
       Specify whether to turn on ASLR for the package (on by default).
 
-  --backup <boolean>
-      Enable or disable the execution of backuptool.sh.
-      Disabled by default.
-
-  --configid <boolean>
-     Enable or disable the execution of modelid_cfg.sh.
-      Enabled by default.
-
-  --override_device <device>
-      Override device-specific asserts. Can be a comma-separated list.
+  -f  (--special_factory_reset)
+      After upgrade, it will execute special factory reset.
 
 """
 
@@ -95,13 +99,17 @@ OPTIONS.require_verbatim = set()
 OPTIONS.prohibit_verbatim = set(("system/build.prop",))
 OPTIONS.patch_threshold = 0.95
 OPTIONS.wipe_user_data = False
-OPTIONS.omit_prereq = False
+OPTIONS.omit_prereq = True
 OPTIONS.extra_script = None
 OPTIONS.aslr_mode = True
 OPTIONS.worker_threads = 3
-OPTIONS.backuptool = False
-OPTIONS.modelidcfg = True
-OPTIONS.override_device = 'auto'
+#wschen
+OPTIONS.preloader = None
+OPTIONS.uboot = None
+OPTIONS.logo = None
+OPTIONS.dsp = None
+scatter_path = "mediatek/misc/ota_scatter.txt"
+OPTIONS.special_factory_reset = False
 
 def MostPopularKey(d, default):
   """Given a dict, return the key corresponding to the largest
@@ -115,7 +123,7 @@ def MostPopularKey(d, default):
 def IsSymlink(info):
   """Return true if the zipfile.ZipInfo object passed in represents a
   symlink."""
-  return (info.external_attr >> 16) & 0770000 == 0120000
+  return (info.external_attr >> 16) == 0120777
 
 def IsRegular(info):
   """Return true if the zipfile.ZipInfo object passed in represents a
@@ -180,7 +188,12 @@ class Item:
 
     for line in output.split("\n"):
       if not line: continue
-      name, uid, gid, mode = line.split()
+      #wschen
+      try:
+        name, uid, gid, mode = line.split()
+      except ValueError:
+        print line, " ---> File name or directory CANNOT contain spaces or Chinese characters"
+        raise ValueError, 'File name or directory CANNOT contain spaces or Chinese characters'
       i = cls.ITEMS.get(name, None)
       if i is not None:
         i.uid = int(uid)
@@ -275,15 +288,13 @@ def CopySystemFiles(input_zip, output_zip=None,
                     substitute=None):
   """Copies files underneath system/ in the input zip to the output
   zip.  Populates the Item class with their metadata, and returns a
-  list of symlinks as well as a list of files that will be retouched.
-  output_zip may be None, in which case the copy is skipped (but the
-  other side effects still happen).  substitute is an optional dict
-  of {output filename: contents} to be output instead of certain input
-  files.
+  list of symlinks.  output_zip may be None, in which case the copy is
+  skipped (but the other side effects still happen).  substitute is an
+  optional dict of {output filename: contents} to be output instead of
+  certain input files.
   """
 
   symlinks = []
-  retouch_files = []
 
   for info in input_zip.infolist():
     if info.filename.startswith("SYSTEM/"):
@@ -301,9 +312,6 @@ def CopySystemFiles(input_zip, output_zip=None,
             data = substitute[fn]
           else:
             data = input_zip.read(info.filename)
-          if info.filename.startswith("SYSTEM/lib/") and IsRegular(info):
-            retouch_files.append(("/system/" + basefilename,
-                                  common.sha1(data).hexdigest()))
           output_zip.writestr(info2, data)
         if fn.endswith("/"):
           Item.Get(fn[:-1], dir=True)
@@ -311,7 +319,7 @@ def CopySystemFiles(input_zip, output_zip=None,
           Item.Get(fn, dir=False)
 
   symlinks.sort()
-  return (symlinks, retouch_files)
+  return symlinks
 
 
 def SignOutput(temp_zip_name, output_zip_name):
@@ -323,14 +331,24 @@ def SignOutput(temp_zip_name, output_zip_name):
 
 
 def AppendAssertions(script, input_zip):
-  if OPTIONS.override_device == "auto":
-    device = GetBuildProp("ro.product.device", input_zip)
-  else:
-    device = OPTIONS.override_device
-  script.AssertDevice(device)
+  device = GetBuildProp("ro.product.device", input_zip)
+  devicealias = None
+  bp = input_zip.read("SYSTEM/build.prop")
+  m = re.search(re.escape("ro.product.device.alias") + r"=(.*)\n", bp)
+  if m:
+    devicealias = m.group(1).strip()
+  script.AssertDevices(device, devicealias)
 
 
-def MakeRecoveryPatch(output_zip, recovery_img, boot_img):
+""" Vanzo:songlixin on: Fri, 12 Aug 2011 10:13:25 +0800
+Assert platform
+"""
+def AppendAssertions2(script, input_zip):
+  platform = GetBuildProp("ro.board.platform", input_zip)
+  script.AssertPlatform(platform)
+""" End of Vanzo:songlixin """
+
+def MakeRecoveryPatch(input_tmp, output_zip, recovery_img, boot_img):
   """Generate a binary patch that creates the recovery image starting
   with the boot image.  (Most of the space in these images is just the
   kernel, which is identical for the two, so the resulting patch
@@ -346,7 +364,16 @@ def MakeRecoveryPatch(output_zip, recovery_img, boot_img):
   executable.
   """
 
-  d = common.Difference(recovery_img, boot_img)
+  diff_program = ["imgdiff"]
+  path = os.path.join(input_tmp, "SYSTEM", "etc", "recovery-resource.dat")
+  if os.path.exists(path):
+    diff_program.append("-b")
+    diff_program.append(path)
+    bonus_args = "-b /system/etc/recovery-resource.dat"
+  else:
+    bonus_args = ""
+
+  d = common.Difference(recovery_img, boot_img, diff_program=diff_program)
   _, _, patch = d.ComputePatch()
   common.ZipWriteStr(output_zip, "recovery/recovery-from-boot.p", patch)
   Item.Get("system/recovery-from-boot.p", dir=False)
@@ -357,7 +384,7 @@ def MakeRecoveryPatch(output_zip, recovery_img, boot_img):
   sh = """#!/system/bin/sh
 if ! applypatch -c %(recovery_type)s:%(recovery_device)s:%(recovery_size)d:%(recovery_sha1)s; then
   log -t recovery "Installing new recovery image"
-  applypatch %(boot_type)s:%(boot_device)s:%(boot_size)d:%(boot_sha1)s %(recovery_type)s:%(recovery_device)s %(recovery_sha1)s %(recovery_size)d %(boot_sha1)s:/system/recovery-from-boot.p
+  applypatch %(bonus_args)s %(boot_type)s:%(boot_device)s:%(boot_size)d:%(boot_sha1)s %(recovery_type)s:%(recovery_device)s %(recovery_sha1)s %(recovery_size)d %(boot_sha1)s:/system/recovery-from-boot.p
 else
   log -t recovery "Recovery image already installed"
 fi
@@ -369,6 +396,7 @@ fi
         'boot_device': boot_device,
         'recovery_type': recovery_type,
         'recovery_device': recovery_device,
+        'bonus_args': bonus_args,
         }
   common.ZipWriteStr(output_zip, "recovery/etc/install-recovery.sh", sh)
   return Item.Get("system/etc/install-recovery.sh", dir=False)
@@ -394,66 +422,140 @@ def WriteFullOTAPackage(input_zip, output_zip):
       metadata=metadata,
       info_dict=OPTIONS.info_dict)
 
-  #if not OPTIONS.omit_prereq:
-  #  ts = GetBuildProp("ro.build.date.utc", input_zip)
-  #  script.AssertOlderBuild(ts)
+  if not OPTIONS.omit_prereq:
+    ts = GetBuildProp("ro.build.date.utc", input_zip)
+    script.AssertOlderBuild(ts)
 
+  """ Vanzo:songlixin on: Sat, 22 Jan 2011 13:56:56 +0800
+Not assert bcz many device will change it's device id
+But it can not change platform:P
   AppendAssertions(script, input_zip)
+  """
+  AppendAssertions(script, input_zip)
+  """ End of Vanzo: songlixin """
   device_specific.FullOTA_Assertions()
-  if OPTIONS.backuptool:
-    script.Mount("/system")
-    script.RunBackup("backup")
-    script.Unmount("/system")
+  device_specific.FullOTA_InstallBegin()
 
+  """ Vanzo:songlixin on: Wed, 23 Feb 2011 15:17:51 +0800
+  according to real run
   script.ShowProgress(0.5, 0)
+  """
+  script.ShowProgress(0.95, 50)
+  """ End of Vanzo: songlixin """
 
   if OPTIONS.wipe_user_data:
     script.FormatPartition("/data")
 
+  if "selinux_fc" in OPTIONS.info_dict:
+    WritePolicyConfig(OPTIONS.info_dict["selinux_fc"], output_zip)
+
   script.FormatPartition("/system")
   script.Mount("/system")
-  #script.UnpackPackageDir("recovery", "/system")
+  script.UnpackPackageDir("recovery", "/system")
   script.UnpackPackageDir("system", "/system")
 
-  (symlinks, retouch_files) = CopySystemFiles(input_zip, output_zip)
+  symlinks = CopySystemFiles(input_zip, output_zip)
   script.MakeSymlinks(symlinks)
-  if OPTIONS.aslr_mode:
-    script.RetouchBinaries(retouch_files)
-  else:
-    script.UndoRetouchBinaries(retouch_files)
 
   boot_img = common.GetBootableImage("boot.img", "boot.img",
                                      OPTIONS.input_tmp, "BOOT")
-  #recovery_img = common.GetBootableImage("recovery.img", "recovery.img",
-  #                                       OPTIONS.input_tmp, "RECOVERY")
-  #MakeRecoveryPatch(output_zip, recovery_img, boot_img)
+  recovery_img = common.GetBootableImage("recovery.img", "recovery.img",
+                                         OPTIONS.input_tmp, "RECOVERY")
+  MakeRecoveryPatch(OPTIONS.input_tmp, output_zip, recovery_img, boot_img)
 
   Item.GetMetadata(input_zip)
   Item.Get("system").SetPermissions(script)
 
   common.CheckSize(boot_img.data, "boot.img", OPTIONS.info_dict)
   common.ZipWriteStr(output_zip, "boot.img", boot_img.data)
+  """ Vanzo:songlixin on: Wed, 23 Feb 2011 15:21:55 +0800
+  according to real run
   script.ShowProgress(0.2, 0)
 
-  if OPTIONS.backuptool:
-    script.ShowProgress(0.2, 10)
-    script.RunBackup("restore")
-
-  if OPTIONS.modelidcfg:
-    script.RunConfig("")
-
   script.ShowProgress(0.2, 10)
+  """
+  script.ShowProgress(0.05, 1)
+  """ End of Vanzo: songlixin """
   script.WriteRawImage("/boot", "boot.img")
 
+  # security version
+  print "[SEC OTA] Adding security version (WriteFullOTAPackage)"
+  cust_dir = GetBuildProp("ro.product.device", input_zip)
+  print "[SEC OTA] cust directory : ", cust_dir
+  sec_ver_path = os.path.join("mediatek/custom",cust_dir,"security/recovery/SEC_VER.txt")
+  print "[SEC OTA] security config : ", sec_ver_path
+  if os.path.exists(sec_ver_path):
+    sec_ver = open(sec_ver_path).read()  
+    common.ZipWriteStr(output_zip, "SEC_VER.txt", sec_ver)    
+
+  #wschen start
+  #common.ZipWriteStr(output_zip, "type.txt", "1")
+  #ota_scatter = open(scatter_path).read()
+  #common.ZipWriteStr(output_zip, "scatter.txt", ota_scatter)
+
+  if OPTIONS.preloader is not None or OPTIONS.uboot is not None or OPTIONS.logo is not None or OPTIONS.dsp is not None:
+    script.AppendExtra('assert(run_program(\"/system/bin/dd\", \"if=/dev/zero\", \"of=/proc/driver/mtd_writeable\", \"bs=3c\", \"count=1\"));')
+
+  if OPTIONS.logo is not None:
+    logo_img = open(OPTIONS.logo).read()
+    common.ZipWriteStr(output_zip, "logo.img", logo_img)
+    script.WriteRawImage2("logo", "logo.img")
+
+  if OPTIONS.preloader is not None:
+    preloader_img = open(OPTIONS.preloader).read()
+    common.ZipWriteStr(output_zip, "preloader.img", preloader_img)
+    script.WriteRawImage2("preloader", "preloader.img")
+
+  if OPTIONS.uboot is not None:
+    uboot_img = open(OPTIONS.uboot).read()
+    common.ZipWriteStr(output_zip, "uboot.img", uboot_img)
+    script.WriteRawImage2("uboot", "uboot.img")
+
+  if OPTIONS.dsp is not None:
+    dsp_img = open(OPTIONS.dsp).read()
+    common.ZipWriteStr(output_zip, "dsp.img", dsp_img)
+    script.WriteRawImage2("dsp_bl", "dsp.img")
+  #wschen end
+
+  """ Vanzo:songlixin on: Thu, 30 Sep 2010 11:15:52 +0800
+  """
+  #logo_img = input_zip.read("logo.bin")
+  #common.ZipWriteStr(output_zip, "logo.img", logo_img)
+  #script.WriteRawImage2("logo", "logo.img")
+
+  #uboot_img = input_zip.read("lk.bin")
+  #common.ZipWriteStr(output_zip, "lk.img", uboot_img)
+  #script.WriteRawImage2("uboot", "lk.img")
+
+  #if write dsp_bl, sd driver will fail when clear recovery tag
+  #dsp_img = input_zip.read("DSP_BL")
+  #common.ZipWriteStr(output_zip, "dsp.img", dsp_img)
+  #script.WriteRawImage2("dsp_bl", "dsp.img")
+  """ End of Vanzo:songlixin """
+
+  """ Vanzo:songlixin on: Wed, 23 Feb 2011 15:21:27 +0800
+  according to real run
   script.ShowProgress(0.1, 0)
+  """
+  """ End of Vanzo: songlixin """
   device_specific.FullOTA_InstallEnd()
 
   if OPTIONS.extra_script is not None:
     script.AppendExtra(OPTIONS.extra_script)
 
   script.UnmountAll()
+
+  #wschen
+  if OPTIONS.special_factory_reset:
+    script.AppendExtra('special_factory_reset();')
+
   script.AddToZip(input_zip, output_zip)
   WriteMetadata(metadata, output_zip)
+
+def WritePolicyConfig(file_context, output_zip):
+  f = open(file_context, 'r');
+  basename = os.path.basename(file_context)
+  common.ZipWriteStr(output_zip, basename, f.read())
 
 
 def WriteMetadata(metadata, output_zip):
@@ -461,24 +563,17 @@ def WriteMetadata(metadata, output_zip):
                      "".join(["%s=%s\n" % kv
                               for kv in sorted(metadata.iteritems())]))
 
-
-
-
 def LoadSystemFiles(z):
   """Load all the files from SYSTEM/... in a given target-files
   ZipFile, and return a dict of {filename: File object}."""
   out = {}
-  retouch_files = []
   for info in z.infolist():
     if info.filename.startswith("SYSTEM/") and not IsSymlink(info):
       basefilename = info.filename[7:]
       fn = "system/" + basefilename
       data = z.read(info.filename)
       out[fn] = common.File(fn, data)
-      if info.filename.startswith("SYSTEM/lib/") and IsRegular(info):
-        retouch_files.append(("/system/" + basefilename,
-                              out[fn].sha1))
-  return (out, retouch_files)
+  return out
 
 
 def GetBuildProp(property, z):
@@ -517,9 +612,9 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
       info_dict=OPTIONS.info_dict)
 
   print "Loading target..."
-  (target_data, target_retouch_files) = LoadSystemFiles(target_zip)
+  target_data = LoadSystemFiles(target_zip)
   print "Loading source..."
-  (source_data, source_retouch_files) = LoadSystemFiles(source_zip)
+  source_data = LoadSystemFiles(source_zip)
 
   verbatim_targets = []
   patch_list = []
@@ -566,17 +661,18 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
   script.AssertSomeFingerprint(source_fp, target_fp)
 
   source_boot = common.GetBootableImage(
-      "/tmp/boot.img", "boot.img", OPTIONS.source_tmp, "BOOT")
+      "/tmp/boot.img", "boot.img", OPTIONS.source_tmp, "BOOT",
+      OPTIONS.source_info_dict)
   target_boot = common.GetBootableImage(
       "/tmp/boot.img", "boot.img", OPTIONS.target_tmp, "BOOT")
   updating_boot = (source_boot.data != target_boot.data)
 
-  #source_recovery = common.GetBootableImage(
-  #    "/tmp/recovery.img", "recovery.img", OPTIONS.source_tmp, "RECOVERY")
-  #target_recovery = common.GetBootableImage(
-  #    "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
-  #updating_recovery = (source_recovery.data != target_recovery.data)
-  updating_recovery = false
+  source_recovery = common.GetBootableImage(
+      "/tmp/recovery.img", "recovery.img", OPTIONS.source_tmp, "RECOVERY",
+      OPTIONS.source_info_dict)
+  target_recovery = common.GetBootableImage(
+      "/tmp/recovery.img", "recovery.img", OPTIONS.target_tmp, "RECOVERY")
+  updating_recovery = (source_recovery.data != target_recovery.data)
 
   # Here's how we divide up the progress bar:
   #  0.1 for verifying the start state (PatchCheck calls)
@@ -588,6 +684,8 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
   device_specific.IncrementalOTA_Assertions()
 
   script.Print("Verifying current system...")
+
+  device_specific.IncrementalOTA_VerifyBegin()
 
   script.ShowProgress(0.1, 0)
   total_verify_size = float(sum([i[2].size for i in patch_list]) + 1)
@@ -601,21 +699,22 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     script.SetProgress(so_far / total_verify_size)
 
   if updating_boot:
-    d = common.Difference(target_boot, source_boot)
-    _, _, d = d.ComputePatch()
-    print "boot      target: %d  source: %d  diff: %d" % (
-        target_boot.size, source_boot.size, len(d))
-
-    common.ZipWriteStr(output_zip, "patch/boot.img.p", d)
-
-    boot_type, boot_device = common.GetTypeAndDevice("/boot", OPTIONS.info_dict)
-
-    script.PatchCheck("%s:%s:%d:%s:%d:%s" %
-                      (boot_type, boot_device,
-                       source_boot.size, source_boot.sha1,
-                       target_boot.size, target_boot.sha1))
-    so_far += source_boot.size
-    script.SetProgress(so_far / total_verify_size)
+     common.ZipWriteStr(output_zip, "boot.img", target_boot.data)
+#    d = common.Difference(target_boot, source_boot)
+#    _, _, d = d.ComputePatch()
+#    print "boot      target: %d  source: %d  diff: %d" % (
+#        target_boot.size, source_boot.size, len(d))
+#
+#    common.ZipWriteStr(output_zip, "patch/boot.img.p", d)
+#
+#    boot_type, boot_device = common.GetTypeAndDevice("/boot", OPTIONS.info_dict)
+#
+#    script.PatchCheck("%s:%s:%d:%s:%d:%s" %
+#                      (boot_type, boot_device,
+#                       source_boot.size, source_boot.sha1,
+#                       target_boot.size, target_boot.sha1))
+#    so_far += source_boot.size
+#    script.SetProgress(so_far / total_verify_size)
 
   if patch_list or updating_recovery or updating_boot:
     script.CacheFreeSpaceCheck(largest_source_size)
@@ -623,6 +722,8 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
   device_specific.IncrementalOTA_VerifyEnd()
 
   script.Comment("---- start making changes here ----")
+
+  device_specific.IncrementalOTA_InstallBegin()
 
   if OPTIONS.wipe_user_data:
     script.Print("Erasing user data...")
@@ -655,33 +756,33 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     # Produce the boot image by applying a patch to the current
     # contents of the boot partition, and write it back to the
     # partition.
-    script.Print("Patching boot image...")
-    script.ApplyPatch("%s:%s:%d:%s:%d:%s"
-                      % (boot_type, boot_device,
-                         source_boot.size, source_boot.sha1,
-                         target_boot.size, target_boot.sha1),
-                      "-",
-                      target_boot.size, target_boot.sha1,
-                      source_boot.sha1, "patch/boot.img.p")
-    so_far += target_boot.size
-    script.SetProgress(so_far / total_patch_size)
+#    script.Print("Patching boot image...")
+#    script.ApplyPatch("%s:%s:%d:%s:%d:%s"
+#                      % (boot_type, boot_device,
+#                         source_boot.size, source_boot.sha1,
+#                         target_boot.size, target_boot.sha1),
+#                      "-",
+#                      target_boot.size, target_boot.sha1,
+#                      source_boot.sha1, "patch/boot.img.p")
+#    so_far += target_boot.size
+#    script.SetProgress(so_far / total_patch_size)
+    script.WriteRawImage("/boot", "boot.img")
     print "boot image changed; including."
   else:
     print "boot image unchanged; skipping."
 
   if updating_recovery:
-    # Is it better to generate recovery as a patch from the current
-    # boot image, or from the previous recovery image?  For large
-    # updates with significant kernel changes, probably the former.
-    # For small updates where the kernel hasn't changed, almost
-    # certainly the latter.  We pick the first option.  Future
-    # complicated schemes may let us effectively use both.
+    # Recovery is generated as a patch using both the boot image
+    # (which contains the same linux kernel as recovery) and the file
+    # /system/etc/recovery-resource.dat (which contains all the images
+    # used in the recovery UI) as sources.  This lets us minimize the
+    # size of the patch, which must be included in every OTA package.
     #
-    # A wacky possibility: as long as there is room in the boot
-    # partition, include the binaries and image files from recovery in
-    # the boot image (though not in the ramdisk) so they can be used
-    # as fodder for constructing the recovery image.
-    MakeRecoveryPatch(output_zip, target_recovery, target_boot)
+    # For older builds where recovery-resource.dat is not present, we
+    # use only the boot image as the source.
+
+    MakeRecoveryPatch(OPTIONS.target_tmp, output_zip,
+                      target_recovery, target_boot)
     script.DeleteFiles(["/system/recovery-from-boot.p",
                         "/system/etc/install-recovery.sh"])
     print "recovery image changed; including as patch from boot."
@@ -690,7 +791,7 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
 
   script.ShowProgress(0.1, 10)
 
-  (target_symlinks, target_retouch_dummies) = CopySystemFiles(target_zip, None)
+  target_symlinks = CopySystemFiles(target_zip, None)
 
   target_symlinks_d = dict([(i[1], i[0]) for i in target_symlinks])
   temp_script = script.MakeTemporary()
@@ -699,7 +800,7 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
 
   # Note that this call will mess up the tree of Items, so make sure
   # we're done with it.
-  (source_symlinks, source_retouch_dummies) = CopySystemFiles(source_zip, None)
+  source_symlinks = CopySystemFiles(source_zip, None)
   source_symlinks_d = dict([(i[1], i[0]) for i in source_symlinks])
 
   # Delete all the symlinks in source that aren't in target.  This
@@ -715,9 +816,9 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     script.Print("Unpacking new files...")
     script.UnpackPackageDir("system", "/system")
 
-  #if updating_recovery:
-  #  script.Print("Unpacking new recovery...")
-  #  script.UnpackPackageDir("recovery", "/system")
+  if updating_recovery:
+    script.Print("Unpacking new recovery...")
+    script.UnpackPackageDir("recovery", "/system")
 
   script.Print("Symlinks and permissions...")
 
@@ -733,14 +834,50 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
       to_create.append((dest, link))
   script.DeleteFiles([i[1] for i in to_create])
   script.MakeSymlinks(to_create)
-  if OPTIONS.aslr_mode:
-    script.RetouchBinaries(target_retouch_files)
-  else:
-    script.UndoRetouchBinaries(target_retouch_files)
 
   # Now that the symlinks are created, we can set all the
   # permissions.
   script.AppendScript(temp_script)
+
+  # security version
+  print "[SEC OTA] Adding security version (WriteIncrementalOTAPackage)"
+  try:
+    sec_ver = target_zip.read("OTA/SEC_VER.txt")
+    common.ZipWriteStr(output_zip, "SEC_VER.txt", sec_ver)
+    print "[SEC OTA] security version write done :"
+    print sec_ver  
+  except:
+    print "[SEC OTA] security version not found"
+
+  #wschen start
+  #common.ZipWriteStr(output_zip, "type.txt", "0")
+  #ota_scatter = open(scatter_path).read()
+  #common.ZipWriteStr(output_zip, "scatter.txt", ota_scatter)
+
+  if OPTIONS.preloader is not None or OPTIONS.uboot is not None or OPTIONS.logo is not None or OPTIONS.dsp is not None:
+    script.AppendExtra('assert(run_program(\"/system/bin/dd\", \"if=/dev/zero\", \"of=/proc/driver/mtd_writeable\", \"bs=3c\", \"count=1\"));')
+
+  if OPTIONS.logo is not None:
+    logo_img = open(OPTIONS.logo).read()
+    common.ZipWriteStr(output_zip, "logo.img", logo_img)
+    script.WriteRawImage2("logo", "logo.img")
+
+  if OPTIONS.preloader is not None:
+    preloader_img = open(OPTIONS.preloader).read()
+    common.ZipWriteStr(output_zip, "preloader.img", preloader_img)
+    script.WriteRawImage2("preloader", "preloader.img")
+
+  if OPTIONS.uboot is not None:
+    uboot_img = open(OPTIONS.uboot).read()
+    common.ZipWriteStr(output_zip, "uboot.img", uboot_img)
+    script.WriteRawImage2("uboot", "uboot.img")
+
+  if OPTIONS.dsp is not None:
+    dsp_img = open(OPTIONS.dsp).read()
+    common.ZipWriteStr(output_zip, "dsp.img", dsp_img)
+    script.WriteRawImage2("dsp_bl", "dsp.img")
+  #wschen end
+
 
   # Do device-specific installation (eg, write radio image).
   device_specific.IncrementalOTA_InstallEnd()
@@ -756,6 +893,10 @@ def WriteIncrementalOTAPackage(target_zip, source_zip, output_zip):
     fn, tf, sf, size, _ = item
     script.ApplyPatch("/"+fn, "-", tf.size, tf.sha1, sf.sha1, "patch/"+fn+".p")
   script.SetPermissions("/system/build.prop", 0, 0, 0644)
+
+  #wschen
+  if OPTIONS.special_factory_reset:
+    script.AppendExtra('special_factory_reset();')
 
   script.AddToZip(target_zip, output_zip)
   WriteMetadata(metadata, output_zip)
@@ -783,28 +924,36 @@ def main(argv):
         OPTIONS.aslr_mode = False
     elif o in ("--worker_threads"):
       OPTIONS.worker_threads = int(a)
-    elif o in ("--backup"):
-      OPTIONS.backuptool = bool(a.lower() == 'true')
-    elif o in ("--configid"):
-      OPTIONS.modelidcfg = bool(a.lower() == 'true')
-    elif o in ("--override_device"):
-      OPTIONS.override_device = a
+    elif o in ("-r", "--preloader"):
+      OPTIONS.preloader = a
+    elif o in ("-l", "--logo"):
+      OPTIONS.logo = a
+    elif o in ("-u", "--uboot"):
+      OPTIONS.uboot = a
+    elif o in ("-d", "--dsp"):
+      OPTIONS.dsp = a
+    elif o in ("-f", "--special_factory_reset"):
+      OPTIONS.special_factory_reset = True
     else:
       return False
     return True
 
   args = common.ParseOptions(argv, __doc__,
-                             extra_opts="b:k:i:d:wne:a:",
+                             extra_opts="b:k:i:d:wfne:r:l:u:d:a:",
                              extra_long_opts=["board_config=",
                                               "package_key=",
                                               "incremental_from=",
                                               "wipe_user_data",
+                                              "special_factory_reset",
                                               "no_prereq",
                                               "extra_script=",
+                                              "preloader=",
+                                              "logo=",
+                                              "uboot=",
+                                              "dsp=",
                                               "worker_threads=",
                                               "aslr_mode=",
-                                              "backup=",
-                                              "override_device="],
+                                              ],
                              extra_option_handler=option_handler)
 
   if len(args) != 2:

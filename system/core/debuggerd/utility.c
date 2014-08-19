@@ -15,88 +15,80 @@
 ** limitations under the License.
 */
 
-#include <sys/ptrace.h>
-#include <sys/exec_elf.h>
-#include <signal.h>
-#include <assert.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
+#include <signal.h>
+#include <cutils/logd.h>
+#include <sys/ptrace.h>
+#include <sys/wait.h>
 
 #include "utility.h"
 
-/* Get a word from pid using ptrace. The result is the return value. */
-int get_remote_word(int pid, void *src)
-{
-    return ptrace(PTRACE_PEEKTEXT, pid, src, NULL);
-}
+const int sleep_time_usec = 50000;         /* 0.05 seconds */
+const int max_total_sleep_usec = 10000000; /* 10 seconds */
 
+void _LOG(log_t* log, bool in_tombstone_only, const char *fmt, ...) {
+    char buf[512];
 
-/* Handy routine to read aggregated data from pid using ptrace. The read 
- * values are written to the dest locations directly. 
- */
-void get_remote_struct(int pid, void *src, void *dst, size_t size)
-{
-    unsigned int i;
+    va_list ap;
+    va_start(ap, fmt);
 
-    for (i = 0; i+4 <= size; i+=4) {
-        *(int *)((char *)dst+i) = ptrace(PTRACE_PEEKTEXT, pid, (char *)src+i, NULL);
+    if (log && log->tfd >= 0) {
+        int len;
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        len = strlen(buf);
+        write(log->tfd, buf, len);
     }
 
-    if (i < size) {
-        int val;
-
-        assert((size - i) < 4);
-        val = ptrace(PTRACE_PEEKTEXT, pid, (char *)src+i, NULL);
-        while (i < size) {
-            ((unsigned char *)dst)[i] = val & 0xff;
-            i++;
-            val >>= 8;
-        }
+    if (!in_tombstone_only && (!log || !log->quiet)) {
+        __android_log_vprint(ANDROID_LOG_INFO, "DEBUG", fmt, ap);
     }
+    va_end(ap);
 }
 
-/* Map a pc address to the name of the containing ELF file */
-const char *map_to_name(mapinfo *mi, unsigned pc, const char* def)
-{
-    while(mi) {
-        if((pc >= mi->start) && (pc < mi->end)){
-            return mi->name;
-        }
-        mi = mi->next;
-    }
-    return def;
-}
-
-/* Find the containing map info for the pc */
-const mapinfo *pc_to_mapinfo(mapinfo *mi, unsigned pc, unsigned *rel_pc)
-{
-    *rel_pc = pc;
-    while(mi) {
-        if((pc >= mi->start) && (pc < mi->end)){
-            // Only calculate the relative offset for shared libraries
-            if (strstr(mi->name, ".so")) {
-                *rel_pc -= mi->start;
+int wait_for_signal(pid_t tid, int* total_sleep_time_usec) {
+    for (;;) {
+        int status;
+        pid_t n = waitpid(tid, &status, __WALL | WNOHANG);
+        if (n < 0) {
+            if(errno == EAGAIN) continue;
+            LOG("waitpid failed: %s\n", strerror(errno));
+            return -1;
+        } else if (n > 0) {
+            XLOG("waitpid: n=%d status=%08x\n", n, status);
+            if (WIFSTOPPED(status)) {
+                return WSTOPSIG(status);
+            } else {
+                LOG("unexpected waitpid response: n=%d, status=%08x\n", n, status);
+                return -1;
             }
-            return mi;
         }
-        mi = mi->next;
+
+        if (*total_sleep_time_usec > max_total_sleep_usec) {
+            LOG("timed out waiting for tid=%d to die\n", tid);
+            return -1;
+        }
+
+        /* not ready yet */
+        XLOG("not ready yet\n");
+        usleep(sleep_time_usec);
+        *total_sleep_time_usec += sleep_time_usec;
     }
-    return NULL;
 }
 
-/*
- * Returns true if the specified signal has an associated address (i.e. it
- * sets siginfo_t.si_addr).
- */
-bool signal_has_address(int sig)
-{
-    switch (sig) {
-        case SIGILL:
-        case SIGFPE:
-        case SIGSEGV:
-        case SIGBUS:
-            return true;
-        default:
-            return false;
+void wait_for_stop(pid_t tid, int* total_sleep_time_usec) {
+    siginfo_t si;
+    while (TEMP_FAILURE_RETRY(ptrace(PTRACE_GETSIGINFO, tid, 0, &si)) < 0 && errno == ESRCH) {
+        if (*total_sleep_time_usec > max_total_sleep_usec) {
+            LOG("timed out waiting for tid=%d to stop\n", tid);
+            break;
+        }
+
+        usleep(sleep_time_usec);
+        *total_sleep_time_usec += sleep_time_usec;
     }
 }

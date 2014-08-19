@@ -42,6 +42,111 @@ static char const * const kAudioDeviceName = "/dev/eac";
 
 // ----------------------------------------------------------------------------
 
+#ifndef ANDROID_DEFAULT_CODE
+ status_t AudioHardwareGeneric::SetEMParameter(void *ptr , int len)
+ {
+     return NO_ERROR;
+ }
+ status_t AudioHardwareGeneric::GetEMParameter(void *ptr , int len)
+ {
+     return NO_ERROR;
+ }
+ status_t AudioHardwareGeneric::SetAudioCommand(int par1, int par2)
+ {
+     return NO_ERROR;
+ }
+ status_t AudioHardwareGeneric::GetAudioCommand(int par1)
+ {
+     return NO_ERROR;
+ }
+ status_t AudioHardwareGeneric::SetAudioData(int par1,size_t len,void *ptr)
+ {
+     return NO_ERROR;
+ }
+ status_t AudioHardwareGeneric::GetAudioData(int par1,size_t len,void *ptr)
+ {
+     return NO_ERROR;
+ }
+
+ status_t AudioHardwareGeneric::SetACFPreviewParameter(void *ptr , int len)
+ {
+     return NO_ERROR;
+ }
+ status_t AudioHardwareGeneric::SetHCFPreviewParameter(void *ptr , int len)
+ {
+     return NO_ERROR;
+ }
+ /////////////////////////////////////////////////////////////////////////
+ //    for PCMxWay Interface API ...   
+ /////////////////////////////////////////////////////////////////////////
+ int AudioHardwareGeneric::xWayPlay_Start(int sample_rate)
+ {
+     return NO_ERROR;
+ }
+ int AudioHardwareGeneric::xWayPlay_Stop(void)
+ {
+     return NO_ERROR;
+ }
+ int AudioHardwareGeneric::xWayPlay_Write(void *buffer, int size_bytes)
+ {
+     return NO_ERROR;
+ }
+ int AudioHardwareGeneric::xWayPlay_GetFreeBufferCount(void)
+ {
+     return NO_ERROR;
+ }
+int AudioHardwareGeneric::xWayRec_Start(int sample_rate)
+ {
+     return NO_ERROR;
+ }
+ int AudioHardwareGeneric::xWayRec_Stop(void)
+ {
+     return NO_ERROR;
+ }
+ int AudioHardwareGeneric::xWayRec_Read(void *buffer, int size_bytes)
+ {
+     return NO_ERROR;
+ }
+ 
+ //add by wendy
+ int AudioHardwareGeneric::ReadRefFromRing(void*buf, uint32_t datasz,void* DLtime)
+ {
+    return NO_ERROR;
+ }
+  int AudioHardwareGeneric::GetVoiceUnlockULTime(void* DLtime)
+ {
+    return NO_ERROR;
+ } 
+ int AudioHardwareGeneric::SetVoiceUnlockSRC(uint outSR, uint outChannel)
+ {
+    return NO_ERROR;
+ }
+ 
+ bool AudioHardwareGeneric::startVoiceUnlockDL()
+ {
+    return NO_ERROR;
+ }
+ 
+ bool AudioHardwareGeneric::stopVoiceUnlockDL()
+ {
+    return NO_ERROR;
+ }
+ 
+ void AudioHardwareGeneric::freeVoiceUnlockDLInstance()
+ {
+     return;
+ }
+ 
+ int AudioHardwareGeneric::GetVoiceUnlockDLLatency()
+ {
+  return NO_ERROR;
+ }
+ bool AudioHardwareGeneric::getVoiceUnlockDLInstance()
+ {
+  return 0;
+ }
+#endif
+
 AudioHardwareGeneric::AudioHardwareGeneric()
     : mOutput(0), mInput(0),  mFd(-1), mMicMute(false)
 {
@@ -273,7 +378,7 @@ status_t AudioStreamOutGeneric::setParameters(const String8& keyValuePairs)
     String8 key = String8(AudioParameter::keyRouting);
     status_t status = NO_ERROR;
     int device;
-    LOGV("setParameters() %s", keyValuePairs.string());
+    ALOGV("setParameters() %s", keyValuePairs.string());
 
     if (param.getInt(key, device) == NO_ERROR) {
         mDevice = device;
@@ -296,7 +401,7 @@ String8 AudioStreamOutGeneric::getParameters(const String8& keys)
         param.addInt(key, (int)mDevice);
     }
 
-    LOGV("getParameters() %s", param.toString().string());
+    ALOGV("getParameters() %s", param.toString().string());
     return param.toString();
 }
 
@@ -318,12 +423,12 @@ status_t AudioStreamInGeneric::set(
         AudioSystem::audio_in_acoustics acoustics)
 {
     if (pFormat == 0 || pChannels == 0 || pRate == 0) return BAD_VALUE;
-    LOGV("AudioStreamInGeneric::set(%p, %d, %d, %d, %u)", hw, fd, *pFormat, *pChannels, *pRate);
+    ALOGV("AudioStreamInGeneric::set(%p, %d, %d, %d, %u)", hw, fd, *pFormat, *pChannels, *pRate);
     // check values
     if ((*pFormat != format()) ||
         (*pChannels != channels()) ||
         (*pRate != sampleRate())) {
-        LOGE("Error opening input channel");
+        ALOGE("Error opening input channel");
         *pFormat = format();
         *pChannels = channels();
         *pRate = sampleRate();
@@ -344,7 +449,7 @@ ssize_t AudioStreamInGeneric::read(void* buffer, ssize_t bytes)
 {
     AutoMutex lock(mLock);
     if (mFd < 0) {
-        LOGE("Attempt to read from unopened device");
+        ALOGE("Attempt to read from unopened device");
         return NO_INIT;
     }
     return ::read(mFd, buffer, bytes);
@@ -381,7 +486,7 @@ status_t AudioStreamInGeneric::setParameters(const String8& keyValuePairs)
     String8 key = String8(AudioParameter::keyRouting);
     status_t status = NO_ERROR;
     int device;
-    LOGV("setParameters() %s", keyValuePairs.string());
+    ALOGV("setParameters() %s", keyValuePairs.string());
 
     if (param.getInt(key, device) == NO_ERROR) {
         mDevice = device;
@@ -404,7 +509,7 @@ String8 AudioStreamInGeneric::getParameters(const String8& keys)
         param.addInt(key, (int)mDevice);
     }
 
-    LOGV("getParameters() %s", param.toString().string());
+    ALOGV("getParameters() %s", param.toString().string());
     return param.toString();
 }
 

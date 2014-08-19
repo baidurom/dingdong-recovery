@@ -1,3 +1,38 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+#
+# The following software/firmware and/or related documentation ("MediaTek Software")
+# have been modified by MediaTek Inc. All revisions are subject to any receiver's
+# applicable license agreements with MediaTek Inc.
+
+
 ###########################################################
 ## Standard rules for building a java library.
 ##
@@ -14,8 +49,10 @@ ifneq (,$(LOCAL_ASSET_DIR))
 $(error $(LOCAL_PATH): Target java libraries may not set LOCAL_ASSET_DIR)
 endif
 
+ifneq (true,$(LOCAL_IS_STATIC_JAVA_LIBRARY))
 ifneq (,$(LOCAL_RESOURCE_DIR))
 $(error $(LOCAL_PATH): Target java libraries may not set LOCAL_RESOURCE_DIR)
+endif
 endif
 
 #xxx base_rules.mk looks at this
@@ -23,6 +60,11 @@ all_res_assets :=
 
 LOCAL_BUILT_MODULE_STEM := javalib.jar
 
+LOCAL_PROGUARD_ENABLED:=$(strip $(LOCAL_PROGUARD_ENABLED))
+ifeq ($(LOCAL_PROGUARD_ENABLED),disabled)
+    # the package explicitly request to disable proguard.
+    LOCAL_PROGUARD_ENABLED :=
+endif
 intermediates.COMMON := $(call local-intermediates-dir,COMMON)
 
 # This file will be the one that other modules should depend on.
@@ -41,6 +83,16 @@ endif
 ifeq (false,$(LOCAL_DEX_PREOPT))
 LOCAL_DEX_PREOPT :=
 endif
+
+ifeq (true,$(EMMA_INSTRUMENT))
+ifeq (true,$(LOCAL_EMMA_INSTRUMENT))
+ifeq (true,$(EMMA_INSTRUMENT_STATIC))
+LOCAL_STATIC_JAVA_LIBRARIES += emma
+endif # LOCAL_EMMA_INSTRUMENT
+endif # EMMA_INSTRUMENT_STATIC
+else
+LOCAL_EMMA_INSTRUMENT := false
+endif # EMMA_INSTRUMENT
 
 #################################
 include $(BUILD_SYSTEM)/java.mk
@@ -65,6 +117,7 @@ $(common_javalib.jar) : $(built_dex) $(java_resource_sources) | $(AAPT)
 	@echo "target Jar: $(PRIVATE_MODULE) ($@)"
 	$(create-empty-package)
 	$(add-dex-to-package)
+	$(add-carried-java-resources)
 ifneq ($(extra_jar_args),)
 	$(add-java-resources-to-package)
 endif
@@ -90,6 +143,7 @@ $(built_odex) : $(DEXPREOPT_BOOT_ODEXS)
 $(built_odex) : $(common_javalib.jar) | $(DEXPREOPT) $(DEXOPT)
 	@echo "Dexpreopt Jar: $(PRIVATE_MODULE) ($@)"
 	$(hide) rm -f $@
+	@mkdir -p $(dir $@)
 	$(call dexpreopt-one-file,$<,$@)
 
 $(LOCAL_BUILT_MODULE) : $(common_javalib.jar) | $(ACP) $(AAPT)

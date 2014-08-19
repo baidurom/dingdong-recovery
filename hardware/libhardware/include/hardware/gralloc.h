@@ -76,8 +76,16 @@ enum {
     GRALLOC_USAGE_HW_FB                 = 0x00001000,
     /* buffer will be used with the HW video encoder */
     GRALLOC_USAGE_HW_VIDEO_ENCODER      = 0x00010000,
+    /* buffer will be written by the HW camera pipeline */
+    GRALLOC_USAGE_HW_CAMERA_WRITE       = 0x00020000,
+    /* buffer will be read by the HW camera pipeline */
+    GRALLOC_USAGE_HW_CAMERA_READ        = 0x00040000,
+    /* buffer will be used as part of zero-shutter-lag queue */
+    GRALLOC_USAGE_HW_CAMERA_ZSL         = 0x00060000,
+    /* mask for the camera access values */
+    GRALLOC_USAGE_HW_CAMERA_MASK        = 0x00060000,
     /* mask for the software usage bit-mask */
-    GRALLOC_USAGE_HW_MASK               = 0x00011F00,
+    GRALLOC_USAGE_HW_MASK               = 0x00071F00,
 
     /* buffer should be displayed full-screen on an external display when
      * possible
@@ -98,6 +106,14 @@ enum {
     GRALLOC_USAGE_PRIVATE_2             = 0x40000000,
     GRALLOC_USAGE_PRIVATE_3             = 0x80000000,
     GRALLOC_USAGE_PRIVATE_MASK          = 0xF0000000,
+
+    // [MTK] {{{
+    GRALLOC_USAGE_S3D_RESERVED       = 0x00100000,
+    GRALLOC_USAGE_S3D_SIDE_BY_SIDE   = 0x00200000,
+    GRALLOC_USAGE_S3D_TOP_AND_BOTTOM = 0x00400000,
+    GRALLOC_USAGE_S3D_LR_SWAPPED     = 0x00800000,
+    GRALLOC_USAGE_S3D_MASK           = 0x00F00000,
+    // [MTK] }}}
 };
 
 /*****************************************************************************/
@@ -221,9 +237,6 @@ typedef struct alloc_device_t {
             int w, int h, int format, int usage,
             buffer_handle_t* handle, int* stride);
 
-#ifdef HTC_MSM7X27A_CHIP
-    void* reserverd[1];
-#endif
     /*
      * (*free)() Frees a previously allocated buffer. 
      * Behavior is undefined if the buffer is still mapped in any process,
@@ -259,6 +272,37 @@ static inline int gralloc_close(struct alloc_device_t* device) {
     return device->common.close(&device->common);
 }
 
+// [MTK] {{{
+
+#define GRALLOC_HARDWARE_EXTRA "extra"
+
+typedef struct extra_device_t {
+    struct hw_device_t common;
+
+    /*
+     * (*getIonFd)() is called for getting ion share fd from buffer handle
+     * It should return the beginning index of native_handle.data[]
+     * for ion shard fds and number of ion share fds
+     */
+
+    int (*getIonFd)(struct extra_device_t* dev,
+            buffer_handle_t handle, int *idx, int *num);
+
+    void* reserved_proc[7];
+} extra_device_t;
+
+static inline int gralloc_extra_open(const struct hw_module_t* module,
+        struct extra_device_t** device) {
+    return module->methods->open(module,
+            GRALLOC_HARDWARE_EXTRA, (struct hw_device_t**)device);
+}
+
+static inline int gralloc_extra_close(struct extra_device_t* device) {
+    return device->common.close(&device->common);
+}
+
+// [MTK] }}}
+
 __END_DECLS
 
-#endif  // ANDROID_ALLOC_INTERFACE_H
+#endif  // ANDROID_GRALLOC_INTERFACE_H

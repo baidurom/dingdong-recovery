@@ -1,3 +1,0 @@
-
-PRODUCT_MAKEFILES := \
-    $(LOCAL_DIR)/msm8625.mk

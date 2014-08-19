@@ -1,8 +1,8 @@
 /*
  * Definitions for DHD command-line utility
  *
- * Copyright (C) 1999-2011, Broadcom Corporation
- *
+ * Copyright (C) 1999-2012, Broadcom Corporation
+ * 
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -15,7 +15,7 @@
  * OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *
- * $Id: dhdu.h,v 1.7 2009-05-22 19:23:29 Exp $
+ * $Id: dhdu.h 294362 2011-11-06 22:26:56Z $
  */
 
 #ifndef _dhdu_h_
@@ -45,8 +45,6 @@ extern int dhd_check(void *dhd);
 struct ipv4_addr;
 int dhd_ether_atoe(const char *a, struct ether_addr *n);
 int dhd_atoip(const char *a, struct ipv4_addr *n);
-/* useful macros */
-#define ARRAYSIZE(a)  (sizeof(a)/sizeof(a[0]))
 
 #define USAGE_ERROR    -1	/* Error code for Usage */
 #define IOCTL_ERROR    -2	/* Error code for ioctl failure */

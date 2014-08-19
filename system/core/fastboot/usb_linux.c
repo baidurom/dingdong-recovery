@@ -9,7 +9,7 @@
  *    notice, this list of conditions and the following disclaimer.
  *  * Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the 
+ *    the documentation and/or other materials provided with the
  *    distribution.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -19,7 +19,7 @@
  * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
  * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
  * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
- * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED 
+ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
  * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
@@ -32,6 +32,7 @@
 #include <string.h>
 
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -66,7 +67,7 @@
  */
 #define MAX_USBFS_BULK_SIZE (16 * 1024)
 
-struct usb_handle 
+struct usb_handle
 {
     char fname[64];
     int desc;
@@ -85,12 +86,12 @@ static inline int badname(const char *name)
 static int check(void *_desc, int len, unsigned type, int size)
 {
     unsigned char *desc = _desc;
-    
+
     if(len < size) return -1;
     if(desc[0] < size) return -1;
     if(desc[0] > len) return -1;
     if(desc[1] != type) return -1;
-    
+
     return 0;
 }
 
@@ -103,46 +104,51 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
     struct usb_interface_descriptor *ifc;
     struct usb_endpoint_descriptor *ept;
     struct usb_ifc_info info;
-    
+
     int in, out;
     unsigned i;
     unsigned e;
     
+    struct stat st;
+    int result;
+
     if(check(ptr, len, USB_DT_DEVICE, USB_DT_DEVICE_SIZE))
         return -1;
     dev = (void*) ptr;
     len -= dev->bLength;
     ptr += dev->bLength;
-    
+
     if(check(ptr, len, USB_DT_CONFIG, USB_DT_CONFIG_SIZE))
         return -1;
     cfg = (void*) ptr;
     len -= cfg->bLength;
     ptr += cfg->bLength;
-    
+
     info.dev_vendor = dev->idVendor;
     info.dev_product = dev->idProduct;
     info.dev_class = dev->bDeviceClass;
     info.dev_subclass = dev->bDeviceSubClass;
     info.dev_protocol = dev->bDeviceProtocol;
     info.writable = writable;
-    
+
     // read device serial number (if there is one)
     info.serial_number[0] = 0;
     if (dev->iSerialNumber) {
         struct usbdevfs_ctrltransfer  ctrl;
-        __u16 buffer[128];
-        int result;
+        // Keep it short enough because some bootloaders are borked if the URB len is > 255
+        // 128 is too big by 1.
+        __u16 buffer[127];
 
         memset(buffer, 0, sizeof(buffer));
 
         ctrl.bRequestType = USB_DIR_IN|USB_TYPE_STANDARD|USB_RECIP_DEVICE;
         ctrl.bRequest = USB_REQ_GET_DESCRIPTOR;
         ctrl.wValue = (USB_DT_STRING << 8) | dev->iSerialNumber;
-        ctrl.wIndex = 0;
+        //language ID (en-us) for serial number string
+        ctrl.wIndex = 0x0409;
         ctrl.wLength = sizeof(buffer);
         ctrl.data = buffer;
-	ctrl.timeout = 50;
+        ctrl.timeout = 50;
 
         result = ioctl(fd, USBDEVFS_CONTROL, &ctrl);
         if (result > 0) {
@@ -155,29 +161,65 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
         }
     }
 
+    /* We need to get a path that represents a particular port on a particular
+     * hub.  We are passed an fd that was obtained by opening an entry under
+     * /dev/bus/usb.  Unfortunately, the names of those entries change each
+     * time devices are plugged and unplugged.  So how to get a repeatable
+     * path?  udevadm provided the inspiration.  We can get the major and
+     * minor of the device file, read the symlink that can be found here:
+     *   /sys/dev/char/<major>:<minor>
+     * and then use the last element of that path.  As a concrete example, I
+     * have an Android device at /dev/bus/usb/001/027 so working with bash:
+     *   $ ls -l /dev/bus/usb/001/027
+     *   crw-rw-r-- 1 root plugdev 189, 26 Apr  9 11:03 /dev/bus/usb/001/027
+     *   $ ls -l /sys/dev/char/189:26
+     *   lrwxrwxrwx 1 root root 0 Apr  9 11:03 /sys/dev/char/189:26 ->
+     *           ../../devices/pci0000:00/0000:00:1a.7/usb1/1-4/1-4.2/1-4.2.3
+     * So our device_path would be 1-4.2.3 which says my device is connected
+     * to port 3 of a hub on port 2 of a hub on port 4 of bus 1 (per
+     * http://www.linux-usb.org/FAQ.html).
+     */
+    info.device_path[0] = '\0';
+    result = fstat(fd, &st);
+    if (!result && S_ISCHR(st.st_mode)) {
+        char cdev[128];
+        char link[256];
+        char *slash;
+        ssize_t link_len;
+        snprintf(cdev, sizeof(cdev), "/sys/dev/char/%d:%d",
+                 major(st.st_rdev), minor(st.st_rdev));
+        link_len = readlink(cdev, link, sizeof(link) - 1);
+        if (link_len > 0) {
+            link[link_len] = '\0';
+            slash = strrchr(link, '/');
+            if (slash)
+                snprintf(info.device_path, sizeof(info.device_path), "usb:%s", slash+1);
+        }
+    }
+
     for(i = 0; i < cfg->bNumInterfaces; i++) {
         if(check(ptr, len, USB_DT_INTERFACE, USB_DT_INTERFACE_SIZE))
             return -1;
         ifc = (void*) ptr;
         len -= ifc->bLength;
         ptr += ifc->bLength;
-        
+
         in = -1;
         out = -1;
         info.ifc_class = ifc->bInterfaceClass;
         info.ifc_subclass = ifc->bInterfaceSubClass;
         info.ifc_protocol = ifc->bInterfaceProtocol;
-        
+
         for(e = 0; e < ifc->bNumEndpoints; e++) {
             if(check(ptr, len, USB_DT_ENDPOINT, USB_DT_ENDPOINT_SIZE))
                 return -1;
             ept = (void*) ptr;
             len -= ept->bLength;
             ptr += ept->bLength;
-    
+
             if((ept->bmAttributes & 0x03) != 0x02)
                 continue;
-            
+
             if(ept->bEndpointAddress & 0x80) {
                 in = ept->bEndpointAddress;
             } else {
@@ -187,7 +229,7 @@ static int filter_usb_device(int fd, char *ptr, int len, int writable,
 
         info.has_bulk_in = (in != -1);
         info.has_bulk_out = (out != -1);
-        
+
         if(callback(&info) == 0) {
             *ept_in_id = in;
             *ept_out_id = out;
@@ -205,25 +247,25 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
     char busname[64], devname[64];
     char desc[1024];
     int n, in, out, ifc;
-    
+
     DIR *busdir, *devdir;
     struct dirent *de;
     int fd;
     int writable;
-    
+
     busdir = opendir(base);
     if(busdir == 0) return 0;
 
     while((de = readdir(busdir)) && (usb == 0)) {
         if(badname(de->d_name)) continue;
-        
+
         sprintf(busname, "%s/%s", base, de->d_name);
         devdir = opendir(busname);
         if(devdir == 0) continue;
-        
+
 //        DBG("[ scanning %s ]\n", busname);
         while((de = readdir(devdir)) && (usb == 0)) {
-            
+
             if(badname(de->d_name)) continue;
             sprintf(devname, "%s/%s", busname, de->d_name);
 
@@ -239,7 +281,7 @@ static usb_handle *find_usb_device(const char *base, ifc_match_func callback)
             }
 
             n = read(fd, desc, sizeof(desc));
-            
+
             if(filter_usb_device(fd, desc, n, writable, callback,
                                  &in, &out, &ifc) == 0) {
                 usb = calloc(1, sizeof(usb_handle));
@@ -276,13 +318,13 @@ int usb_write(usb_handle *h, const void *_data, int len)
     if(h->ep_out == 0) {
         return -1;
     }
-    
+
     if(len == 0) {
         bulk.ep = h->ep_out;
         bulk.len = 0;
         bulk.data = data;
         bulk.timeout = 0;
-        
+
         n = ioctl(h->desc, USBDEVFS_BULK, &bulk);
         if(n != 0) {
             fprintf(stderr,"ERROR: n = %d, errno = %d (%s)\n",
@@ -291,16 +333,16 @@ int usb_write(usb_handle *h, const void *_data, int len)
         }
         return 0;
     }
-    
+
     while(len > 0) {
         int xfer;
         xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
-        
+
         bulk.ep = h->ep_out;
         bulk.len = xfer;
         bulk.data = data;
         bulk.timeout = 0;
-        
+
         n = ioctl(h->desc, USBDEVFS_BULK, &bulk);
         if(n != xfer) {
             DBG("ERROR: n = %d, errno = %d (%s)\n",
@@ -326,10 +368,10 @@ int usb_read(usb_handle *h, void *_data, int len)
     if(h->ep_in == 0) {
         return -1;
     }
-    
+
     while(len > 0) {
         int xfer = (len > MAX_USBFS_BULK_SIZE) ? MAX_USBFS_BULK_SIZE : len;
-        
+
         bulk.ep = h->ep_in;
         bulk.len = xfer;
         bulk.data = data;
@@ -352,12 +394,12 @@ int usb_read(usb_handle *h, void *_data, int len)
         count += n;
         len -= n;
         data += n;
-        
+
         if(n < xfer) {
             break;
         }
     }
-    
+
     return count;
 }
 
@@ -376,7 +418,7 @@ void usb_kick(usb_handle *h)
 int usb_close(usb_handle *h)
 {
     int fd;
-    
+
     fd = h->desc;
     h->desc = -1;
     if(fd >= 0) {

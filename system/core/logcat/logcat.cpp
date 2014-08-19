@@ -32,6 +32,9 @@ static int g_tail_lines = 0;
 
 #define LOG_FILE_DIR    "/dev/log/"
 
+#define LOG_TS_PATH "/proc/log_ts"
+extern int g_log_ts;
+
 struct queued_entry_t {
     union {
         unsigned char buf[LOGGER_ENTRY_MAX_LEN + 1] __attribute__((aligned(4)));
@@ -85,6 +88,41 @@ struct log_device_t {
     }
 };
 
+// To fix the bug of multi-device blocking
+char trigger_tag[] = {"AEE"};
+char trigger_message[] = {"trigger log"};
+struct queued_entry_t trigger_entry;
+int entry_num = 0;
+bool entry_too_much = false;
+#define LOG_TRIGGER_WATERLEVEL 10000
+
+
+/*
+ * Trigger Log when there are too many entries in memory
+ */
+void constructEntry(queued_entry_t* entry){
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    entry->entry.len = 1 + sizeof(trigger_tag) + sizeof(trigger_message);
+    entry->entry.pid = 0;
+    entry->entry.tid = 0;
+    entry->entry.msg[0] = 0x5;
+    memcpy(entry->buf + sizeof(logger_entry) + 1, trigger_tag, sizeof(trigger_tag));
+    memcpy(entry->buf + sizeof(logger_entry) + sizeof(trigger_tag) + 1, trigger_message, sizeof(trigger_message));
+    entry->entry.sec = now.tv_sec;
+    entry->entry.nsec = now.tv_usec * 1000;
+}
+
+void trigger_log(log_device_t *dev) {
+    queued_entry_t* entry = new queued_entry_t();
+    constructEntry(entry);
+    dev->enqueue(entry);
+    entry_num++;
+    if (entry_num >= LOG_TRIGGER_WATERLEVEL) {
+        entry_too_much = true;
+    }
+}
+
 namespace android {
 
 /* Global Variables */
@@ -101,7 +139,7 @@ static EventTagMap* g_eventTagMap = NULL;
 
 static int openLogFile (const char *pathname)
 {
-    return open(g_outputFileName, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+    return open(pathname, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 }
 
 static void rotateLogs()
@@ -235,6 +273,10 @@ static void skipNextEntry(log_device_t* dev) {
     queued_entry_t* entry = dev->queue;
     dev->queue = entry->next;
     delete entry;
+    entry_num--;
+    if(entry_num < LOG_TRIGGER_WATERLEVEL) {
+        entry_too_much = false;
+    }
 }
 
 static void printNextEntry(log_device_t* dev) {
@@ -253,7 +295,7 @@ static void readLogLines(log_device_t* devices)
     int max = 0;
     int ret;
     int queued_lines = 0;
-    bool sleep = true;
+    bool sleep = false;
 
     int result;
     fd_set readset;
@@ -305,6 +347,10 @@ static void readLogLines(log_device_t* devices)
                     entry->entry.msg[entry->entry.len] = '\0';
 
                     dev->enqueue(entry);
+                    entry_num++;
+                    if (entry_num >= LOG_TRIGGER_WATERLEVEL) {
+                        entry_too_much = true;
+                    }
                     ++queued_lines;
                 }
             }
@@ -336,7 +382,11 @@ static void readLogLines(log_device_t* devices)
                 while (g_tail_lines == 0 || queued_lines > g_tail_lines) {
                     chooseFirst(devices, &dev);
                     if (dev == NULL || dev->queue->next == NULL) {
-                        break;
+                        if (entry_too_much) {
+                            trigger_log(dev);
+                        } else {
+                            break;
+                        }
                     }
                     if (g_tail_lines == 0) {
                         printNextEntry(dev);
@@ -658,6 +708,28 @@ int main(int argc, char **argv)
         }
     }
 
+	// Read /proc/log_ts
+	char log_ts = '0';
+	int log_fd = open(LOG_TS_PATH, O_RDONLY);
+	if (log_fd >= 0) {
+		int ts_ret = read(log_fd, &log_ts, 1);
+		if(ts_ret >= 0) {
+			switch(log_ts) {
+			case '0':
+				g_log_ts = 0;
+				break;
+			case '1':
+				g_log_ts = 1;
+				break;
+			default:
+				g_log_ts = 0;
+				break;
+			}
+		}
+		
+		close(log_fd);
+	}
+	
     if (!devices) {
         devices = new log_device_t(strdup("/dev/"LOGGER_LOG_MAIN), false, 'm');
         android::g_devCount = 1;

@@ -16,6 +16,8 @@
 
 LOCAL_PATH := $(call my-dir)
 
+ifneq ($(BOARD_USES_GENERIC_INVENSENSE),false)
+
 # InvenSense fragment of the HAL
 include $(CLEAR_VARS)
 
@@ -42,3 +44,5 @@ LOCAL_LDFLAGS:=-rdynamic
 LOCAL_PRELINK_MODULE := false
 
 include $(BUILD_SHARED_LIBRARY)
+
+endif

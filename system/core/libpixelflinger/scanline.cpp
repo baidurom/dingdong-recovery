@@ -32,6 +32,9 @@
 #include "codeflinger/CodeCache.h"
 #include "codeflinger/GGLAssembler.h"
 #include "codeflinger/ARMAssembler.h"
+#if defined(__mips__)
+#include "codeflinger/MIPSAssembler.h"
+#endif
 //#include "codeflinger/ARMAssemblerOptimizer.h"
 
 // ----------------------------------------------------------------------------
@@ -49,7 +52,7 @@
 #   define ANDROID_CODEGEN      ANDROID_CODEGEN_GENERATED
 #endif
 
-#if defined(__arm__)
+#if defined(__arm__) || defined(__mips__)
 #   define ANDROID_ARM_CODEGEN  1
 #else
 #   define ANDROID_ARM_CODEGEN  0
@@ -63,7 +66,11 @@
  */
 #define DEBUG_NEEDS  0
 
+#ifdef __mips__
+#define ASSEMBLY_SCRATCH_SIZE   4096
+#else
 #define ASSEMBLY_SCRATCH_SIZE   2048
+#endif
 
 // ----------------------------------------------------------------------------
 namespace android {
@@ -110,10 +117,14 @@ static void scanline_clear(context_t* c);
 static void rect_generic(context_t* c, size_t yc);
 static void rect_memcpy(context_t* c, size_t yc);
 
+#if defined( __arm__)
 extern "C" void scanline_t32cb16blend_arm(uint16_t*, uint32_t*, size_t);
 extern "C" void scanline_t32cb16_arm(uint16_t *dst, uint32_t *src, size_t ct);
 extern "C" void scanline_col32cb16blend_neon(uint16_t *dst, uint32_t *col, size_t ct);
 extern "C" void scanline_col32cb16blend_arm(uint16_t *dst, uint32_t col, size_t ct);
+#elif defined(__mips__)
+extern "C" void scanline_t32cb16blend_mips(uint16_t*, uint32_t*, size_t);
+#endif
 
 // ----------------------------------------------------------------------------
 
@@ -262,7 +273,12 @@ static  const needs_filter_t fill16noblend = {
 // ----------------------------------------------------------------------------
 
 #if ANDROID_ARM_CODEGEN
+
+#if defined(__mips__)
+static CodeCache gCodeCache(32 * 1024);
+#else
 static CodeCache gCodeCache(12 * 1024);
+#endif
 
 class ScanlineAssembly : public Assembly {
     AssemblyKey<needs_t> mKey;
@@ -351,7 +367,7 @@ static void pick_scanline(context_t* c)
     }
 
 #if DEBUG_NEEDS
-    LOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
+    ALOGI("Needs: n=0x%08x p=0x%08x t0=0x%08x t1=0x%08x",
          c->state.needs.n, c->state.needs.p,
          c->state.needs.t[0], c->state.needs.t[1]);
 #endif
@@ -371,9 +387,14 @@ static void pick_scanline(context_t* c)
         sp<ScanlineAssembly> a = new ScanlineAssembly(c->state.needs, 
                 ASSEMBLY_SCRATCH_SIZE);
         // initialize our assembler
+#if defined(__arm__)
         GGLAssembler assembler( new ARMAssembler(a) );
         //GGLAssembler assembler(
         //        new ARMAssemblerOptimizer(new ARMAssembler(a)) );
+#endif
+#if defined(__mips__)
+        GGLAssembler assembler( new ArmToMipsAssembler(a) );
+#endif
         // generate the scanline code for the given needs
         int err = assembler.scanline(c->state.needs, c);
         if (ggl_likely(!err)) {
@@ -381,7 +402,7 @@ static void pick_scanline(context_t* c)
             err = gCodeCache.cache(a->key(), a);
         }
         if (ggl_unlikely(err)) {
-            LOGE("error generating or caching assembly. Reverting to NOP.");
+            ALOGE("error generating or caching assembly. Reverting to NOP.");
             c->scanline = scanline_noop;
             c->init_y = init_y_noop;
             c->step_y = step_y__nop;
@@ -395,12 +416,12 @@ static void pick_scanline(context_t* c)
         c->scanline_as->decStrong(c);
     }
 
-    //LOGI("using generated pixel-pipeline");
+    //ALOGI("using generated pixel-pipeline");
     c->scanline_as = assembly.get();
     c->scanline_as->incStrong(c); //  hold on to assembly
     c->scanline = (void(*)(context_t* c))assembly->base();
 #else
-//    LOGW("using generic (slow) pixel-pipeline");
+//    ALOGW("using generic (slow) pixel-pipeline");
     c->scanline = scanline;
 #endif
 }
@@ -1761,7 +1782,7 @@ void init_y_error(context_t* c, int32_t y0)
     // woooops, shoud never happen,
     // fail gracefully (don't display anything)
     init_y_noop(c, y0);
-    LOGE("color-buffer has an invalid format!");
+    ALOGE("color-buffer has an invalid format!");
 }
 
 // ----------------------------------------------------------------------------
@@ -2136,7 +2157,7 @@ last_one:
 
 void scanline_t32cb16blend(context_t* c)
 {
-#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && defined(__arm__))
+#if ((ANDROID_CODEGEN >= ANDROID_CODEGEN_ASM) && (defined(__arm__) || defined(__mips)))
     int32_t x = c->iterators.xl;
     size_t ct = c->iterators.xr - x;
     int32_t y = c->iterators.y;
@@ -2148,7 +2169,11 @@ void scanline_t32cb16blend(context_t* c)
     const int32_t v = (c->state.texture[0].shade.it0>>16) + y;
     uint32_t *src = reinterpret_cast<uint32_t*>(tex->data)+(u+(tex->stride*v));
 
+#ifdef __arm__
     scanline_t32cb16blend_arm(dst, src, ct);
+#else
+    scanline_t32cb16blend_mips(dst, src, ct);
+#endif
 #else
     dst_iterator16  di(c);
     horz_iterator32  hi(c);

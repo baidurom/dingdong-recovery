@@ -50,21 +50,6 @@ extern struct __res_state *__res_state(void);
 extern int   b64_ntop(u_char const *, size_t, char *, size_t);
 extern int   b64_pton(char const *, u_char *, size_t);
 
-/* Set name of default interface */
-extern void _resolv_set_default_iface(const char* ifname);
-
-/* set name servers for an interface */
-extern void _resolv_set_nameservers_for_iface(const char* ifname, char** servers, int numservers);
-
-/* tell resolver of the address of an interface */
-extern void _resolv_set_addr_of_iface(const char* ifname, struct in_addr* addr);
-
-/* flush the cache associated with the default interface */
-extern void _resolv_flush_cache_for_default_iface();
-
-/* flush the cache associated with a certain interface */
-extern void _resolv_flush_cache_for_iface(const char* ifname);
-
 __END_DECLS
 
 #endif /* _RESOLV_H_ */

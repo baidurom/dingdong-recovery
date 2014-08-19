@@ -247,6 +247,8 @@ status_t OMXCameraAdapter::setParametersAlgo(const CameraParameters &params,
         mOMXStateSwitch = true;
         }
 
+#ifdef OMAP_ENHANCEMENT
+
     //Set Auto Convergence Mode
     valstr = params.get((const char *) TICameraParameters::KEY_AUTOCONVERGENCE);
     if ( valstr != NULL )
@@ -276,6 +278,8 @@ status_t OMXCameraAdapter::setParametersAlgo(const CameraParameters &params,
                 }
         CAMHAL_LOGVB("AutoConvergenceMode %s, value = %d", valstr, (int) manualconvergence);
         }
+
+#endif
 
     LOG_FUNCTION_NAME_EXIT;
 
@@ -637,10 +641,10 @@ status_t OMXCameraAdapter::setCaptureMode(OMXCameraAdapter::CaptureMode mode)
             CAMHAL_LOGDA("Camera mode: HIGH QUALITY_ZSL");
             camMode.eCamOperatingMode = OMX_TI_CaptureImageProfileZeroShutterLag;
 
-            valstr = mParams.get(TICameraParameters::KEY_RECORDING_HINT);
-            if (!valstr || (valstr && (strcmp(valstr, "false")))) {
+            if ( !mIternalRecordingHint ) {
                 zslHistoryLen.nHistoryLen = 5;
             }
+
             }
         else if( OMXCameraAdapter::VIDEO_MODE == mode )
             {

@@ -28,6 +28,14 @@ LOCAL_SRC_FILES := 	\
 	mapper.cpp
 	
 LOCAL_MODULE := gralloc.default
-LOCAL_CFLAGS:= -DLOG_TAG=\"gralloc\"
+LOCAL_CFLAGS := -DLOG_TAG=\"gralloc\"
+
+# --- MediaTek ---------------------------------------------------------------
+ifeq ($(MTK_ION_SUPPORT), yes)
+LOCAL_SRC_FILES += gralloc_ion.cpp
+LOCAL_CFLAGS += -DMTK_ION_SUPPORT -DMTK_GRALLOC_ION_DBG
+LOCAL_C_INCLUDES += $(TOP)/$(MTK_PATH_SOURCE)/kernel/include
+endif
+# ----------------------------------------------------------------------------
 
 include $(BUILD_SHARED_LIBRARY)

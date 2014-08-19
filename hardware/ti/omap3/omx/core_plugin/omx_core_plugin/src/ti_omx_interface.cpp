@@ -23,11 +23,11 @@ class TIOMXInterface : public OMXInterface
                 const char* pErr = dlerror();
                 if (NULL != pErr)
                 {
-                    LOGE("TIOMXInterface: Error closing library: %s\n", pErr);
+                    ALOGE("TIOMXInterface: Error closing library: %s\n", pErr);
                 }
                 else
                 {
-                    LOGE("OsclSharedLibrary::Close: Error closing library, no error reported");
+                    ALOGE("OsclSharedLibrary::Close: Error closing library, no error reported");
                 }
             }
 
@@ -40,18 +40,18 @@ class TIOMXInterface : public OMXInterface
             // call failed.
             if (ipHandle && aInterfaceId == OMX_INTERFACE_ID)
             {
-                LOGD("TIOMXInterface: library lookup success\n");
+                ALOGD("TIOMXInterface: library lookup success\n");
                 // the library lookup was successful
                 return this;
             }
             // the ID doesn't match
-            LOGE("TIOMXInterface: library lookup failed\n");
+            ALOGE("TIOMXInterface: library lookup failed\n");
             return NULL;
         };
 
         static TIOMXInterface* Instance()
         {
-            LOGD("TIOMXInterface: creating interface\n");
+            ALOGD("TIOMXInterface: creating interface\n");
             return OSCL_NEW(TIOMXInterface, ());
         };
 
@@ -67,7 +67,7 @@ class TIOMXInterface : public OMXInterface
 
         TIOMXInterface()
         {
-            LOGD("Calling DLOPEN on OMX_CORE_LIBRARY (%s)\n", OMX_CORE_LIBRARY);
+            ALOGD("Calling DLOPEN on OMX_CORE_LIBRARY (%s)\n", OMX_CORE_LIBRARY);
             ipHandle = dlopen(OMX_CORE_LIBRARY, RTLD_NOW);
 
             if (NULL == ipHandle)
@@ -89,19 +89,19 @@ class TIOMXInterface : public OMXInterface
                 if (NULL == pErr)
                 {
                     // No error reported, but no handle to the library
-                    LOGE("OsclLib::LoadLibrary: Error opening "
+                    ALOGE("OsclLib::LoadLibrary: Error opening "
                          "library (%s) but no error reported\n", OMX_CORE_LIBRARY);
                 }
                 else
                 {
                     // Error reported
-                    LOGE("OsclLib::LoadLibrary: Error opening "
+                    ALOGE("OsclLib::LoadLibrary: Error opening "
                          "library (%s): %s\n", OMX_CORE_LIBRARY, pErr);
                 }
             }
             else
             {
-                LOGD("DLOPEN SUCCEEDED (%s)\n", OMX_CORE_LIBRARY);
+                ALOGD("DLOPEN SUCCEEDED (%s)\n", OMX_CORE_LIBRARY);
                 // Lookup all the symbols in the OMX core
                 pOMX_Init = (tpOMX_Init)dlsym(ipHandle, "TIOMX_Init");
                 pOMX_Deinit = (tpOMX_Deinit)dlsym(ipHandle, "TIOMX_Deinit");

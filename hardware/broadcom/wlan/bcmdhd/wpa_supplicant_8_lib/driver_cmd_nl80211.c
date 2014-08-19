@@ -11,15 +11,16 @@
  */
 
 #include "driver_nl80211.h"
-#include "driver_cmd_common.h"
-
 #include "wpa_supplicant_i.h"
 #include "config.h"
-
-#define WPA_EVENT_DRIVER_STATE		"CTRL-EVENT-DRIVER-STATE "
+#ifdef ANDROID
+#include "android_drv.h"
+#endif
 
 #define WPA_PS_ENABLED		0
 #define WPA_PS_DISABLED		1
+
+#define MAX_WPSP2PIE_CMD_SIZE		512
 
 typedef struct android_wifi_priv_cmd {
 	char *buf;
@@ -54,7 +55,7 @@ static int wpa_driver_set_power_save(void *priv, int state)
 	if (!msg)
 		return -1;
 
-	genlmsg_put(msg, 0, 0, genl_family_get_id(drv->nl80211), 0, 0,
+	genlmsg_put(msg, 0, 0, drv->global->nl80211_id, 0, 0,
 		    NL80211_CMD_SET_POWER_SAVE, 0);
 
 	if (state == WPA_PS_ENABLED)
@@ -108,7 +109,7 @@ static int wpa_driver_get_power_save(void *priv, int *state)
 	if (!msg)
 		return -1;
 
-	genlmsg_put(msg, 0, 0, genl_family_get_id(drv->nl80211), 0, 0,
+	genlmsg_put(msg, 0, 0, drv->global->nl80211_id, 0, 0,
 		    NL80211_CMD_GET_POWER_SAVE, 0);
 
 	NLA_PUT_U32(msg, NL80211_ATTR_IFINDEX, drv->ifindex);
@@ -191,7 +192,7 @@ static int wpa_driver_set_backgroundscan_params(void *priv)
 	priv_cmd.total_len = bp;
 	ifr.ifr_data = &priv_cmd;
 
-	ret = ioctl(drv->ioctl_sock, SIOCDEVPRIVATE + 1, &ifr);
+	ret = ioctl(drv->global->ioctl_sock, SIOCDEVPRIVATE + 1, &ifr);
 
 	if (ret < 0) {
 		wpa_printf(MSG_ERROR, "ioctl[SIOCSIWPRIV] (pnosetup): %d", ret);
@@ -212,15 +213,15 @@ int wpa_driver_nl80211_driver_cmd(void *priv, char *cmd, char *buf,
 	int ret = 0;
 
 	if (os_strcasecmp(cmd, "STOP") == 0) {
-		linux_set_iface_flags(drv->ioctl_sock, bss->ifname, 0);
+		linux_set_iface_flags(drv->global->ioctl_sock, bss->ifname, 0);
 		wpa_msg(drv->ctx, MSG_INFO, WPA_EVENT_DRIVER_STATE "STOPPED");
 	} else if (os_strcasecmp(cmd, "START") == 0) {
-		linux_set_iface_flags(drv->ioctl_sock, bss->ifname, 1);
+		linux_set_iface_flags(drv->global->ioctl_sock, bss->ifname, 1);
 		wpa_msg(drv->ctx, MSG_INFO, WPA_EVENT_DRIVER_STATE "STARTED");
 	} else if (os_strcasecmp(cmd, "MACADDR") == 0) {
 		u8 macaddr[ETH_ALEN] = {};
 
-		ret = linux_get_ifhwaddr(drv->ioctl_sock, bss->ifname, macaddr);
+		ret = linux_get_ifhwaddr(drv->global->ioctl_sock, bss->ifname, macaddr);
 		if (!ret)
 			ret = os_snprintf(buf, buf_len,
 					  "Macaddr = " MACSTR "\n", MAC2STR(macaddr));
@@ -266,7 +267,7 @@ int wpa_driver_nl80211_driver_cmd(void *priv, char *cmd, char *buf,
 		priv_cmd.total_len = buf_len;
 		ifr.ifr_data = &priv_cmd;
 
-		if ((ret = ioctl(drv->ioctl_sock, SIOCDEVPRIVATE + 1, &ifr)) < 0) {
+		if ((ret = ioctl(drv->global->ioctl_sock, SIOCDEVPRIVATE + 1, &ifr)) < 0) {
 			wpa_printf(MSG_ERROR, "%s: failed to issue private commands\n", __func__);
 			wpa_driver_send_hang_msg(drv);
 		} else {
@@ -274,10 +275,11 @@ int wpa_driver_nl80211_driver_cmd(void *priv, char *cmd, char *buf,
 			ret = 0;
 			if ((os_strcasecmp(cmd, "LINKSPEED") == 0) ||
 			    (os_strcasecmp(cmd, "RSSI") == 0) ||
-			    (os_strcasecmp(cmd, "GETBAND") == 0) ||
-			    (os_strcasecmp(cmd, "P2P_GET_NOA") == 0))
+			    (os_strcasecmp(cmd, "GETBAND") == 0) )
 				ret = strlen(buf);
-
+			else if (os_strcasecmp(cmd, "COUNTRY") == 0)
+				wpa_supplicant_event(drv->ctx,
+					EVENT_CHANNEL_LIST_CHANGED, NULL);
 			wpa_printf(MSG_DEBUG, "%s %s len = %d, %d", __func__, buf, ret, strlen(buf));
 		}
 	}
@@ -296,20 +298,8 @@ int wpa_driver_set_p2p_noa(void *priv, u8 count, int start, int duration)
 
 int wpa_driver_get_p2p_noa(void *priv, u8 *buf, size_t len)
 {
-	char rbuf[MAX_DRV_CMD_SIZE];
-	char *cmd = "P2P_GET_NOA";
-	int ret;
-
-	wpa_printf(MSG_DEBUG, "%s: Entry", __func__);
-	os_memset(buf, 0, len);
-	ret = wpa_driver_nl80211_driver_cmd(priv, cmd, rbuf, sizeof(rbuf));
-	if (ret <= 0)
-		return 0;
-	ret >>= 1;
-	if (ret > (int)len)
-		ret = (int)len;
-	hexstr2bin(rbuf, buf, ret);
-	return ret;
+	/* Return 0 till we handle p2p_presence request completely in the driver */
+	return 0;
 }
 
 int wpa_driver_set_p2p_ps(void *priv, int legacy_ps, int opp_ps, int ctwindow)

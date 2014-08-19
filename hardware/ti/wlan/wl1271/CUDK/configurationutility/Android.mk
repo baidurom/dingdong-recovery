@@ -49,6 +49,10 @@ ifeq ($(WPA_ENTERPRISE), y)
 	DK_DEFINES += -D WPA_ENTERPRISE
 endif
 
+ifeq ($(WPA_SUPPLICANT_VERSION),VER_0_6_X)
+	DK_DEFINES += -DSUPPL_WPS_SUPPORT
+endif
+
 #DK_DEFINES += -D NO_WPA_SUPPL
 
 #Supplicant image building

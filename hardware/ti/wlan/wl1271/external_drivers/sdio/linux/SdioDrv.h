@@ -171,5 +171,7 @@ void sdioDrv_register_pm(int (*wlanDrvIf_Start)(void),
 
 int sdioDrv_clk_enable(void);
 void sdioDrv_clk_disable(void);
+void sdioDrv_start_inact_timer(void);
+void sdioDrv_cancel_inact_timer(void);
 
 #endif/* _OMAP3430_SDIODRV_H */

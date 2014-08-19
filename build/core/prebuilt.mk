@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 ###########################################################
 ## Standard rules for copying files that are prebuilt
 ##
@@ -27,6 +58,21 @@ ifeq (SHARED_LIBRARIES,$(LOCAL_MODULE_CLASS))
   OVERRIDE_BUILT_MODULE_PATH := $($(my_prefix)OUT_INTERMEDIATE_LIBRARIES)
 endif
 
+# Deal with the OSX library timestamp issue when installing
+# a prebuilt simulator library.
+ifneq ($(filter STATIC_LIBRARIES SHARED_LIBRARIES,$(LOCAL_MODULE_CLASS)),)
+  prebuilt_module_is_a_library := true
+else
+  prebuilt_module_is_a_library :=
+endif
+
+# Don't install static libraries by default.
+ifndef LOCAL_UNINSTALLABLE_MODULE
+ifeq (STATIC_LIBRARIES,$(LOCAL_MODULE_CLASS))
+  LOCAL_UNINSTALLABLE_MODULE := true
+endif
+endif
+
 ifeq ($(LOCAL_STRIP_MODULE),true)
   ifdef LOCAL_IS_HOST_MODULE
     $(error Cannot strip host module LOCAL_PATH=$(LOCAL_PATH))
@@ -42,14 +88,15 @@ ifeq ($(LOCAL_STRIP_MODULE),true)
 else
   include $(BUILD_SYSTEM)/base_rules.mk
   built_module := $(LOCAL_BUILT_MODULE)
-endif
 
-# Deal with the OSX library timestamp issue when installing
-# a prebuilt simulator library.
-ifneq ($(filter STATIC_LIBRARIES SHARED_LIBRARIES,$(LOCAL_MODULE_CLASS)),)
-  prebuilt_module_is_a_library := true
-else
-  prebuilt_module_is_a_library :=
+ifdef prebuilt_module_is_a_library
+# Create a dummy export_includes.
+$(intermediates)/export_includes:
+	$(hide) mkdir -p $(dir $@) && rm -f $@
+	$(hide) touch $@
+
+$(LOCAL_BUILT_MODULE) : | $(intermediates)/export_includes
+endif
 endif
 
 PACKAGES.$(LOCAL_MODULE).OVERRIDES := $(strip $(LOCAL_OVERRIDES_PACKAGES))
@@ -85,7 +132,15 @@ else ifeq ($(LOCAL_CERTIFICATE),PRESIGNED)
 else
   # If this is not an absolute certificate, assign it to a generic one.
   ifeq ($(dir $(strip $(LOCAL_CERTIFICATE))),./)
+    ifeq ($(MTK_SIGNATURE_CUSTOMIZATION),yes)
+      ifeq ($(MTK_INTERNAL),yes)
+        LOCAL_CERTIFICATE := $(SRC_TARGET_DIR)/product/security/common/$(LOCAL_CERTIFICATE)
+      else
+        LOCAL_CERTIFICATE := $(SRC_TARGET_DIR)/product/security/$(TARGET_PRODUCT)/$(LOCAL_CERTIFICATE)
+      endif
+    else
       LOCAL_CERTIFICATE := $(dir $(DEFAULT_SYSTEM_DEV_CERTIFICATE))$(LOCAL_CERTIFICATE)
+  endif
   endif
 
   PACKAGES.$(LOCAL_MODULE).PRIVATE_KEY := $(LOCAL_CERTIFICATE).pk8
@@ -115,6 +170,13 @@ $(built_module) : $(LOCAL_PATH)/$(LOCAL_SRC_FILES)
 else
 $(built_module) : $(LOCAL_PATH)/$(LOCAL_SRC_FILES) | $(ACP)
 	$(transform-prebuilt-to-target)
+ifneq ($(prebuilt_module_is_a_library),)
+  ifneq ($(LOCAL_IS_HOST_MODULE),)
+	$(transform-host-ranlib-copy-hack)
+  else
+	$(transform-ranlib-copy-hack)
+  endif
+endif
 endif
 endif
 
@@ -135,11 +197,3 @@ $(common_javalib_jar) : $(common_classes_jar) | $(ACP)
 # make sure the classes.jar and javalib.jar are built before $(LOCAL_BUILT_MODULE)
 $(built_module) : $(common_javalib_jar)
 endif # TARGET JAVA_LIBRARIES
-
-ifneq ($(prebuilt_module_is_a_library),)
-  ifneq ($(LOCAL_IS_HOST_MODULE),)
-	$(transform-host-ranlib-copy-hack)
-  else
-	$(transform-ranlib-copy-hack)
-  endif
-endif

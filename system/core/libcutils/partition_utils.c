@@ -22,6 +22,9 @@
 #include <sys/mount.h> /* for BLKGETSIZE */
 #include <cutils/properties.h>
 
+#include <errno.h>
+#include <cutils/partition_utils.h>
+
 static int only_one_char(char *buf, int len, char c)
 {
     int i, ret;
@@ -64,4 +67,101 @@ int partition_wiped(char *source)
 
     return 0;
 }
+
+#ifdef MTK_EMMC_SUPPORT
+int misc_set_phone_encrypt_state(const struct phone_encrypt_state *in) {
+    int dev = -1;
+    char dev_name[32];
+    int count;
+
+    strcpy(dev_name, "/dev/misc");
+
+    dev = open(dev_name, O_WRONLY);
+    if (dev < 0)  {
+        printf("Can't open %s\n(%s)\n", dev_name, strerror(errno));
+        return -1;
+    }
+
+    if (lseek(dev, PHONE_ENCRYPT_OFFSET, SEEK_SET) == -1) {
+        printf("Failed seeking %s\n(%s)\n", dev_name, strerror(errno));
+        close(dev);
+        return -1;
+    }
+
+    count = write(dev, in, sizeof(*in));
+    if (count != sizeof(*in)) {
+        printf("Failed writing %s\n(%s)\n", dev_name, strerror(errno));
+        return -1;
+    }
+    if (close(dev) != 0) {
+        printf("Failed closing %s\n(%s)\n", dev_name, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+int misc_get_phone_encrypt_state(struct phone_encrypt_state *in) {
+
+    int dev = -1;
+    char dev_name[32];
+    int count;
+
+    strcpy(dev_name, "/dev/misc");
+
+    dev = open(dev_name, O_RDONLY);
+    if (dev < 0)  {
+        printf("Can't open %s\n(%s)\n", dev_name, strerror(errno));
+        return -1;
+    }
+
+    if (lseek(dev, PHONE_ENCRYPT_OFFSET, SEEK_SET) == -1) {
+        printf("Failed seeking %s\n(%s)\n", dev_name, strerror(errno));
+        close(dev);
+        return -1;
+    }
+
+    count = read(dev, in, sizeof(*in));
+    if (count != sizeof(*in)) {
+        printf("Failed reading %s\n(%s)\n", dev_name, strerror(errno));
+        return -1;
+    }
+    if (close(dev) != 0) {
+        printf("Failed closing %s\n(%s)\n", dev_name, strerror(errno));
+        return -1;
+    }
+    return 0;
+
+}
+
+
+int misc_test(int argc, char **argv)
+{
+
+    struct phone_encrypt_state ps;
+
+    if (argc == 1) {
+
+        misc_get_phone_encrypt_state(&ps);
+
+        if (ps.state == PHONE_ENCRYPTED) {
+            printf("Phone is encrypted (%x)\n", ps.state);
+        } else {
+            printf("Phone is not encrypted (%x)\n", ps.state);
+        }
+
+        return 0;
+    }
+
+    if (atoi(argv[1]) == 0) {
+        ps.state = 0;
+    } else {
+        ps.state = PHONE_ENCRYPTED;
+    }
+
+    misc_set_phone_encrypt_state(&ps);
+    sync();
+
+    return 0;
+}
+#endif
 

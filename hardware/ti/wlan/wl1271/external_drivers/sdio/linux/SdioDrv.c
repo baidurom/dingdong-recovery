@@ -243,6 +243,8 @@ typedef struct OMAP3430_sdiodrv
 	size_t dma_write_size;
 	struct workqueue_struct *sdio_wq; /* Work Queue */
 	struct work_struct sdiodrv_work;
+	struct timer_list inact_timer;
+	int inact_timer_running;
 } OMAP3430_sdiodrv_t;
 
 struct omap_hsmmc_regs {
@@ -280,6 +282,7 @@ static int sdiodrv_fclk_got = 0;
 static void sdioDrv_hsmmc_save_ctx(void);
 static void sdioDrv_hsmmc_restore_ctx(void);
 static void sdiodrv_dma_shutdown(void);
+static void sdioDrv_inact_timer(unsigned long);
 
 #ifndef TI_SDIO_STANDALONE
 void sdio_init( int sdcnum )
@@ -327,6 +330,26 @@ static void sdioDrv_hsmmc_restore_ctx(void)
         OMAP_HSMMC_WRITE(IE, hsmmc_ctx.ie);
         OMAP_HSMMC_WRITE(SYSCTL, hsmmc_ctx.sysctl);
         OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) | SDBP);
+}
+
+static void sdioDrv_inact_timer(unsigned long data)
+{
+	sdioDrv_clk_disable();
+	g_drv.inact_timer_running = 0;
+}
+
+void sdioDrv_start_inact_timer(void)
+{
+	mod_timer(&g_drv.inact_timer, jiffies + msecs_to_jiffies(1000));
+	g_drv.inact_timer_running = 1;
+}
+
+void sdioDrv_cancel_inact_timer(void)
+{
+	if(g_drv.inact_timer_running) {
+		del_timer_sync(&g_drv.inact_timer);
+		g_drv.inact_timer_running = 0;
+	}
 }
 
 void sdiodrv_task(struct work_struct *unused)
@@ -547,6 +570,8 @@ static void OMAP3430_mmc_set_clock(unsigned int clock, OMAP3430_sdiodrv_t *host)
 
 static void sdiodrv_free_resources(void)
 {
+	sdioDrv_cancel_inact_timer();
+
 	if(g_drv.ifclks_enabled) {
 		sdioDrv_clk_disable();
 	}
@@ -569,8 +594,71 @@ static void sdiodrv_free_resources(void)
 
 int sdioDrv_InitHw(void)
 {
+	int rc;
+	u32 status;
+#ifdef SDIO_1_BIT /* see also in SdioAdapter.c */
+	unsigned long clock_rate = 6000000;
+#else
+	unsigned long clock_rate = 24000000;
+#endif
+
+	printk(KERN_INFO "TIWLAN SDIO sdioDrv_InitHw()!!");
+
+        rc = sdioDrv_clk_enable();
+	if (rc) {
+		PERR("sdioDrv_InitHw : sdioDrv_clk_enable FAILED !!!\n");
+		goto err;
+	}
+
+	OMAP3430_mmc_reset();
+
+	//obc - init sequence p. 3600,3617
+	/* 1.8V */
+	OMAP_HSMMC_WRITE(CAPA, OMAP_HSMMC_READ(CAPA) | VS18);
+	OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) | SDVS18);//SDVS fits p. 3650
+	/* clock gating */
+	OMAP_HSMMC_WRITE(SYSCONFIG, OMAP_HSMMC_READ(SYSCONFIG) | AUTOIDLE);
+
+	/* bus power */
+	OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) | SDBP);//SDBP fits p. 3650
+	/* interrupts */
+	OMAP_HSMMC_WRITE(ISE, 0);
+	OMAP_HSMMC_WRITE(IE, IE_EN_MASK);
+
+	//p. 3601 suggests moving to the end
+	OMAP3430_mmc_set_clock(clock_rate, &g_drv);
+	printk("SDIO clock Configuration is now set to %dMhz\n",(int)clock_rate/1000000);
+
+	/* Bus width */
+#ifdef SDIO_1_BIT /* see also in SdioAdapter.c */
+	PDEBUG("%s() setting %d data lines\n",__FUNCTION__, 1);
+	OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) & (ONE_BIT));
+#else
+	PDEBUG("%s() setting %d data lines\n",__FUNCTION__, 4);
+	OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) | (1 << 1));//DTW 4 bits - p. 3650
+#endif
+
+	/* send the init sequence. 80 clocks of synchronization in the SDIO */
+	//doesn't match p. 3601,3617 - obc
+	OMAP_HSMMC_WRITE( CON, OMAP_HSMMC_READ(CON) | INIT_STREAM);
+	OMAP_HSMMC_SEND_COMMAND( 0, 0);
+	status = sdiodrv_poll_status(OMAP_HSMMC_STAT, CC, MMC_TIMEOUT_MS);
+	if (!(status & CC)) {
+		PERR("sdioDrv_InitHw() SDIO Command error status = 0x%x\n", status);
+		rc = status;
+		goto err;
+	}
+	OMAP_HSMMC_WRITE(CON, OMAP_HSMMC_READ(CON) & ~INIT_STREAM);
+
 	return 0;
-} /* sdioDrv_InitHw */
+
+err:
+	/* Disabling clocks for now */
+	sdioDrv_clk_disable();
+
+	return rc;
+
+} /* sdiodrv_InitHw */
 
 void sdiodrv_shutdown(void)
 {
@@ -1045,12 +1133,6 @@ int sdioDrv_WriteSyncBytes (unsigned int  uFunc,
 static int sdioDrv_probe(struct platform_device *pdev)
 {
 	int rc;
-	u32 status;
-#ifdef SDIO_1_BIT /* see also in SdioAdapter.c */
-	unsigned long clock_rate = 6000000;
-#else
-	unsigned long clock_rate = 24000000;
-#endif
 
 	printk(KERN_INFO "TIWLAN SDIO probe: initializing mmc%d device\n", pdev->id + 1);
 
@@ -1062,7 +1144,7 @@ static int sdioDrv_probe(struct platform_device *pdev)
 
         rc= request_irq(OMAP_MMC_IRQ, sdiodrv_irq, 0, SDIO_DRIVER_NAME, &g_drv);
         if (rc != 0) {
-                PERR("sdioDrv_InitHw() - request_irq FAILED!!\n");
+                PERR("sdioDrv_probe() - request_irq FAILED!!\n");
                 return rc;
         }
         sdiodrv_irq_requested = 1;
@@ -1095,54 +1177,25 @@ static int sdioDrv_probe(struct platform_device *pdev)
 	}
 	sdiodrv_iclk_got = 1;
 	
-        rc = sdioDrv_clk_enable();
-        if (rc) {
-                PERR("sdioDrv_probe : clk_enable FAILED !!!\n");
-                goto err;
+	printk("Configuring SDIO DMA registers!!!\n");
+	printk("pdev->id is %d!!!\n", pdev->id);
+	if ( pdev->id == 1 ) {
+		/* MMC2 */
+		TIWLAN_MMC_CONTROLLER_BASE_ADDR = OMAP_HSMMC2_BASE;
+		TIWLAN_MMC_DMA_TX = OMAP24XX_DMA_MMC2_TX;
+		TIWLAN_MMC_DMA_RX = OMAP24XX_DMA_MMC2_RX;
         }
-
-	OMAP3430_mmc_reset();
-
-	//obc - init sequence p. 3600,3617
-	/* 1.8V */
-	OMAP_HSMMC_WRITE(CAPA,		OMAP_HSMMC_READ(CAPA) | VS18);
-	OMAP_HSMMC_WRITE(HCTL,		OMAP_HSMMC_READ(HCTL) | SDVS18);//SDVS fits p. 3650
-	/* clock gating */
-	OMAP_HSMMC_WRITE(SYSCONFIG, OMAP_HSMMC_READ(SYSCONFIG) | AUTOIDLE);
-
-	/* bus power */
-	OMAP_HSMMC_WRITE(HCTL,		OMAP_HSMMC_READ(HCTL) | SDBP);//SDBP fits p. 3650
-	/* interrupts */
-	OMAP_HSMMC_WRITE(ISE,		0);
-	OMAP_HSMMC_WRITE(IE,		IE_EN_MASK);
-
-	//p. 3601 suggests moving to the end
-	OMAP3430_mmc_set_clock(clock_rate, &g_drv);
-	printk(KERN_INFO "SDIO clock Configuration is now set to %dMhz\n",(int)clock_rate/1000000);
-
-	/* Bus width */
-#ifdef SDIO_1_BIT /* see also in SdioAdapter.c */
-	PDEBUG("%s() setting %d data lines\n",__FUNCTION__, 1);
-	OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) & (ONE_BIT));
-#else
-	PDEBUG("%s() setting %d data lines\n",__FUNCTION__, 4);
-	OMAP_HSMMC_WRITE(HCTL, OMAP_HSMMC_READ(HCTL) | (1 << 1));//DTW 4 bits - p. 3650
-#endif
-	
-	/* send the init sequence. 80 clocks of synchronization in the SDIO */
-	//doesn't match p. 3601,3617 - obc
-	OMAP_HSMMC_WRITE( CON, OMAP_HSMMC_READ(CON) | INIT_STREAM);
-	OMAP_HSMMC_SEND_COMMAND( 0, 0);
-	status = sdiodrv_poll_status(OMAP_HSMMC_STAT, CC, MMC_TIMEOUT_MS);
-	if (!(status & CC)) {
-		PERR("sdioDrv_InitHw() SDIO Command error status = 0x%x\n", status);
-		rc = -1;
-		goto err;
+	else if ( pdev->id == 2 ) {
+		/* MMC3 */
+		TIWLAN_MMC_CONTROLLER_BASE_ADDR	= OMAP_HSMMC3_BASE;
+		TIWLAN_MMC_DMA_TX = OMAP34XX_DMA_MMC3_TX;
+		TIWLAN_MMC_DMA_RX = OMAP34XX_DMA_MMC3_RX;
 	}
-	OMAP_HSMMC_WRITE(CON, OMAP_HSMMC_READ(CON) & ~INIT_STREAM);
 
-	/* Disabling clocks for now */
-	sdioDrv_clk_disable();
+	/* inactivity timer initialization*/
+	init_timer(&g_drv.inact_timer);
+	g_drv.inact_timer.function = sdioDrv_inact_timer;
+	g_drv.inact_timer_running = 0;
 
 	return 0;
 err:

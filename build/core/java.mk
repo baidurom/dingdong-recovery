@@ -1,12 +1,60 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+#
+# The following software/firmware and/or related documentation ("MediaTek Software")
+# have been modified by MediaTek Inc. All revisions are subject to any receiver's
+# applicable license agreements with MediaTek Inc.
+
+
 # Requires:
 # LOCAL_MODULE_SUFFIX
 # LOCAL_MODULE_CLASS
 # all_res_assets
 
+ifeq ($(TARGET_BUILD_PDK),true)
+ifeq ($(TARGET_BUILD_PDK_JAVA_PLATFORM),)
+# LOCAL_SDK not defined or set to current
+ifeq ($(filter-out current,$(LOCAL_SDK_VERSION)),)
+LOCAL_SDK_VERSION := $(PDK_BUILD_SDK_VERSION)
+endif
+endif # !PDK_JAVA
+endif #PDK
+
+
 # Make sure there's something to build.
 # It's possible to build a package that doesn't contain any classes.
-ifeq (,$(strip $(LOCAL_SRC_FILES)$(all_res_assets)))
-$(error $(LOCAL_PATH): Target java module does not define any source or resource files)
+# LOCAL_SOURCE_FILES_ALL_GENERATED is set only if the module does not have static source files,
+# but generated source files in its LOCAL_INTERMEDIATE_SOURCE_DIR.
+# You have to set up the dependency in some other way.
+ifeq (,$(strip $(LOCAL_SRC_FILES)$(all_res_assets)$(LOCAL_STATIC_JAVA_LIBRARIES))$(filter true,$(LOCAL_SOURCE_FILES_ALL_GENERATED)))
+$(warning $(LOCAL_PATH): Target java module does not define any source or resource files)
 endif
 
 LOCAL_NO_STANDARD_LIBRARIES:=$(strip $(LOCAL_NO_STANDARD_LIBRARIES))
@@ -20,8 +68,9 @@ ifneq ($(LOCAL_SDK_VERSION),)
       $(error $(LOCAL_PATH): Invalid LOCAL_SDK_VERSION '$(LOCAL_SDK_VERSION)' \
              Choices are: $(TARGET_AVAILABLE_SDK_VERSIONS))
     else
-      ifeq ($(LOCAL_SDK_VERSION),current)
-        LOCAL_JAVA_LIBRARIES := android_stubs_$(LOCAL_SDK_VERSION) $(LOCAL_JAVA_LIBRARIES)
+      ifeq ($(LOCAL_SDK_VERSION)$(TARGET_BUILD_APPS),current)
+        # Use android_stubs_current if LOCAL_SDK_VERSION is current and no TARGET_BUILD_APPS.
+        LOCAL_JAVA_LIBRARIES := android_stubs_current $(LOCAL_JAVA_LIBRARIES)
       else
         LOCAL_JAVA_LIBRARIES := sdk_v$(LOCAL_SDK_VERSION) $(LOCAL_JAVA_LIBRARIES)
       endif
@@ -29,7 +78,13 @@ ifneq ($(LOCAL_SDK_VERSION),)
   endif
 else
   ifneq ($(LOCAL_NO_STANDARD_LIBRARIES),true)
-    LOCAL_JAVA_LIBRARIES := core core-junit ext framework filterfw $(LOCAL_JAVA_LIBRARIES)
+    LOCAL_JAVA_LIBRARIES := core core-junit ext framework $(LOCAL_JAVA_LIBRARIES)
+#    ifneq ($(filter mediatek-common,$(ALL_MODULES)),)
+      LOCAL_JAVA_LIBRARIES := mediatek-common $(LOCAL_JAVA_LIBRARIES)
+#    endif
+#    ifneq ($(filter secondary-framework,$(ALL_MODULES)),)
+      LOCAL_JAVA_LIBRARIES := secondary-framework $(LOCAL_JAVA_LIBRARIES)
+#    endif
   endif
 endif
 
@@ -61,14 +116,8 @@ endif
 intermediates := $(call local-intermediates-dir)
 intermediates.COMMON := $(call local-intermediates-dir,COMMON)
 
-# Emma source code coverage
-ifneq ($(EMMA_INSTRUMENT),true)
-LOCAL_NO_EMMA_INSTRUMENT := true
-LOCAL_NO_EMMA_COMPILE := true
-endif
-
 # Choose leaf name for the compiled jar file.
-ifneq ($(LOCAL_NO_EMMA_COMPILE),true)
+ifeq ($(LOCAL_EMMA_INSTRUMENT),true)
 full_classes_compiled_jar_leaf := classes-no-debug-var.jar
 built_dex_intermediate_leaf := classes-no-local.dex
 else
@@ -125,8 +174,9 @@ LOCAL_INTERMEDIATE_SOURCE_DIR := $(intermediates.COMMON)/src
 
 ###############################################################
 ## .rs files: RenderScript sources to .java files and .bc files
+## .fs files: Filterscript sources to .java files and .bc files
 ###############################################################
-renderscript_sources := $(filter %.rs,$(LOCAL_SRC_FILES))
+renderscript_sources := $(filter %.rs %.fs,$(LOCAL_SRC_FILES))
 # Because names of the java files from RenderScript are unknown until the
 # .rs file(s) are compiled, we have to depend on a timestamp file.
 RenderScript_file_stamp :=
@@ -152,16 +202,22 @@ ifeq ($(LOCAL_RENDERSCRIPT_CC),)
 LOCAL_RENDERSCRIPT_CC := $(LLVM_RS_CC)
 endif
 
+# Turn on all warnings and warnings as errors for RS compiles.
+# This can be disabled with LOCAL_RENDERSCRIPT_FLAGS := -Wno-error
+renderscript_flags := -Wall -Werror
+renderscript_flags += $(LOCAL_RENDERSCRIPT_FLAGS)
+
 # prepend the RenderScript system include path
-ifneq ($(filter-out current,$(LOCAL_SDK_VERSION)),)
+ifneq ($(filter-out current,$(LOCAL_SDK_VERSION))$(if $(TARGET_BUILD_APPS),$(filter current,$(LOCAL_SDK_VERSION))),)
+# if a numeric LOCAL_SDK_VERSION, or current LOCAL_SDK_VERSION with TARGET_BUILD_APPS
 LOCAL_RENDERSCRIPT_INCLUDES := \
-    $(HISTORICAL_SDK_VERSIONS_ROOT)/$(LOCAL_SDK_VERSION)/renderscript/clang-include \
-    $(HISTORICAL_SDK_VERSIONS_ROOT)/$(LOCAL_SDK_VERSION)/renderscript/include \
+    $(HISTORICAL_SDK_VERSIONS_ROOT)/renderscript/clang-include \
+    $(HISTORICAL_SDK_VERSIONS_ROOT)/renderscript/include \
     $(LOCAL_RENDERSCRIPT_INCLUDES)
 else
 LOCAL_RENDERSCRIPT_INCLUDES := \
     $(TOPDIR)external/clang/lib/Headers \
-    $(TOPDIR)frameworks/base/libs/rs/scriptc \
+    $(TOPDIR)frameworks/rs/scriptc \
     $(LOCAL_RENDERSCRIPT_INCLUDES)
 endif
 
@@ -171,6 +227,7 @@ endif
 
 $(RenderScript_file_stamp): PRIVATE_RS_INCLUDES := $(LOCAL_RENDERSCRIPT_INCLUDES)
 $(RenderScript_file_stamp): PRIVATE_RS_CC := $(LOCAL_RENDERSCRIPT_CC)
+$(RenderScript_file_stamp): PRIVATE_RS_FLAGS := $(renderscript_flags)
 $(RenderScript_file_stamp): PRIVATE_RS_SOURCE_FILES := $(renderscript_sources_fullpath)
 # By putting the generated java files into $(LOCAL_INTERMEDIATE_SOURCE_DIR), they will be
 # automatically found by the java compiling function transform-java-to-classes.jar.
@@ -181,7 +238,7 @@ $(RenderScript_file_stamp): $(renderscript_sources_fullpath) $(LOCAL_RENDERSCRIP
 
 # include the dependency files (.d) generated by llvm-rs-cc.
 renderscript_generated_dep_files := $(addprefix $(renderscript_intermediate)/, \
-    $(patsubst %.rs,%.d, $(notdir $(renderscript_sources))))
+    $(patsubst %.fs,%.d, $(patsubst %.rs,%.d, $(notdir $(renderscript_sources)))))
 -include $(renderscript_generated_dep_files)
 
 LOCAL_INTERMEDIATE_TARGETS += $(RenderScript_file_stamp)
@@ -214,7 +271,7 @@ $(cleantarget): PRIVATE_CLEAN_FILES += $(intermediates.COMMON)
 # If the module includes java code (i.e., it's not framework-res), compile it.
 full_classes_jar :=
 built_dex :=
-ifneq (,$(strip $(all_java_sources)))
+ifneq (,$(strip $(all_java_sources)$(full_static_java_libs))$(filter true,$(LOCAL_SOURCE_FILES_ALL_GENERATED)))
 
 # If LOCAL_BUILT_MODULE_STEM wasn't overridden by our caller,
 # full_classes_jar will be the same module as LOCAL_BUILT_MODULE.
@@ -242,7 +299,22 @@ ALL_MODULES.$(LOCAL_MODULE).STUBS := $(full_classes_stubs_jar)
 # This intentionally depends on java_sources, not all_java_sources.
 # Deps for generated source files must be handled separately,
 # via deps on the target that generates the sources.
+# Mediatek: code injection
+ifneq ($(strip $(MTK_PLATFORM)),)
+  ifeq ($(LOCAL_JAVASSIST_ENABLED), true)
+  $(full_classes_compiled_jar): $(JPE_TOOL)
+  endif
+  $(full_classes_compiled_jar): PRIVATE_JAVASSIST_ENABLED := $(LOCAL_JAVASSIST_ENABLED)
+  $(full_classes_compiled_jar): PRIVATE_JAVASSIST_OPTIONS := $(LOCAL_JAVASSIST_OPTIONS)
+endif
+# Mediatek: ProGuard for partial classes
+$(full_classes_compiled_jar): PRIVATE_EXCLUDED_JAVA_CLASSES:=$(strip $(LOCAL_EXCLUDED_JAVA_CLASSES))
 $(full_classes_compiled_jar): PRIVATE_JAVACFLAGS := $(LOCAL_JAVACFLAGS)
+$(full_classes_compiled_jar): PRIVATE_JAR_EXCLUDE_FILES := $(LOCAL_JAR_EXCLUDE_FILES)
+$(full_classes_compiled_jar): PRIVATE_DONT_DELETE_JAR_META_INF := $(LOCAL_DONT_DELETE_JAR_META_INF)
+# Meidatek: move to PorGuard setting block
+#$(full_classes_compiled_jar): PRIVATE_PROGUARD_SOURCE := $(LOCAL_PROGUARD_SOURCE)
+$(full_classes_compiled_jar): PRIVATE_SECONDARY_JAVA_CLASSES := $(LOCAL_SECONDARY_JAVA_CLASSES)
 $(full_classes_compiled_jar): $(java_sources) $(java_resource_sources) $(full_java_lib_deps) $(jar_manifest_file) \
 	$(RenderScript_file_stamp) $(proto_java_sources_file_stamp)
 	$(transform-java-to-classes.jar)
@@ -270,13 +342,7 @@ $(full_classes_jarjar_jar): $(full_classes_compiled_jar) | $(ACP)
 	$(hide) $(ACP) -fp $< $@
 endif
 
-ifeq ($(LOCAL_IS_STATIC_JAVA_LIBRARY),true)
-# Skip adding emma instrumentation to class files if this is a static library,
-# since it will be instrumented by the package that includes it
-LOCAL_NO_EMMA_INSTRUMENT:= true
-endif
-
-ifneq ($(LOCAL_NO_EMMA_INSTRUMENT),true)
+ifeq ($(LOCAL_EMMA_INSTRUMENT),true)
 $(full_classes_emma_jar): PRIVATE_EMMA_COVERAGE_FILE := $(intermediates.COMMON)/coverage.em
 $(full_classes_emma_jar): PRIVATE_EMMA_INTERMEDIATES_DIR := $(emma_intermediates_dir)
 # module level coverage filter can be defined using LOCAL_EMMA_COVERAGE_FILTER
@@ -292,10 +358,7 @@ endif
 # $(full_classes_emma_jar)
 $(full_classes_emma_jar): $(full_classes_jarjar_jar) | $(EMMA_JAR)
 	$(transform-classes.jar-to-emma)
-$(PRIVATE_EMMA_COVERAGE_FILE): $(full_classes_emma_jar)
 
-# tell proguard to load emma jar
-LOCAL_PROGUARD_FLAGS := $(LOCAL_PROGUARD_FLAGS) $(addprefix -libraryjars ,$(EMMA_JAR))
 else
 $(full_classes_emma_jar): $(full_classes_jarjar_jar) | $(ACP)
 	@echo Copying: $@
@@ -307,50 +370,111 @@ $(full_classes_jar): $(full_classes_emma_jar) | $(ACP)
 	@echo Copying: $@
 	$(hide) $(ACP) -fp $< $@
 
+# Check xlog/ALE flag
+ifeq ($(LOCAL_ALE_ENABLED),true)
+$(built_dex_intermediate): PRIVATE_ALE_ENABLED := true
+endif
+
 # Run proguard if necessary, otherwise just copy the file.
 proguard_dictionary := $(intermediates.COMMON)/proguard_dictionary
 # Proguard doesn't like a class in both library and the jar to be processed.
-proguard_full_java_libs := $(filter-out $(full_static_java_libs),$(full_java_libs))
+proguard_full_java_libs := $(filter-out $(full_static_java_libs) $(ARTIFACT_DIR)/cls,$(full_java_libs))
 proguard_flags := $(addprefix -libraryjars ,$(proguard_full_java_libs)) \
-                  -include $(BUILD_SYSTEM)/proguard.flags \
                   -forceprocessing \
                   -printmapping $(proguard_dictionary)
+ifeq ($(LOCAL_EMMA_INSTRUMENT),true)
+proguard_flags += -include $(BUILD_SYSTEM)/proguard.emma.flags
+endif
 # If this is a test package, add proguard keep flags for tests.
 ifneq ($(strip $(LOCAL_INSTRUMENTATION_FOR)$(filter tests,$(LOCAL_MODULE_TAGS))$(filter android.test.runner,$(LOCAL_JAVA_LIBRARIES))),)
-proguard_flags := $(proguard_flags) -include $(BUILD_SYSTEM)/proguard_tests.flags
+proguard_flags := $(proguard_flags) -include $(BUILD_SYSTEM)/proguard.flags -include $(BUILD_SYSTEM)/proguard_tests.flags
+# disable classes base proguard
+LOCAL_PROGUARD_SOURCE :=
 endif # test package
 
 ifneq ($(LOCAL_PROGUARD_ENABLED),)
 ifeq ($(LOCAL_PROGUARD_ENABLED),full)
     # full
-    proguard_flags += -dontobfuscate
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard.flags
 else
 ifeq ($(LOCAL_PROGUARD_ENABLED),optonly)
     # optonly
-    proguard_flags += -dontobfuscate
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard.flags -dontobfuscate
+else
+ifeq ($(LOCAL_PROGUARD_ENABLED),protected-extreme)
+    # protected-high
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard_protected_extreme.flags
+else
+ifeq ($(LOCAL_PROGUARD_ENABLED),protected-high)
+    # protected-high
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard_protected_high.flags
+else
+ifeq ($(LOCAL_PROGUARD_ENABLED),protected-medium)
+    # protected-medium
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard_protected_medium.flags
+else
+ifeq ($(LOCAL_PROGUARD_ENABLED),protected-low)
+    # protected-low
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard_protected_low.flags
+else
+ifeq ($(LOCAL_PROGUARD_ENABLED),protected)
+    proguard_flags += -include $(BUILD_SYSTEM)/proguard_protected.flags
 else
 ifeq ($(LOCAL_PROGUARD_ENABLED),custom)
     # custom
-    proguard_flags += -dontobfuscate
-else
-ifeq ($(LOCAL_PROGUARD_ENABLED),obfuscate)
-    # obfuscate
-ifneq ($(TARGET_BUILD_VARIANT),user)
-    proguard_flags += -dontobfuscate
-endif
+    
 else
     $(warning while processing: $(LOCAL_MODULE))
     $(error invalid value for LOCAL_PROGUARD_ENABLED: $(LOCAL_PROGUARD_ENABLED))
-endif # obfuscate
 endif # custom
+endif  #  protected
+endif # protected-low
+endif # protected-medium
+endif # protected-high
+endif # protected-extreme
 endif # optonly
 endif # full
 endif # LOCAL_PROGUARD_ENABLED
 
+LOCAL_PROGUARD_SOURCE:=$(strip $(LOCAL_PROGUARD_SOURCE))
+ifneq ($(LOCAL_PROGUARD_ENABLED),)
+ifeq ($(LOCAL_PROGUARD_SOURCE),)
+    LOCAL_PROGUARD_SOURCE:=jar
+endif
+ifeq ($(LOCAL_PROGUARD_SOURCE),jar)
+    # jar
+else
+ifeq ($(LOCAL_PROGUARD_SOURCE),javaclassfile)
+    # java class file
+else
+    $(warning while processing: $(LOCAL_MODULE))
+    $(error invalid value for LOCAL_PROGUARD_SOURCE: $(LOCAL_PROGUARD_SOURCE))
+endif # javaclassfile
+endif #jar
+else
+    LOCAL_PROGUARD_SOURCE:=
+endif
+
+$(full_classes_compiled_jar): PRIVATE_PROGUARD_SOURCE := \
+                              $(if $(filter jar,$(LOCAL_PROGUARD_SOURCE)),,$(LOCAL_PROGUARD_SOURCE))
+
 proguard_flag_files := $(addprefix $(LOCAL_PATH)/, $(LOCAL_PROGUARD_FLAG_FILES))
 LOCAL_PROGUARD_FLAGS += $(addprefix -include , $(proguard_flag_files))
+$(full_classes_compiled_jar): PRIVATE_PROGUARD_FLAGS := $(proguard_flags) $(LOCAL_PROGUARD_FLAGS)
 
-$(full_classes_proguard_jar): PRIVATE_PROGUARD_ENABLED:=$(LOCAL_PROGUARD_ENABLED)
+
+ifneq ($(LOCAL_PROGUARD_SOURCE),javaclassfile)
+    $(full_classes_proguard_jar): PRIVATE_PROGUARD_ENABLED:=$(LOCAL_PROGUARD_ENABLED)
+else
+    $(full_classes_proguard_jar): PRIVATE_PROGUARD_ENABLED:=
+endif
+
+ifneq ($(LOCAL_SECONDARY_JAVA_CLASSES),)
+ifneq ($(PRIVATE_PROGUARD_ENABLED),)
+LOCAL_PROGUARD_FLAGS := $(LOCAL_PROGUARD_FLAGS) $(addprefix -libraryjars ,$(intermediates.COMMON)/temp.jar)
+endif
+endif
+
 $(full_classes_proguard_jar): PRIVATE_PROGUARD_FLAGS := $(proguard_flags) $(LOCAL_PROGUARD_FLAGS)
 $(full_classes_proguard_jar): PRIVATE_INSTRUMENTATION_FOR:=$(strip $(LOCAL_INSTRUMENTATION_FOR))
 $(full_classes_proguard_jar) : $(full_classes_jar) $(proguard_flag_files) | $(ACP) $(PROGUARD)
@@ -368,7 +492,7 @@ $(built_dex_intermediate): PRIVATE_DX_FLAGS := $(LOCAL_DX_FLAGS)
 # The workaround here is to build different dex file here based on emma switch
 # then later copy into classes.dex. When emma is on, dx is run with --no-locals
 # option to remove local variable information
-ifneq ($(LOCAL_NO_EMMA_COMPILE),true)
+ifeq ($(LOCAL_EMMA_INSTRUMENT),true)
 $(built_dex_intermediate): PRIVATE_DX_FLAGS += --no-locals
 endif
 $(built_dex_intermediate): $(full_classes_proguard_jar) $(DX)

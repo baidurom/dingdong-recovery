@@ -85,7 +85,17 @@ enum {
     // request FRAME and METADATA. Or the apps can request only FRAME or only
     // METADATA.
     CAMERA_MSG_PREVIEW_METADATA = 0x0400, // dataCallback
+    // Notify on autofocus start and stop. This is useful in continuous
+    // autofocus - FOCUS_MODE_CONTINUOUS_VIDEO and FOCUS_MODE_CONTINUOUS_PICTURE.
+    CAMERA_MSG_FOCUS_MOVE = 0x0800,       // notifyCallback
+//!+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#ifndef MTK_CAMERA_BSP_SUPPORT
     CAMERA_MSG_ALL_MSGS = 0xFFFF
+#else
+    CAMERA_MSG_ALL_MSGS         = 0xC000FFFF
+#endif
+//!-----------------------------------------------------------------------------
+
 };
 
 /** cmdType in sendCommand functions */
@@ -134,7 +144,8 @@ enum {
      * KEY_FOCUS_AREAS and KEY_METERING_AREAS have no effect.
      *
      * arg1 is the face detection type. It can be CAMERA_FACE_DETECTION_HW or
-     * CAMERA_FACE_DETECTION_SW.
+     * CAMERA_FACE_DETECTION_SW. If the type of face detection requested is not
+     * supported, the HAL must return BAD_VALUE.
      */
     CAMERA_CMD_START_FACE_DETECTION = 6,
 
@@ -142,11 +153,47 @@ enum {
      * Stop the face detection.
      */
     CAMERA_CMD_STOP_FACE_DETECTION = 7,
+
+    /**
+     * Enable/disable focus move callback (CAMERA_MSG_FOCUS_MOVE). Passing
+     * arg1 = 0 will disable, while passing arg1 = 1 will enable the callback.
+     */
+    CAMERA_CMD_ENABLE_FOCUS_MOVE_MSG = 8,
+
+    /**
+     * Ping camera service to see if camera hardware is released.
+     *
+     * When any camera method returns error, the client can use ping command
+     * to see if the camera has been taken away by other clients. If the result
+     * is NO_ERROR, it means the camera hardware is not released. If the result
+     * is not NO_ERROR, the camera has been released and the existing client
+     * can silently finish itself or show a dialog.
+     */
+    CAMERA_CMD_PING = 9,
+
+    /**
+     * Configure the number of video buffers used for recording. The intended
+     * video buffer count for recording is passed as arg1, which must be
+     * greater than 0. This command must be sent before recording is started.
+     * This command returns INVALID_OPERATION error if it is sent after video
+     * recording is started, or the command is not supported at all. This
+     * command also returns a BAD_VALUE error if the intended video buffer
+     * count is non-positive or too big to be realized.
+     */
+    CAMERA_CMD_SET_VIDEO_BUFFER_COUNT = 10,
 };
 
 /** camera fatal errors */
 enum {
     CAMERA_ERROR_UNKNOWN = 1,
+    /**
+     * Camera was released because another client has connected to the camera.
+     * The original client should call Camera::disconnect immediately after
+     * getting this notification. Otherwise, the camera will be released by
+     * camera service in a short time. The client should not call any method
+     * (except disconnect and sending CAMERA_CMD_PING) after getting this.
+     */
+    CAMERA_ERROR_RELEASED = 2,
     CAMERA_ERROR_SERVER_DIED = 100
 };
 

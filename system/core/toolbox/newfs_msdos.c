@@ -31,6 +31,7 @@ static const char rcsid[] =
 #endif /* not lint */
 
 #include <sys/param.h>
+#include <linux/kdev_t.h>
 
 #ifndef ANDROID
   #include <sys/fdcio.h>
@@ -57,6 +58,7 @@ static const char rcsid[] =
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#define MTK_SDCARDMOUNTPOINT_CHECK	1	/* it is added for checking if the sdcard is mounted when formatting */ 
 
 #define MAXU16	  0xffff	/* maximum unsigned 16-bit quantity */
 #define BPN	  4		/* bits per nibble */
@@ -431,7 +433,8 @@ newfs_msdos_main(int argc, char *argv[])
 		bpb.spc = 8;
 	    else if (bpb.bsec <= (1<<19)) /* 256M -> 8k */
 		bpb.spc = 16;
-	    else if (bpb.bsec <= (1<<21)) /* 1G -> 16k */
+	    else if (bpb.bsec <= (1<<22)) /* 2G -> 16k, some versions of windows
+					     require a minimum of 65527 clusters */
 		bpb.spc = 32;
 	    else
 		bpb.spc = 64;		/* otherwise 32k */
@@ -727,7 +730,189 @@ newfs_msdos_main(int argc, char *argv[])
     }
     return 0;
 }
+#ifdef MTK_SDCARDMOUNTPOINT_CHECK
 
+static int get_symbolic_link( const char *dev, char **link)
+{
+	FILE* fp;
+	char rd_line[128];
+	char buf[255] = {0};
+	char * pch;
+
+	//*link[0] = '\0';
+	strcpy(rd_line, "ls -l ");
+	strcat(rd_line, dev);
+	if ((fp = popen(rd_line, "r")) == NULL)
+	{
+		warnx("could not find the symbolic link\n");
+		return -1;
+	}else
+	{
+		while   (fgets(buf,   255,   fp)   !=   NULL)
+		{
+			pch = strtok(buf," ");
+			while (pch != NULL)
+			{
+				*link = pch;
+				pch = strtok (NULL, " ");
+			}   
+		}
+	}
+	
+	pclose(fp);
+	if( *link[0] == 0 )
+		return -1;
+	else
+	{
+		*link = strtok(*link, " \n");
+		printf( "symbolic_link:%s\n", *link);
+		return 1;
+	}
+}
+
+static int get_dev_major_minor( const char *dev, int *major, int *minor)
+{
+	struct stat s;
+	char linkto[256] = {0};
+        int len;
+
+	if(lstat(dev, &s) < 0) {
+		printf("%s:lstat error\n", dev);
+        	return -1;
+    	}
+	while( linkto[0] == 0)
+	{
+		if( (s.st_mode & S_IFMT) == S_IFCHR || (s.st_mode & S_IFMT) == S_IFBLK)
+		{
+			printf("major:%d minor:%d\n",(int) MAJOR(s.st_rdev), (int) MINOR(s.st_rdev));
+			*major = (int) MAJOR(s.st_rdev);
+			*minor = (int) MINOR(s.st_rdev);
+			return 1;
+		}
+		else if( (s.st_mode & S_IFMT) == S_IFLNK )
+		{
+			len = readlink(dev, linkto, 256);
+		        if(len < 0)
+		        {
+		        	printf("readlink error");
+				return -1;
+		        }
+
+		        if(len > 255) {
+				linkto[252] = '.';
+				linkto[253] = '.';
+				linkto[254] = '.';
+				linkto[255] = 0;
+				return -1;
+		        } else {
+				linkto[len] = 0;
+			}
+			printf("linkto:%s\n",linkto);
+		}else
+		{
+			printf("no major minor\n");
+			return -1;
+		}
+		if(lstat(linkto, &s) < 0) {
+			printf("%s:lstat error\n", dev);
+        		return -1;
+    		}
+		linkto[0] = 0;
+	}
+	
+	return 1;
+        
+}
+static int get_mounts_dev_dir(const char *arg, char *dir)
+{
+	FILE *f;
+	char mount_dev[256];
+	char mount_dir[256];
+	char mount_type[256];
+	char mount_opts[256];
+	int mount_freq;
+	int mount_passno;
+	int match;
+	char rd_line[128];
+	char buf[255] = {0};
+	int major=0, minor=0, mount_major=-1, mount_minor=-1;
+
+	
+	get_dev_major_minor(arg, &major, &minor);
+
+	
+	/**
+	 **	parse the mounts to iterate all the mount points
+	 **
+	 **/
+	f = fopen("/proc/mounts", "r");
+	if (!f) {
+		warnx("could not open /proc/mounts\n");
+		return -1;
+	}
+	do {
+		match = fscanf(f, "%255s %255s %255s %255s %d %d\n",
+		mount_dev, mount_dir, mount_type,
+		mount_opts, &mount_freq, &mount_passno);
+		
+		printf("mount_dev:%s\n", mount_dev);
+		mount_dev[255] = 0;
+		mount_dir[255] = 0;
+		mount_type[255] = 0;
+		mount_opts[255] = 0;
+		if (match == 6 && strcmp(arg, mount_dev) == 0 ) 
+		{
+			//*dir = strdup(mount_dir);
+			strcpy(dir, mount_dir);
+			fclose(f);
+			return 1;
+		}
+		//check the major & minor number
+		if (match == 6 && get_dev_major_minor( mount_dev, &mount_major, &mount_minor) == 1 &&
+		major == mount_major && minor == mount_minor) 
+		{
+			//*dir = strdup(mount_dir);
+			strcpy(dir, mount_dir);
+			fclose(f);
+			return 1;
+		}
+	} while (match != EOF);
+
+	fclose(f);
+	return -1;
+}
+int checkfilestat(int argc,char *argv[])
+{
+	struct stat s;
+	int length;
+	char *path;
+
+	if( argc == 2 )
+		path = argv[1];
+	else
+	{
+		printf("error\n");
+		return 0;
+	}
+	if (lstat(path, &s) < 0)
+	{
+		printf("errror1\n");
+		return 0;
+	}
+	printf("%x\n", s.st_mode);
+	if ((s.st_mode & S_IFMT) != S_IFLNK)
+		return 0;
+
+// we have a symlink
+/*   length = readlink(path, link, max- 1);
+ if (length <= 0)
+ return 0;
+link[length] = 0;
+*/   
+	return 0;
+}
+
+#endif
 /*
  * Exit with error if file system is mounted.
  */
@@ -738,9 +923,18 @@ check_mounted(const char *fname, mode_t mode)
     const char *s1, *s2;
     size_t len;
     int n, r;
+    char dir[256];
 
 #ifdef ANDROID
-    warnx("Skipping mount checks");
+#ifdef MTK_SDCARDMOUNTPOINT_CHECK
+	printf("Mount checks %s\n", fname);
+	if( get_mounts_dev_dir(fname, dir) == 1)
+	{
+		errx(1, "%s is mounted on %s", fname, dir);
+	}
+#else
+	warnx("Skipping mount checks");
+#endif
 #else
     if (!(n = getmntinfo(&mp, MNT_NOWAIT)))
 	err(1, "getmntinfo");

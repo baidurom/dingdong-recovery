@@ -964,7 +964,7 @@ void RxQueue_ReceivePacket (TI_HANDLE hRxQueue, const void * pBuffer)
 
     }
 
-    TRACE1(pRxQueue->hReport, REPORT_SEVERITY_ERROR, "RxQueue_ReceivePacket: unknow type tag. tag = %d\n", pRxParams->packet_class_tag);
+    TRACE1(pRxQueue->hReport, REPORT_SEVERITY_INFORMATION, "RxQueue_ReceivePacket: unknow type tag. tag = %d\n", pRxParams->packet_class_tag);
 
     RxQueue_PassPacket (pRxQueue, tStatus, pBuffer);
 

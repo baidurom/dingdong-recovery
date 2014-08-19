@@ -39,6 +39,7 @@
 
 #include <cutils/uio.h>
 #include <cutils/logd.h>
+#include <cutils/alelog.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,7 +48,7 @@ extern "C" {
 // ---------------------------------------------------------------------
 
 /*
- * Normally we strip LOGV (VERBOSE messages) from release builds.
+ * Normally we strip ALOGV (VERBOSE messages) from release builds.
  * You can modify this (for example with "#define LOG_NDEBUG 0"
  * at the top of your source file) to change that behavior.
  */
@@ -73,11 +74,135 @@ extern "C" {
 /*
  * Simplified macro to send a verbose log message using the current LOG_TAG.
  */
+#ifndef ALOGV
+#if LOG_NDEBUG
+#define ALOGV(...)   ((void)0)
+#else
+#define ALOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#endif
+#endif
+
+#define CONDITION(cond)     (__builtin_expect((cond)!=0, 0))
+
+#ifndef ALOGV_IF
+#if LOG_NDEBUG
+#define ALOGV_IF(cond, ...)   ((void)0)
+#else
+#define ALOGV_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+#endif
+
+/*
+ * Simplified macro to send a debug log message using the current LOG_TAG.
+ */
+#ifndef ALOGD
+#define ALOGD(...) ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef ALOGD_IF
+#define ALOGD_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+/*
+ * Simplified macro to send an info log message using the current LOG_TAG.
+ */
+#ifndef ALOGI
+#define ALOGI(...) ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef ALOGI_IF
+#define ALOGI_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+/*
+ * Simplified macro to send a warning log message using the current LOG_TAG.
+ */
+#ifndef ALOGW
+#define ALOGW(...) ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef ALOGW_IF
+#define ALOGW_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+/*
+ * Simplified macro to send an error log message using the current LOG_TAG.
+ */
+#ifndef ALOGE
+#define ALOGE(...) ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__))
+#endif
+
+#ifndef ALOGE_IF
+#define ALOGE_IF(cond, ...) \
+    ( (CONDITION(cond)) \
+    ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
+    : (void)0 )
+#endif
+
+// ---------------------------------------------------------------------
+
+/*
+ * Conditional based on whether the current LOG_TAG is enabled at
+ * verbose priority.
+ */
+#ifndef IF_ALOGV
+#if LOG_NDEBUG
+#define IF_ALOGV() if (false)
+#else
+#define IF_ALOGV() IF_ALOG(LOG_VERBOSE, LOG_TAG)
+#endif
+#endif
+
+/*
+ * Conditional based on whether the current LOG_TAG is enabled at
+ * debug priority.
+ */
+#ifndef IF_ALOGD
+#define IF_ALOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
+#endif
+
+/*
+ * Conditional based on whether the current LOG_TAG is enabled at
+ * info priority.
+ */
+#ifndef IF_ALOGI
+#define IF_ALOGI() IF_ALOG(LOG_INFO, LOG_TAG)
+#endif
+
+/*
+ * Conditional based on whether the current LOG_TAG is enabled at
+ * warn priority.
+ */
+#ifndef IF_ALOGW
+#define IF_ALOGW() IF_ALOG(LOG_WARN, LOG_TAG)
+#endif
+
+/*
+ * Conditional based on whether the current LOG_TAG is enabled at
+ * error priority.
+ */
+#ifndef IF_ALOGE
+#define IF_ALOGE() IF_ALOG(LOG_ERROR, LOG_TAG)
+#endif
+
+// added LOGE,LOGI,LOGW, begin
 #ifndef LOGV
 #if LOG_NDEBUG
 #define LOGV(...)   ((void)0)
 #else
-#define LOGV(...) ((void)LOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
+#define LOGV(...) ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__))
 #endif
 #endif
 
@@ -89,7 +214,7 @@ extern "C" {
 #else
 #define LOGV_IF(cond, ...) \
     ( (CONDITION(cond)) \
-    ? ((void)LOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
+    ? ((void)ALOG(LOG_VERBOSE, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
 #endif
@@ -98,13 +223,13 @@ extern "C" {
  * Simplified macro to send a debug log message using the current LOG_TAG.
  */
 #ifndef LOGD
-#define LOGD(...) ((void)LOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
+#define LOGD(...) ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__))
 #endif
 
 #ifndef LOGD_IF
 #define LOGD_IF(cond, ...) \
     ( (CONDITION(cond)) \
-    ? ((void)LOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
+    ? ((void)ALOG(LOG_DEBUG, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
 
@@ -112,13 +237,13 @@ extern "C" {
  * Simplified macro to send an info log message using the current LOG_TAG.
  */
 #ifndef LOGI
-#define LOGI(...) ((void)LOG(LOG_INFO, LOG_TAG, __VA_ARGS__))
+#define LOGI(...) ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__))
 #endif
 
 #ifndef LOGI_IF
 #define LOGI_IF(cond, ...) \
     ( (CONDITION(cond)) \
-    ? ((void)LOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
+    ? ((void)ALOG(LOG_INFO, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
 
@@ -126,13 +251,13 @@ extern "C" {
  * Simplified macro to send a warning log message using the current LOG_TAG.
  */
 #ifndef LOGW
-#define LOGW(...) ((void)LOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
+#define LOGW(...) ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__))
 #endif
 
 #ifndef LOGW_IF
 #define LOGW_IF(cond, ...) \
     ( (CONDITION(cond)) \
-    ? ((void)LOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
+    ? ((void)ALOG(LOG_WARN, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
 
@@ -140,13 +265,13 @@ extern "C" {
  * Simplified macro to send an error log message using the current LOG_TAG.
  */
 #ifndef LOGE
-#define LOGE(...) ((void)LOG(LOG_ERROR, LOG_TAG, __VA_ARGS__))
+#define LOGE(...) ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__))
 #endif
 
 #ifndef LOGE_IF
 #define LOGE_IF(cond, ...) \
     ( (CONDITION(cond)) \
-    ? ((void)LOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
+    ? ((void)ALOG(LOG_ERROR, LOG_TAG, __VA_ARGS__)) \
     : (void)0 )
 #endif
 
@@ -160,7 +285,7 @@ extern "C" {
 #if LOG_NDEBUG
 #define IF_LOGV() if (false)
 #else
-#define IF_LOGV() IF_LOG(LOG_VERBOSE, LOG_TAG)
+#define IF_LOGV() IF_ALOG(LOG_VERBOSE, LOG_TAG)
 #endif
 #endif
 
@@ -169,7 +294,7 @@ extern "C" {
  * debug priority.
  */
 #ifndef IF_LOGD
-#define IF_LOGD() IF_LOG(LOG_DEBUG, LOG_TAG)
+#define IF_LOGD() IF_ALOG(LOG_DEBUG, LOG_TAG)
 #endif
 
 /*
@@ -177,7 +302,7 @@ extern "C" {
  * info priority.
  */
 #ifndef IF_LOGI
-#define IF_LOGI() IF_LOG(LOG_INFO, LOG_TAG)
+#define IF_LOGI() IF_ALOG(LOG_INFO, LOG_TAG)
 #endif
 
 /*
@@ -185,7 +310,7 @@ extern "C" {
  * warn priority.
  */
 #ifndef IF_LOGW
-#define IF_LOGW() IF_LOG(LOG_WARN, LOG_TAG)
+#define IF_LOGW() IF_ALOG(LOG_WARN, LOG_TAG)
 #endif
 
 /*
@@ -193,10 +318,9 @@ extern "C" {
  * error priority.
  */
 #ifndef IF_LOGE
-#define IF_LOGE() IF_LOG(LOG_ERROR, LOG_TAG)
+#define IF_LOGE() IF_ALOG(LOG_ERROR, LOG_TAG)
 #endif
-
-
+//add end
 // ---------------------------------------------------------------------
 
 /*
@@ -329,9 +453,9 @@ extern "C" {
  * Assertion that generates a log message when the assertion fails.
  * Stripped out of release builds.  Uses the current LOG_TAG.
  */
-#ifndef LOG_ASSERT
-#define LOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
-//#define LOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
+#ifndef ALOG_ASSERT
+#define ALOG_ASSERT(cond, ...) LOG_FATAL_IF(!(cond), ## __VA_ARGS__)
+//#define ALOG_ASSERT(cond) LOG_FATAL_IF(!(cond), "Assertion failed: " #cond)
 #endif
 
 // ---------------------------------------------------------------------
@@ -340,12 +464,12 @@ extern "C" {
  * Basic log message macro.
  *
  * Example:
- *  LOG(LOG_WARN, NULL, "Failed with error %d", errno);
+ *  ALOG(LOG_WARN, NULL, "Failed with error %d", errno);
  *
  * The second argument may be NULL or "" to indicate the "global" tag.
  */
-#ifndef LOG
-#define LOG(priority, tag, ...) \
+#ifndef ALOG
+#define ALOG(priority, tag, ...) \
     LOG_PRI(ANDROID_##priority, tag, __VA_ARGS__)
 #endif
 
@@ -353,8 +477,23 @@ extern "C" {
  * Log macro that allows you to specify a number for the priority.
  */
 #ifndef LOG_PRI
-#define LOG_PRI(priority, tag, ...) \
+#ifndef HAVE_ALE_FEATURE
+#define LOG_PRI(priority, tag, ...)		\
     android_printLog(priority, tag, __VA_ARGS__)
+#else
+#define LOG_PRI(priority, tag, ...)		\
+    ale_log_print(LOG_ID_MAIN, priority, tag, __VA_ARGS__)
+#endif
+#endif
+
+#ifndef SLOG_PRI
+#ifndef HAVE_ALE_FEATURE
+#define SLOG_PRI(priority, tag, ...)		\
+    __android_log_buf_print(LOG_ID_SYSTEM, priority, tag, __VA_ARGS__)
+#else
+#define SLOG_PRI(priority, tag, ...)		\
+    ale_log_print(LOG_ID_SYSTEM, priority, tag, __VA_ARGS__)
+#endif
 #endif
 
 /*
@@ -368,8 +507,8 @@ extern "C" {
 /*
  * Conditional given a desired logging priority and tag.
  */
-#ifndef IF_LOG
-#define IF_LOG(priority, tag) \
+#ifndef IF_ALOG
+#define IF_ALOG(priority, tag) \
     if (android_testLog(ANDROID_##priority, tag))
 #endif
 
@@ -424,7 +563,7 @@ typedef enum {
     __android_log_vprint(prio, tag, fmt)
 
 /* XXX Macros to work around syntax errors in places where format string
- * arg is not passed to LOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
+ * arg is not passed to ALOG_ASSERT, LOG_ALWAYS_FATAL or LOG_ALWAYS_FATAL_IF
  * (happens only in debug builds).
  */
 

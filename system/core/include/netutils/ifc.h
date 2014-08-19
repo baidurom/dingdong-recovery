@@ -20,6 +20,11 @@
 #include <sys/cdefs.h>
 #include <arpa/inet.h>
 
+struct uid_err {
+    int appuid;
+	int errorNum;
+};
+
 __BEGIN_DECLS
 
 extern int ifc_init(void);
@@ -30,11 +35,16 @@ extern int ifc_get_hwaddr(const char *name, void *ptr);
 
 extern int ifc_up(const char *name);
 extern int ifc_down(const char *name);
+extern int ifc_is_up(const char *name, unsigned *isup);
 
 extern int ifc_enable(const char *ifname);
 extern int ifc_disable(const char *ifname);
 
+extern int ifc_enable_allmc(const char *name);
+extern int ifc_disable_allmc(const char *name);
+
 extern int ifc_reset_connections(const char *ifname, const int reset_mask);
+extern int ifc_reset_connection_by_uid(int uid, int error); 
 
 extern int ifc_get_addr(const char *name, in_addr_t *addr);
 extern int ifc_set_addr(const char *name, in_addr_t addr);
@@ -65,6 +75,8 @@ extern int ifc_get_info(const char *name, in_addr_t *addr, int *prefixLength,
 extern int ifc_configure(const char *ifname, in_addr_t address,
                          uint32_t prefixLength, in_addr_t gateway,
                          in_addr_t dns1, in_addr_t dns2);
+
+extern int ifc_set_throttle(const char *ifname, int rxKbps, int txKbps);
 
 __END_DECLS
 

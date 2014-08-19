@@ -7,12 +7,6 @@
 #include <semaphore.h>
 #include <pthread.h>
 
-#include <surfaceflinger/Surface.h>
-#include <surfaceflinger/ISurface.h>
-#include <surfaceflinger/ISurfaceComposer.h>
-#include <surfaceflinger/ISurfaceComposerClient.h>
-#include <surfaceflinger/SurfaceComposerClient.h>
-
 #include <camera/Camera.h>
 #include <camera/ICamera.h>
 #include <media/mediarecorder.h>

@@ -22,12 +22,31 @@
 #include <sys/time.h>
 #endif /* !FEATURE_UNIT_TEST */
 
+#include <utils/Log.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define RIL_VERSION 6     /* Current version */
-#define RIL_VERSION_MIN 2 /* Minimum RIL_VERSION supported */
+#ifdef ALOGV
+#define LOGV ALOGV
+#endif
+#ifdef ALOGD
+#define LOGD ALOGD
+#endif
+#ifdef ALOGE
+#define LOGE ALOGE
+#endif
+#ifdef ALOGI
+#define LOGI ALOGI
+#endif
+#ifdef ALOGW
+#define LOGW ALOGW
+#endif
+
+
+#define RIL_VERSION 7     /* Current version */
+#define RIL_VERSION_MIN 6 /* Minimum RIL_VERSION supported */
 
 #define CDMA_ALPHA_INFO_BUFFER_LENGTH 64
 #define CDMA_NUMBER_INFO_BUFFER_LENGTH 81
@@ -55,8 +74,25 @@ typedef enum {
                                                    location */
     RIL_E_MODE_NOT_SUPPORTED = 13,              /* HW does not support preferred network type */
     RIL_E_FDN_CHECK_FAILURE = 14,               /* command failed because recipient is not on FDN list */
-    RIL_E_ILLEGAL_SIM_OR_ME = 15                /* network selection failed due to
+    RIL_E_ILLEGAL_SIM_OR_ME = 15,                /* network selection failed due to
                                                    illegal SIM or ME */
+    // NFC SEEK start
+    RIL_E_MISSING_RESOURCE = 16,
+    RIL_E_NO_SUCH_ELEMENT = 17,
+    RIL_E_INVALID_PARAMETER = 18,    
+    // NFC SEEK end
+
+    /// M: MTK-START [mtk03923][20111123][ALPS00093395]ICS Migration - Telephony. @{
+    RIL_E_DIAL_STRING_TOO_LONG = 1001,
+    RIL_E_TEXT_STRING_TOO_LONG = 1002,
+    RIL_E_SIM_MEM_FULL = 1003,
+    RIL_E_CALL_BARRED = 1004,                      /* command failed because call barred */  
+
+    RIL_E_EXTERNAL_APP_CAUSE_BEGIN = 2000,
+    RIL_E_BT_SAP_UNDEFINED = 2001,
+    RIL_E_BT_SAP_NOT_ACCESSIBLE = 2002,
+    RIL_E_BT_SAP_CARD_REMOVED = 2003,
+    /// @}
 } RIL_Errno;
 
 typedef enum {
@@ -71,6 +107,7 @@ typedef enum {
 typedef enum {
     RADIO_STATE_OFF = 0,                   /* Radio explictly powered off (eg CFUN=0) */
     RADIO_STATE_UNAVAILABLE = 1,           /* Radio unavailable (eg, resetting or not booted) */
+    /* States 2-9 below are deprecated. Just leaving them here for backward compatibility. */
     RADIO_STATE_SIM_NOT_READY = 2,         /* Radio is on, but the SIM interface is not ready */
     RADIO_STATE_SIM_LOCKED_OR_ABSENT = 3,  /* SIM PIN locked, PUK required, network
                                               personalization locked, or SIM absent */
@@ -80,8 +117,16 @@ typedef enum {
     RADIO_STATE_RUIM_LOCKED_OR_ABSENT = 7, /* RUIM PIN locked, PUK required, network
                                               personalization locked, or RUIM absent */
     RADIO_STATE_NV_NOT_READY = 8,          /* Radio is on, but the NV interface is not available */
-    RADIO_STATE_NV_READY = 9               /* Radio is on and the NV interface is available */
+    RADIO_STATE_NV_READY = 9,              /* Radio is on and the NV interface is available */
+    RADIO_STATE_ON = 10                    /* Radio is on */
 } RIL_RadioState;
+
+/// M: [mtk03923][20111123][ALPS00093395]ICS Migration - Telephony. @{
+typedef enum {
+    RADIO_TEMPSTATE_AVAILABLE = 0,     /* Radio available */
+    RADIO_TEMPSTATE_UNAVAILABLE = 1,           /* Radio unavailable temporarily */
+} RIL_RadioTempState;
+/// @}
 
 typedef enum {
     RADIO_TECH_UNKNOWN = 0,
@@ -99,7 +144,8 @@ typedef enum {
     RADIO_TECH_EVDO_B = 12,
     RADIO_TECH_EHRPD = 13,
     RADIO_TECH_LTE = 14,
-    RADIO_TECH_HSPAP = 15 // HSPA+
+    RADIO_TECH_HSPAP = 15, // HSPA+
+    RADIO_TECH_GSM = 16 // Only supports voice
 } RIL_RadioTechnology;
 
 // Do we want to split Data from Voice and the use
@@ -251,6 +297,14 @@ typedef struct {
                        (as expected by TS 27.005) or NULL for default SMSC */
 } RIL_SMS_WriteArgs;
 
+/// M: [mtk03923][20111123][ALPS00093395]ICS Migration - Telephony, @{
+typedef struct
+{
+	int	used;
+	int total;
+} RIL_SMS_Memory_Status;
+/// @}
+
 /** Used by RIL_REQUEST_DIAL */
 typedef struct {
     char * address;
@@ -264,6 +318,7 @@ typedef struct {
 } RIL_Dial;
 
 typedef struct {
+    int cla; // NFC SEEK
     int command;    /* one of the commands listed for TS 27.007 +CRSM*/
     int fileid;     /* EF id */
     char *path;     /* "pathid" from TS 27.007 +CRSM command.
@@ -278,6 +333,7 @@ typedef struct {
 } RIL_SIM_IO_v5;
 
 typedef struct {
+    int cla; // NFC SEEK	
     int command;    /* one of the commands listed for TS 27.007 +CRSM*/
     int fileid;     /* EF id */
     char *path;     /* "pathid" from TS 27.007 +CRSM command.
@@ -409,7 +465,9 @@ typedef enum {
 typedef enum {
     RIL_DATA_PROFILE_DEFAULT    = 0,
     RIL_DATA_PROFILE_TETHERED   = 1,
-    RIL_DATA_PROFILE_OEM_BASE   = 1000    /* Start of OEM-specific profiles */
+    RIL_DATA_PROFILE_OEM_BASE   = 1000,    /* Start of OEM-specific profiles */
+    /// M: Add profile for MMS.
+    RIL_DATA_PROFILE_MTK_MMS    = RIL_DATA_PROFILE_OEM_BASE + 1
 } RIL_DataProfile;
 
 /* Used by RIL_UNSOL_SUPP_SVC_NOTIFICATION */
@@ -426,6 +484,31 @@ typedef struct {
     char *  number;             /* "number" from 27.007 7.17
                                    (MT only, may be NULL). */
 } RIL_SuppSvcNotification;
+
+/// M: [mtk03923][20111123][ALPS00093395]ICS Migration - Telephony. @{
+/* Used by RIL_UNSOL_CRSS_NOTIFICATION */
+typedef struct {
+    int    code;            /* 
+                             * 0: +CCWA 
+                             * 1: +CDIP
+                             * 2: +CLIP
+                             * 3: +COLP
+                             */
+    int    type;            /* type of address octet in integer format (refer GSM 04.08 [8] subclause 10.5.4.7) */
+    char * number;          /* string type phone number of format specified by <type> */
+    char * alphaid;         /* 
+                             * optional string type alphanumeric representation of <number>
+                             * corresponding to the entry found in phonebook; 
+                             */
+    int    cli_validity;    /* CLI validity value, 
+                               0: PRESENTATION_ALLOWED, 
+                               1: PRESENTATION_RESTRICTED, 
+                               2: PRESENTATION_UNKNOWN
+                            */
+} RIL_CrssNotification;
+/// @}
+
+
 
 #define RIL_CARD_MAX_APPS     8
 
@@ -529,15 +612,31 @@ typedef struct
   RIL_AppStatus applications[RIL_CARD_MAX_APPS];
 } RIL_CardStatus_v6;
 
-/* The result of a SIM refresh, returned in data[0] of RIL_UNSOL_SIM_REFRESH */
+/** The result of a SIM refresh, returned in data[0] of RIL_UNSOL_SIM_REFRESH
+ *      or as part of RIL_SimRefreshResponse_v7
+ */
 typedef enum {
     /* A file on SIM has been updated.  data[1] contains the EFID. */
     SIM_FILE_UPDATE = 0,
-    /* SIM initialized.  All files should be re-read. data[1] contains AID that caused REFRESH */
+    /* SIM initialized.  All files should be re-read. */
     SIM_INIT = 1,
     /* SIM reset.  SIM power required, SIM may be locked and all files should be re-read. */
     SIM_RESET = 2
 } RIL_SimRefreshResult;
+
+typedef struct {
+    RIL_SimRefreshResult result;
+    int                  ef_id; /* is the EFID of the updated file if the result is */
+                                /* SIM_FILE_UPDATE or 0 for any other result. */
+    char *               aid;   /* is AID(application ID) of the card application */
+                                /* See ETSI 102.221 8.1 and 101.220 4 */
+                                /*     For SIM_FILE_UPDATE result it can be set to AID of */
+                                /*         application in which updated EF resides or it can be */
+                                /*         NULL if EF is outside of an application. */
+                                /*     For SIM_INIT result this field is set to AID of */
+                                /*         application that caused REFRESH */
+                                /*     For SIM_RESET result it is NULL. */
+} RIL_SimRefreshResponse_v7;
 
 /* Deprecated, use RIL_CDMA_CallWaiting_v6 */
 typedef struct {
@@ -790,6 +889,71 @@ typedef struct {
   RIL_CDMA_InformationRecord infoRec[RIL_CDMA_MAX_NUMBER_OF_INFO_RECS];
 } RIL_CDMA_InformationRecords;
 
+/// M: [mtk03923][20111123][ALPS00093395]ICS Migration - Telephony. @{
+typedef enum {
+    RIL_PHB_ADN = 0,
+    RIL_PHB_FDN = 1,
+    RIL_PHB_MSISDN = 2,
+    RIL_PHB_ECC = 3
+} RIL_PhbStorageType;
+
+typedef struct {
+    int type;                       /* type of the entry, refer to RIL_PhbStorageType */
+    int index;                     /* the stored index of the entry */
+    char *number;              /* the phone number */
+    int ton;                        /* type of the number */
+    char * alphaId;             /* the alpha ID, using Hexdecimal coding method */
+} RIL_PhbEntryStrucutre;
+/// @}
+typedef struct {
+    char * storage;
+    int used;
+    int total;
+} RIL_PHB_MEM_STORAGE_RESPONSE;
+
+typedef struct {
+    int index; // values in the range of location numbers of phonebook memory
+    char * number; // phone number of format <type>
+    int type; // type of address octet in integer format; default 145 when number include "+", otherwise 129
+    char * text; // associated with the number
+    int hidden; //0
+    char * group;//indicating a group the entry may belong to
+    char * adnumber; // an additional number of format<adtype>
+    int adtype;//
+    char * secondtext; // a second text field associated with the number
+    char * email;// email field
+} RIL_PHB_ENTRY;
+
+typedef struct {
+	int format;
+	int vp;
+	int pid;
+	int dcs;
+} RIL_SmsParams;
+
+typedef struct {
+    int mode;
+    char *channelConfigInfo;
+    char *languageConfigInfo;
+    int isAllLanguageOn;
+} RIL_CBConfigInfo;
+
+typedef struct {
+	int warningType;
+	int messageId;
+	int serialNumber;
+	char *plmnId;
+	char *securityInfo;
+} RIL_CBEtwsNotification;
+
+//[New R8 modem FD]
+typedef struct {
+    int args_num; //record total number of arguments of this mode
+    int mode; //allowed mode:0,1,2,3
+    int parameter1; //only mode 2 and 3 has parameter1 this field
+    int parameter2;	//only mode2 has parameter2 this field
+}RIL_FDModeStructure;
+
 /**
  * RIL_REQUEST_GET_SIM_STATUS
  *
@@ -1013,7 +1177,7 @@ typedef struct {
  *
  * Get the SIM IMSI
  *
- * Only valid when radio state is "RADIO_STATE_SIM_READY"
+ * Only valid when radio state is "RADIO_STATE_ON"
  *
  * "data" is const char **
  * ((const char **)data)[0] is AID value, See ETSI 102.221 8.1 and 101.220 4, NULL if no value.
@@ -3268,6 +3432,23 @@ typedef struct {
  */
 #define RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS 107
 
+/**
+ * RIL_REQUEST_VOICE_RADIO_TECH
+ *
+ * Query the radio technology type (3GPP/3GPP2) used for voice. Query is valid only
+ * when radio state is RADIO_STATE_ON
+ *
+ * "data" is NULL
+ * "response" is int *
+ * ((int *) response)[0] is of type const RIL_RadioTechnology
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_VOICE_RADIO_TECH 108
+
 
 /***********************************************************************/
 
@@ -3515,14 +3696,17 @@ typedef struct {
  * Indicates that file(s) on the SIM have been updated, or the SIM
  * has been reinitialized.
  *
+ * In the case where RIL is version 6 or older:
  * "data" is an int *
  * ((int *)data)[0] is a RIL_SimRefreshResult.
  * ((int *)data)[1] is the EFID of the updated file if the result is
- * SIM_FILE_UPDATE, AID(application ID) of the card application
- * triggering the REFRESH if the result is SIM_INIT, or NULL for any other result.
+ * SIM_FILE_UPDATE or NULL for any other result.
  *
- * Note: If the radio state changes as a result of the SIM refresh (eg,
- * SIM_READY -> SIM_LOCKED_OR_ABSENT), RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED
+ * In the case where RIL is version 7:
+ * "data" is a RIL_SimRefreshResponse_v7 *
+ *
+ * Note: If the SIM state changes as a result of the SIM refresh (eg,
+ * SIM_READY -> SIM_LOCKED_OR_ABSENT), RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED
  * should be sent.
  */
 #define RIL_UNSOL_SIM_REFRESH 1017
@@ -3732,6 +3916,682 @@ typedef struct {
  */
 #define RIL_UNSOL_RIL_CONNECTED 1034
 
+/// M: Add for proprietary ril request. @{
+#ifdef MTK_RIL
+/* MTK proprietary request begin from 2000 */
+#define RIL_REQUEST_MTK_BASE 2000
+
+/**
+ * RIL_REQUEST_HANGUP_ALL
+ *
+ * Hang up all (like ATH)
+ *
+ * "data" is NULL
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_HANGUP_ALL (RIL_REQUEST_MTK_BASE + 0)
+
+/**
+ * RIL_REQUEST_GET_COLP
+ *
+ * Gets current COLP status
+ * "data" is NULL
+ * "response" is int *
+ * ((int *)data)[0] is "n" parameter from TS 27.007 7.8
+ * ((int *)data)[1] is "m" parameter from TS 27.007 7.8
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_GET_COLP (RIL_REQUEST_MTK_BASE + 1)
+
+
+/**
+ * RIL_REQUEST_SET_COLP
+ *
+ * "data" is int *
+ * ((int *)data)[0] is "n" parameter from TS 27.007 7.8
+ *
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_SET_COLP (RIL_REQUEST_MTK_BASE + 2)
+
+/**
+ * RIL_REQUEST_GET_COLR
+ *
+ * Gets current COLR status
+ * "data" is NULL
+ * "response" is int *
+ * ((int *)data)[0] is "n" parameter for provision status (0: Not Provisioned 1: Provisioned 2: Unknown)
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_GET_COLR (RIL_REQUEST_MTK_BASE + 3)
+
+/**
+ * RIL_REQUEST_GET_CCM
+ *
+ * get current call meter
+ *
+ * "data" is NULL
+ * "response" is a const char * containing the CCM
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_GET_CCM (RIL_REQUEST_MTK_BASE + 4)
+
+/**
+ * RIL_REQUEST_GET_ACM
+ *
+ * get accumulated call meter
+ *
+ * "data" is NULL
+ * "response" is a const char * containing the ACM
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_GET_ACM (RIL_REQUEST_MTK_BASE + 5)
+
+/**
+ * RIL_REQUEST_GET_ACMMAX
+ *
+ * get the maximum of accumulated call meter
+ *
+ * "data" is NULL
+ * "response" is a const char * containing the ACMMAX
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_GET_ACMMAX (RIL_REQUEST_MTK_BASE + 6)
+
+/**
+ * RIL_REQUEST_GET_PPU_AND_CURRENCY
+ *
+ * get price per unit and currency
+ *
+ * "data" is NULL
+ * "response" is a const char * containing the 
+ * price per unit and currency
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_GET_PPU_AND_CURRENCY (RIL_REQUEST_MTK_BASE + 7)
+
+/**
+ * RIL_REQUEST_SET_ACMMAX
+ * 
+ * set maximum value of ACM
+ *
+ * ((const char **)data)[0] = acmmax
+ * ((const char **)data)[1] = pin2
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_SET_ACMMAX (RIL_REQUEST_MTK_BASE + 8)
+
+/**
+ * RIL_REQUEST_RESET_ACM
+ * 
+ * reset value of ACM
+ *
+ * ((const char **)data)[0] = pin2
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_RESET_ACM (RIL_REQUEST_MTK_BASE + 9)
+
+/**
+ * RIL_REQUEST_SET_PPU_AND_CURRENCY
+ * 
+ * set ppu and currency
+ *
+ * ((const char **)data)[0] = currency
+ * ((const char **)data)[1] = ppu
+ * ((const char **)data)[2] = pin2
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_SET_PPU_AND_CURRENCY (RIL_REQUEST_MTK_BASE + 10)
+
+
+/**
+ * RIL_REQUEST_RADIO_POWEROFF
+ *
+ * Power off modem
+ * "data" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_RADIO_POWEROFF (RIL_REQUEST_MTK_BASE + 11)
+
+/**
+ * RIL_REQUEST_DUAL_SIM_MODE_SWITCH
+ *
+ * Dual SIM mode switch
+ * "data" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_DUAL_SIM_MODE_SWITCH (RIL_REQUEST_MTK_BASE + 12)
+
+/**
+ * RIL_REQUEST_QUERY_PHB_STORAGE_INFO
+ *
+ * query the information of specified storage
+ *
+ * "data" is int *
+ * ((int *)data)[0] is the type of the storage, refer to RIL_PhbStorageType
+ *
+ * "response" is a "int *"
+ * ((int *)response)[0] is current number of used entries of the storage. 
+ * ((int *)response)[1] is number of total entries of the storage. 
+ * ((int *)response)[2] is maximum supported length of phone number.  
+ * ((int *)response)[3] is maximum supported length of alpha id.  
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_QUERY_PHB_STORAGE_INFO (RIL_REQUEST_MTK_BASE + 13)
+
+/**
+ * RIL_REQUEST_WRITE_PHB_ENTRY
+ *
+ * Write a phb entry into specified storage
+ *
+ * "data" is a const RIL_PhbEntryStrucutre *
+ *
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ *  DIAL_STRING_TOO_LONG
+ *  TEXT_STRING_TOO_LONG
+ *  SIM_PIN2
+ *  SIM_PUK2
+ *  SIM_MEM_FULL
+ */
+#define RIL_REQUEST_WRITE_PHB_ENTRY (RIL_REQUEST_MTK_BASE + 14)
+
+/**
+ * RIL_REQUEST_READ_PHB_ENTRY
+ *
+ * Read a phb entry from specified storage and index
+ *
+ * "data" is int *
+ * ((int *)data)[0] is the type of the storage, refer to RIL_PhbStorageType
+ * ((int *)data)[1] is the begin index of the storage to be read
+ * ((int *)data)[2] is the end index of the storage to be read
+ *
+ * "response" is "RIL_PhbEntryStrucutre **"
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_READ_PHB_ENTRY (RIL_REQUEST_MTK_BASE + 15)
+
+/**
+ * RIL_REQUEST_SET_GPRS_CONNECT_TYPE
+ *
+ * Set GPRS connect type
+ *
+ * "data" is a int
+  * ((int *)data)[0]  0:WHEN_NEEDED , 1: ALWAYS
+ *
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_SET_GPRS_CONNECT_TYPE (RIL_REQUEST_MTK_BASE + 16)
+
+/**
+ * RIL_REQUEST_SET_GPRS_TRANSFER_TYPE
+ *
+ * Set GPRS connect type
+ *
+ * "data" is a int
+  * ((int *)data)[0]  0:data prefer , 1: call prefer
+ *
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_SET_GPRS_TRANSFER_TYPE (RIL_REQUEST_MTK_BASE + 17)
+
+#define RIL_REQUEST_MOBILEREVISION_AND_IMEI  (RIL_REQUEST_MTK_BASE + 18)//Add by mtk80372 for Barcode Number
+#define RIL_REQUEST_QUERY_SIM_NETWORK_LOCK	(RIL_REQUEST_MTK_BASE + 19)
+#define RIL_REQUEST_SET_SIM_NETWORK_LOCK	(RIL_REQUEST_MTK_BASE + 20)
+
+#define RIL_REQUEST_SET_SCRI	(RIL_REQUEST_MTK_BASE + 21) 
+
+/**
+ * RIL_REQUEST_VT_DIAL
+ *
+ * Initiate video call
+ *
+ * "data" is const RIL_Dial *
+ * "response" is NULL
+ *
+ * This method is never used for supplementary service codes
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_VT_DIAL (RIL_REQUEST_MTK_BASE + 22)
+
+#define RIL_REQUEST_BTSIM_CONNECT     (RIL_REQUEST_MTK_BASE + 23)
+#define RIL_REQUEST_BTSIM_DISCONNECT_OR_POWEROFF   (RIL_REQUEST_MTK_BASE + 24)
+#define RIL_REQUEST_BTSIM_POWERON_OR_RESETSIM   (RIL_REQUEST_MTK_BASE + 25)
+#define RIL_REQUEST_BTSIM_TRANSFERAPDU   (RIL_REQUEST_MTK_BASE + 26)
+
+/**
+ * RIL_REQUEST_EMERGENCY_DIAL
+ *
+ * Initiate emergency call
+ *
+ * "data" is const RIL_Dial *
+ * "response" is NULL
+ *
+ * This method is never used for supplementary service codes
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_EMERGENCY_DIAL (RIL_REQUEST_MTK_BASE + 27)
+
+/**
+ * RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL_WITH_ACT
+ *
+  * Manually select a specified network.
+  *
+  * "data" is const char * specifying MCCMNC of network to select (eg "310170")
+  * and a int specifying Act type. (eg 0 is GSM)
+  * "response" is NULL
+  *
+  * This request must not respond until the new operator is selected
+  * and registered
+  *
+  * Valid errors:
+  *  SUCCESS
+  *  RADIO_NOT_AVAILABLE
+  *  ILLEGAL_SIM_OR_ME
+  *  GENERIC_FAILURE
+  *
+  * Note: Returns ILLEGAL_SIM_OR_ME when the failure is permanent and
+  * 	  no retries needed, such as illegal SIM or ME.
+  * 	  Returns GENERIC_FAILURE for all other causes that might be
+  * 	  fixed by retries.
+  *
+  */
+
+
+#define RIL_REQUEST_SET_NETWORK_SELECTION_MANUAL_WITH_ACT   (RIL_REQUEST_MTK_BASE + 28)
+/**
+ * RIL_REQUEST_QUERY_ICCID
+ *
+  */
+#define RIL_REQUEST_QUERY_ICCID   (RIL_REQUEST_MTK_BASE + 29)
+#define RIL_REQUEST_SIM_AUTHENTICATION      (RIL_REQUEST_MTK_BASE + 30)
+#define RIL_REQUEST_USIM_AUTHENTICATION      (RIL_REQUEST_MTK_BASE + 31)
+
+
+/**
+ * RIL_REQUEST_VOICE_ACCEPT
+ *
+ * voice accept VT call. In fact, disconnect VT call with #88
+ *
+ * "data" is NULL
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_VOICE_ACCEPT (RIL_REQUEST_MTK_BASE + 32)
+#define RIL_REQUEST_RADIO_POWERON   (RIL_REQUEST_MTK_BASE + 33)
+
+/**
+ * RIL_REQUEST_GET_SMS_SIM_MEM_STATUS
+ *
+  * GET SMS SIM Card Memory's total and used number.
+  *
+  * "data" is const RIL_SMS_Memory_Status, contain the total and used SIM Card SMS number. 
+  * "response" is NULL.
+  *
+  * Valid errors:
+  *  SUCCESS
+  *  RADIO_NOT_AVAILABLE
+  *  GENERIC_FAILURE
+  */
+#define RIL_REQUEST_GET_SMS_SIM_MEM_STATUS   (RIL_REQUEST_MTK_BASE + 34)
+
+#define RIL_REQUEST_FORCE_RELEASE_CALL (RIL_REQUEST_MTK_BASE + 35)
+
+#define RIL_REQUEST_SET_CALL_INDICATION (RIL_REQUEST_MTK_BASE + 36)
+
+#define RIL_REQUEST_REPLACE_VT_CALL (RIL_REQUEST_MTK_BASE + 37)
+#define RIL_REQUEST_GET_3G_CAPABILITY (RIL_REQUEST_MTK_BASE + 38)
+#define RIL_REQUEST_SET_3G_CAPABILITY (RIL_REQUEST_MTK_BASE + 39)
+#define RIL_REQUEST_GET_POL_CAPABILITY (RIL_REQUEST_MTK_BASE + 40)
+#define RIL_REQUEST_GET_POL_LIST (RIL_REQUEST_MTK_BASE + 41)
+#define RIL_REQUEST_SET_POL_ENTRY (RIL_REQUEST_MTK_BASE + 42)
+#define RIL_REQUEST_QUERY_UPB_CAPABILITY (RIL_REQUEST_MTK_BASE + 43)
+#define RIL_REQUEST_EDIT_UPB_ENTRY (RIL_REQUEST_MTK_BASE + 44)
+#define RIL_REQUEST_DELETE_UPB_ENTRY (RIL_REQUEST_MTK_BASE + 45)
+#define RIL_REQUEST_READ_UPB_GAS_LIST (RIL_REQUEST_MTK_BASE + 46)
+#define RIL_REQUEST_READ_UPB_GRP  (RIL_REQUEST_MTK_BASE + 47)
+#define RIL_REQUEST_WRITE_UPB_GRP  (RIL_REQUEST_MTK_BASE + 48)
+#define RIL_REQUEST_DISABLE_VT_CAPABILITY (RIL_REQUEST_MTK_BASE + 49)
+#define RIL_REQUEST_SET_SIM_RECOVERY_ON (RIL_REQUEST_MTK_BASE + 51)
+#define RIL_REQUEST_GET_SIM_RECOVERY_ON (RIL_REQUEST_MTK_BASE + 52)
+#define RIL_REQUEST_SET_TRM (RIL_REQUEST_MTK_BASE + 53)
+#define RIL_REQUEST_DETECT_SIM_MISSING (RIL_REQUEST_MTK_BASE + 54)
+
+/**
+ * RIL_REQUEST_HANGUP_ALL_EX
+ *
+ * Hang up all (like ATH, but use AT+CHLD=6 to prevent channel limitation)
+ * For ATH, the channel usd to setup call and release must be the same.
+ * AT+CHLD=6 has no such limitation
+ *
+ * "data" is NULL
+ * "response" is NULL
+ *
+ * Valid errors:
+ *  SUCCESS
+ *  RADIO_NOT_AVAILABLE (radio resetting)
+ *  GENERIC_FAILURE
+ */
+#define RIL_REQUEST_HANGUP_ALL_EX (RIL_REQUEST_MTK_BASE + 50)
+
+/* whether download calibration data or not */
+#define RIL_REQUEST_GET_CALIBRATION_DATA (RIL_REQUEST_MTK_BASE + 55)
+
+//support LGE API, 3gpp 27.007
+/**
+ * at+cpbr=?
+ */
+#define RIL_REQUEST_GET_PHB_STRING_LENGTH (RIL_REQUEST_MTK_BASE + 56)
+/**
+ * at+cpbs?
+ */
+#define RIL_REQUEST_GET_PHB_MEM_STORAGE (RIL_REQUEST_MTK_BASE + 57)
+/**
+ * at+cpbs=<storage><passwork>
+ */
+#define RIL_REQUEST_SET_PHB_MEM_STORAGE (RIL_REQUEST_MTK_BASE + 58)
+/**
+ * at+cpbr=<index1>,<index2>
+ * +CPBR:<indexn>,<number>,<type>,<text>,<hidden>,<group>,<adnumber>,<adtype>,<secondtext>,<email>
+ * see RIL_PHB_ENTRY
+ */
+#define RIL_REQUEST_READ_PHB_ENTRY_EXT (RIL_REQUEST_MTK_BASE + 59)
+/**
+ * at+cpbw=<index>,<number>,<type>,<text>,<hidden>,<group>,<adnumber>,<adtype>,<secondtext>,<email>
+ * see RIL_PHB_ENTRY
+ */
+#define RIL_REQUEST_WRITE_PHB_ENTRY_EXT (RIL_REQUEST_MTK_BASE + 60)
+
+/*
+* Get sms revelant parameters from EFsmsp
+*/
+#define RIL_REQUEST_GET_SMS_PARAMETERS (RIL_REQUEST_MTK_BASE + 61)
+
+/*
+* Set sms revelant parameters into EFsmsp
+*/
+#define RIL_REQUEST_SET_SMS_PARAMETERS (RIL_REQUEST_MTK_BASE + 62)
+
+// NFC SEEK start
+// "data" is a const RIL_SIM_IO *
+// "response" is a const RIL_SIM_IO_Response *
+#define RIL_REQUEST_SIM_TRANSMIT_BASIC (RIL_REQUEST_MTK_BASE + 63)
+
+// "data" is a const char * containing the AID of the applet
+// "response" is a int * containing the channel id
+#define RIL_REQUEST_SIM_OPEN_CHANNEL (RIL_REQUEST_MTK_BASE + 64)
+
+// "data" is a const int * containing the channel id
+// "response" is NULL
+#define RIL_REQUEST_SIM_CLOSE_CHANNEL (RIL_REQUEST_MTK_BASE + 65)
+
+// "data" is a const RIL_SIM_IO *
+// "response" is a const RIL_SIM_IO_Response *
+#define RIL_REQUEST_SIM_TRANSMIT_CHANNEL (RIL_REQUEST_MTK_BASE + 66)
+
+// "data" is NULL *
+// "response" is a const char * containing ATR in hexadecimal format
+#define RIL_REQUEST_SIM_GET_ATR (RIL_REQUEST_MTK_BASE + 67)
+// NFC SEEK end
+
+// CB extension
+#define RIL_REQUEST_SET_CB_CHANNEL_CONFIG_INFO   (RIL_REQUEST_MTK_BASE + 68)
+#define RIL_REQUEST_SET_CB_LANGUAGE_CONFIG_INFO  (RIL_REQUEST_MTK_BASE + 69)
+#define RIL_REQUEST_GET_CB_CONFIG_INFO           (RIL_REQUEST_MTK_BASE + 70)
+#define RIL_REQUEST_SET_ALL_CB_LANGUAGE_ON       (RIL_REQUEST_MTK_BASE + 71)
+// CB extension
+
+#define RIL_REQUEST_SET_ETWS (RIL_REQUEST_MTK_BASE + 72)
+
+//[New R8 modem FD]
+//"data" is a const RIL_FD_MODE *
+//"response" is a int
+#define RIL_REQUEST_SET_FD_MODE (RIL_REQUEST_MTK_BASE + 73)
+
+
+/* Add your REQUEST here with (RIL_REQUEST_MTK_BASE + x) x from 0 */
+
+/******************************************************************/
+/* MTK proprietary local request begin from 2500 */
+#define RIL_LOCAL_REQUEST_MTK_BASE 2500
+
+#define RIL_LOCAL_REQUEST_SIM_AUTHENTICATION (RIL_LOCAL_REQUEST_MTK_BASE + 0)
+#define RIL_LOCAL_REQUEST_USIM_AUTHENTICATION (RIL_LOCAL_REQUEST_MTK_BASE + 1)
+
+
+/******************************************************************/
+
+/* MTK proprietary URC begin from 2000 */
+#define RIL_UNSOL_MTK_BASE 3000
+
+/* Add your UNSOL here with (RIL_UNSOL_MTK_BASE + x) x from 0 */
+
+#define RIL_UNSOL_NEIGHBORING_CELL_INFO (RIL_UNSOL_MTK_BASE + 0)
+
+#define RIL_UNSOL_NETWORK_INFO (RIL_UNSOL_MTK_BASE + 1)
+
+#define RIL_UNSOL_CALL_FORWARDING (RIL_UNSOL_MTK_BASE + 2)
+
+/* RIL_CrssNotification */
+#define RIL_UNSOL_CRSS_NOTIFICATION (RIL_UNSOL_MTK_BASE + 3)
+
+#define RIL_UNSOL_CALL_PROGRESS_INFO (RIL_UNSOL_MTK_BASE + 4)
+
+#define RIL_UNSOL_PHB_READY_NOTIFICATION (RIL_UNSOL_MTK_BASE + 5)
+
+#define RIL_UNSOL_SPEECH_INFO (RIL_UNSOL_MTK_BASE + 6)
+
+#define RIL_UNSOL_SIM_INSERTED_STATUS (RIL_UNSOL_MTK_BASE + 7)
+
+#define RIL_UNSOL_RADIO_TEMPORARILY_UNAVAILABLE (RIL_UNSOL_MTK_BASE + 8)
+
+#define RIL_UNSOL_ME_SMS_STORAGE_FULL (RIL_UNSOL_MTK_BASE + 9)
+
+#define RIL_UNSOL_SMS_READY_NOTIFICATION (RIL_UNSOL_MTK_BASE + 10)
+
+#define RIL_UNSOL_SCRI_RESULT (RIL_UNSOL_MTK_BASE + 11)
+
+#define RIL_UNSOL_VT_STATUS_INFO (RIL_UNSOL_MTK_BASE + 12)
+
+#define RIL_UNSOL_VT_RING_INFO (RIL_UNSOL_MTK_BASE + 13)
+
+#define RIL_UNSOL_INCOMING_CALL_INDICATION (RIL_UNSOL_MTK_BASE + 14)
+
+#define RIL_UNSOL_SIM_MISSING (RIL_UNSOL_MTK_BASE + 15)
+
+#define RIL_UNSOL_GPRS_DETACH (RIL_UNSOL_MTK_BASE + 16)
+
+//MTK-START [mtk04070][111213][ALPS00093395] ATCI for unsolicited response
+#define RIL_UNSOL_ATCI_RESPONSE (RIL_UNSOL_MTK_BASE + 17)
+//MTK-END [mtk04070][111213][ALPS00093395] ATCI for unsolicited response
+#define RIL_UNSOL_SIM_RECOVERY (RIL_UNSOL_MTK_BASE + 18)
+#define RIL_UNSOL_VIRTUAL_SIM_ON (RIL_UNSOL_MTK_BASE + 19)
+#define RIL_UNSOL_VIRTUAL_SIM_OFF (RIL_UNSOL_MTK_BASE + 20)
+#define RIL_UNSOL_INVALID_SIM (RIL_UNSOL_MTK_BASE + 21)
+#define RIL_UNSOL_RESPONSE_PS_NETWORK_STATE_CHANGED (RIL_UNSOL_MTK_BASE + 22)
+
+/// M: MTK added. @{
+#define RIL_UNSOL_RESPONSE_ACMT (RIL_UNSOL_MTK_BASE + 23)
+#define RIL_UNSOL_EF_CSP_PLMN_MODE_BIT (RIL_UNSOL_MTK_BASE + 24)
+#define RIL_UNSOL_IMEI_LOCK (RIL_UNSOL_MTK_BASE + 25)
+/// @}
+
+#define RIL_UNSOL_RESPONSE_MMRR_STATUS_CHANGED (RIL_UNSOL_MTK_BASE + 26)
+#define RIL_UNSOL_SIM_PLUG_OUT (RIL_UNSOL_MTK_BASE + 27)
+#define RIL_UNSOL_SIM_PLUG_IN (RIL_UNSOL_MTK_BASE + 28)
+
+#define RIL_UNSOL_RESPONSE_ETWS_NOTIFICATION (RIL_UNSOL_MTK_BASE + 29)
+
+typedef enum {
+    MTK_RIL_SOCKET_1,
+#ifdef MTK_GEMINI
+    MTK_RIL_SOCKET_2,
+#endif /* MTK_GEMINI */
+    MTK_RIL_SOCKET_NUM
+} RILId;
+
+#ifdef  MTK_DT_SUPPORT
+    #ifdef  MTK_GEMINI
+    typedef enum {
+        RIL_URC,    
+        RIL_CMD_1,
+        RIL_CMD_2,
+        RIL_CMD_3,
+        RIL_CMD_4, /* ALPS00324111 split data and nw command channel */
+        RIL_ATCI,
+        RIL_CHANNEL_OFFSET,
+        
+        RIL_URC2 = RIL_CHANNEL_OFFSET,
+        RIL_CMD2_1,
+        RIL_CMD2_2,
+        RIL_CMD2_3,
+        RIL_CMD2_4, /* ALPS00324111 split data and nw command channel */
+        RIL_ATCI2,
+        RIL_SUPPORT_CHANNELS
+    } RILChannelId;
+    #else   /* MTK_GEMINI */
+    typedef enum {
+        RIL_URC,    
+        RIL_CMD_1,
+        RIL_CMD_2,
+        RIL_CMD_3,
+        RIL_PPPDATA,
+        #if 0
+        RIL_CHANNEL_OFFSET,
+        
+        RIL_URC2 = RIL_CHANNEL_OFFSET,
+        RIL_CMD2_1,
+        RIL_CMD2_2,
+        RIL_CMD2_3,
+        RIL_PPPDATA2,
+        #endif
+        RIL_SUPPORT_CHANNELS
+    } RILChannelId;
+    #endif  /* MTK_GEMINI */
+#else   /* MTK_DT_SUPPORT */
+typedef enum {
+    RIL_URC,    
+    RIL_CMD_1,
+    RIL_CMD_2,
+    RIL_CMD_3,
+    RIL_CMD_4, /* ALPS00324111 split data and nw command channel */
+    RIL_ATCI,
+#ifdef MTK_GEMINI
+    RIL_CHANNEL_OFFSET,
+    RIL_URC2 = RIL_CHANNEL_OFFSET,
+    RIL_CMD2_1,
+    RIL_CMD2_2,
+    RIL_CMD2_3,
+    RIL_CMD2_4, /* ALPS00324111 split data and nw command channel */
+    RIL_ATCI2,
+#endif /* MTK_GEMINI */
+    RIL_SUPPORT_CHANNELS
+} RILChannelId;
+#endif  /* MTK_DT_SUPPORT */
+#endif /* MTK_RIL */
+/// @}
+
+/**
+ * RIL_UNSOL_VOICE_RADIO_TECH_CHANGED
+ *
+ * Indicates that voice technology has changed. Contains new radio technology
+ * as a data in the message.
+ *
+ * "data" is int *
+ * ((int *)data)[0] is of type const RIL_RadioTechnology
+ *
+ */
+#define RIL_UNSOL_VOICE_RADIO_TECH_CHANGED 1035
+
+
 /***********************************************************************/
 
 
@@ -3748,10 +4608,17 @@ typedef struct {
 typedef void (*RIL_RequestFunc) (int request, void *data,
                                     size_t datalen, RIL_Token t);
 
+/// M: MTK modified. @{
 /**
  * This function should return the current radio state synchronously
  */
+#ifndef MTK_RIL 
 typedef RIL_RadioState (*RIL_RadioStateRequest)();
+#else
+typedef RIL_RadioState (*RIL_RadioStateRequest)(RILId rid, int *sim_status);
+#endif /* MTK_RIL */
+/// @}
+
 
 /**
  * This function returns "1" if the specified RIL_REQUEST code is
@@ -3822,9 +4689,13 @@ struct RIL_Env {
      *
      * "data" is owned by caller, and should not be modified or freed by callee
      */
-
-    void (*OnUnsolicitedResponse)(int unsolResponse, const void *data,
-                                    size_t datalen);
+/// M: MTK modified. @{
+#ifdef MTK_RIL
+    void (*OnUnsolicitedResponse)(int unsolResponse, const void *data, size_t datalen, RILId id);
+#else
+    void (*OnUnsolicitedResponse)(int unsolResponse, const void *data, size_t datalen);
+#endif /* MTK_RIL */
+/// @}
 
     /**
      * Call user-specifed "callback" function on on the same thread that
@@ -3836,6 +4707,26 @@ struct RIL_Env {
 
     void (*RequestTimedCallback) (RIL_TimedCallback callback,
                                    void *param, const struct timeval *relativeTime);
+
+/// M: MTK added. @{
+#ifdef MTK_RIL
+    /**
+     * Same propose as RequestTimedCallback but executed in proxy thread
+     */
+    void (*RequestProxyTimedCallback) (RIL_TimedCallback callback, void *param,
+    					const struct timeval *relativeTime, int proxyId);
+
+    /**
+     * Query Context from RIL_Token   
+     */
+    RILChannelId (*QueryMyChannelId) (RIL_Token t);
+
+    /**
+     * Query current proxy according to thread
+     */
+    int (*QueryMyProxyIdByThread)();
+#endif /* MTK_RIL */
+/// @}
 };
 
 
@@ -3882,10 +4773,15 @@ void RIL_onRequestComplete(RIL_Token t, RIL_Errno e,
  *     "data" is owned by caller, and should not be modified or freed by callee
  * @param datalen the length of data in byte
  */
-
+/// M: MTK modified. @{
+#ifdef MTK_RIL
+void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
+                                size_t datalen, RILId id);
+#else
 void RIL_onUnsolicitedResponse(int unsolResponse, const void *data,
                                 size_t datalen);
-
+#endif /* MTK_RIL */
+/// @}
 
 /**
  * Call user-specifed "callback" function on on the same thread that

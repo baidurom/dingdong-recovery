@@ -20,32 +20,24 @@
 # in inherited configurations.
 
 PRODUCT_PACKAGES := \
-    drmserver \
-    libdrmframework \
-    libdrmframework_jni \
     libfwdlockengine \
-    OpenWnn \
-    PinyinIME \
-    libWnnEngDic \
-    libWnnJpnDic \
-    libwnndict \
-    VideoEditor \
     WAPPushManager
+
+PRODUCT_PACKAGES += \
+    LiveWallpapersPicker \
+    PhaseBeam
 
 # Additional settings used in all AOSP builds
 PRODUCT_PROPERTY_OVERRIDES := \
     ro.com.android.dateformat=MM-dd-yyyy \
-    ro.config.ringtone=MI.ogg \
-    ro.config.notification_sound=FadeIn.ogg \
-    ro.config.alarm_alert=GoodMorning.ogg \
-    ro.config.sms_received_sound=FadeIn.ogg \
-    ro.config.sms_delivered_sound=MessageComplete.ogg
+    ro.config.ringtone=Ring_Synth_04.ogg \
+    ro.config.notification_sound=pixiedust.ogg
 
 # Put zh_CN first in the list, so make it default.
-PRODUCT_LOCALES := zh_CN
+PRODUCT_LOCALES := en_US
 
 # Get the TTS language packs
-$(call inherit-product-if-exists, external/svox/pico/lang/all_pico_languages.mk)
+$(call inherit-product-if-exists, external/svox/pico/lang/PicoLangEnUsInSystem.mk)
 
 # Get a list of languages.
 $(call inherit-product, $(SRC_TARGET_DIR)/product/locales_full.mk)

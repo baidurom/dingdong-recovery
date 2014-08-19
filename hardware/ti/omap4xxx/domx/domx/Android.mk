@@ -26,7 +26,7 @@ LOCAL_SHARED_LIBRARIES := \
     libmm_osal \
     libc \
     liblog \
-    libion
+    libion_ti
 
 LOCAL_MODULE:= libdomx
 LOCAL_MODULE_TAGS:= optional

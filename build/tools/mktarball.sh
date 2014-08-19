@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # $1: path to fs_get_stats program
 # $2: start dir
 # $3: subdir to tar up (from $2)

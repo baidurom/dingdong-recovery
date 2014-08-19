@@ -56,7 +56,7 @@ public:
     virtual size_t      bufferSize() const = 0;
 
     /**
-     * returns the output channel nask
+     * returns the output channel mask
      */
     virtual uint32_t    channels() const = 0;
 
@@ -109,6 +109,13 @@ public:
     // return the number of audio frames written by the audio dsp to DAC since
     // the output has exited standby
     virtual status_t    getRenderPosition(uint32_t *dspFrames) = 0;
+
+    /**
+     * get the local time at which the next write to the audio driver will be
+     * presented
+     */
+    virtual status_t    getNextWriteTimestamp(int64_t *timestamp);
+
 };
 
 /**
@@ -166,7 +173,7 @@ public:
     virtual String8     getParameters(const String8& keys) = 0;
 
 
-    // Return the amount of input frames lost in the audio driver since the last call of this function.
+    // Return the number of input frames lost in the audio driver since the last call of this function.
     // Audio driver is expected to reset the value to 0 and restart counting upon returning the current value by this function call.
     // Such loss typically occurs when the user space process is blocked longer than the capacity of audio driver buffers.
     // Unit: the number of input audio frames
@@ -202,15 +209,20 @@ public:
     /** set the audio volume of a voice call. Range is between 0.0 and 1.0 */
     virtual status_t    setVoiceVolume(float volume) = 0;
 
-    /** set the fm volume. Range is between 0.0 and 1.0 */
-    virtual status_t    setFmVolume(float volume) { return 0; }
-
     /**
      * set the audio volume for all audio activities other than voice call.
      * Range between 0.0 and 1.0. If any value other than NO_ERROR is returned,
      * the software mixer will emulate this capability.
      */
     virtual status_t    setMasterVolume(float volume) = 0;
+
+    /**
+     * Get the current master volume value for the HAL, if the HAL supports
+     * master volume control.  AudioFlinger will query this value from the
+     * primary audio HAL when the service starts and use the value for setting
+     * the initial master volume across all HALs.
+     */
+    virtual status_t    getMasterVolume(float *volume) = 0;
 
     /**
      * setMode is called when the audio mode changes. NORMAL mode is for
@@ -227,6 +239,38 @@ public:
     virtual status_t    setParameters(const String8& keyValuePairs) = 0;
     virtual String8     getParameters(const String8& keys) = 0;
 
+   // add by chipeng to add EM parameter
+    virtual status_t SetEMParameter(void *ptr , int len) =0;
+    virtual status_t GetEMParameter(void *ptr , int len) =0;
+    virtual status_t SetAudioCommand(int par1, int par2) =0;
+    virtual status_t GetAudioCommand(int par1)=0;
+    virtual status_t SetAudioData(int par1,size_t len,void *ptr)=0;
+    virtual status_t GetAudioData(int par1,size_t len,void *ptr)=0;
+
+    // add by Tina to set ACF Preview parameter
+    virtual status_t SetACFPreviewParameter(void *ptr , int len) =0;
+    virtual status_t SetHCFPreviewParameter(void *ptr , int len) =0;
+
+    /////////////////////////////////////////////////////////////////////////
+    //    for PCMxWay Interface API ...   Stan
+    /////////////////////////////////////////////////////////////////////////
+    virtual int xWayPlay_Start(int sample_rate) = 0;
+    virtual int xWayPlay_Stop(void) = 0;
+    virtual int xWayPlay_Write(void *buffer, int size_bytes) = 0;
+    virtual int xWayPlay_GetFreeBufferCount(void) = 0;
+    virtual int xWayRec_Start(int sample_rate) = 0;
+    virtual int xWayRec_Stop(void) = 0;
+    virtual int xWayRec_Read(void *buffer, int size_bytes) = 0;
+    //add by wendy
+    virtual int ReadRefFromRing(void*buf, uint32_t datasz,void* DLtime) =0;
+    virtual int GetVoiceUnlockULTime(void* DLtime) =0;
+    virtual int SetVoiceUnlockSRC(uint outSR, uint outChannel) = 0;
+    virtual bool startVoiceUnlockDL()= 0;
+    virtual bool stopVoiceUnlockDL() = 0;
+    virtual void freeVoiceUnlockDLInstance() = 0;
+    virtual int GetVoiceUnlockDLLatency() = 0;
+    virtual bool getVoiceUnlockDLInstance() = 0;
+
     // Returns audio input buffer size according to parameters passed or 0 if one of the
     // parameters is not supported
     virtual size_t    getInputBufferSize(uint32_t sampleRate, int format, int channelCount) = 0;
@@ -238,14 +282,8 @@ public:
                                 uint32_t *channels=0,
                                 uint32_t *sampleRate=0,
                                 status_t *status=0) = 0;
-    /** This method creates and opens the audio hardware output
-     *  session for control path */
-    virtual AudioStreamOut* openOutputSession(
-                                uint32_t devices,
-                                int *format=0,
-                                status_t *status=0,
-                                int sessionId=-1) {return 0;};
     virtual    void        closeOutputStream(AudioStreamOut* out) = 0;
+
     /** This method creates and opens the audio hardware input stream */
     virtual AudioStreamIn* openInputStream(
                                 uint32_t devices,
@@ -260,6 +298,8 @@ public:
     virtual status_t dumpState(int fd, const Vector<String16>& args) = 0;
 
     static AudioHardwareInterface* create();
+
+    static AudioHardwareInterface* A2DPcreate();
 
 protected:
 

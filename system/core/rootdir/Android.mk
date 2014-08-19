@@ -7,11 +7,23 @@ copy_from := \
 	etc/dbus.conf \
 	etc/hosts
 
+# Vanzo:songlixin on: Mon, 20 Feb 2012 17:35:22 +0800
+# to copy salecfg if it exists
+HAVE_SALECFG_FILE := $(shell test -f $(LOCAL_PATH)/etc/salecfg && echo yes)
+ifeq ($(HAVE_SALECFG_FILE), yes)
+    copy_from += etc/salecfg
+endif
+# End of Vanzo:songlixin
+
 ifeq ($(TARGET_PRODUCT),full)
 copy_from += etc/vold.fstab
 endif
 
 ifeq ($(TARGET_PRODUCT),full_x86)
+copy_from += etc/vold.fstab
+endif
+
+ifeq ($(TARGET_PRODUCT),full_mips)
 copy_from += etc/vold.fstab
 endif
 
@@ -49,6 +61,8 @@ $(file) : $(LOCAL_PATH)/ueventd.rc | $(ACP)
 	$(transform-prebuilt-to-target)
 ALL_PREBUILT += $(file)
 $(INSTALLED_RAMDISK_TARGET): $(file)
+
+# init.usb.rc is handled by build/target/product/core.rc
 
 # Just like /system/etc/init.goldfish.sh, the /init.godlfish.rc is here
 # to allow -user builds to properly run the dex pre-optimization pass in

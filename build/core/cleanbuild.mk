@@ -1,3 +1,34 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+
+
 # Copyright (C) 2007 The Android Open Source Project
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,6 +109,10 @@ else
     $(info Clean step: $(INTERNAL_CLEAN_STEP.$(step))) \
     $(shell $(INTERNAL_CLEAN_STEP.$(step))) \
    )
+  # If we are running mm/mmm, we should copy over the other clean steps too.
+  ifneq ($(ONE_SHOT_MAKEFILE),)
+    INTERNAL_CLEAN_STEPS := $(strip $(CURRENT_CLEAN_STEPS) $(steps))
+  endif
   steps :=
 endif
 CURRENT_CLEAN_BUILD_VERSION :=
@@ -182,7 +217,10 @@ installclean_files := \
 	$(PRODUCT_OUT)/obj/APPS \
 	$(PRODUCT_OUT)/obj/NOTICE_FILES \
 	$(PRODUCT_OUT)/obj/PACKAGING \
+        $(PRODUCT_OUT)/obj/EXECUTABLES \
+        $(PRODUCT_OUT)/obj/SHARED_LIBRARIES \
 	$(PRODUCT_OUT)/recovery \
+	$(PRODUCT_OUT)/factory \
 	$(PRODUCT_OUT)/root \
 	$(PRODUCT_OUT)/system \
 	$(PRODUCT_OUT)/dex_bootjars \
@@ -213,6 +251,8 @@ dataclean:
 installclean: FILES := $(installclean_files)
 installclean: dataclean
 	$(hide) rm -rf $(FILES)
+#the sdk/cts building process could clean system folder twice
+	$(hide) /usr/bin/perl mediatek/build/tools/mtkBegin.pl $(PROJECT)
 	@echo "Deleted images and staging directories."
 
 ifeq "$(force_installclean)" "true"
@@ -220,5 +260,6 @@ ifeq "$(force_installclean)" "true"
   $(info *** rm -rf $(dataclean_files) $(installclean_files))
   $(shell rm -rf $(dataclean_files) $(installclean_files))
   $(info *** Done with the cleaning, now starting the real build.)
+  $(shell /usr/bin/perl mediatek/build/tools/mtkBegin.pl $(PROJECT))
 endif
 force_installclean :=

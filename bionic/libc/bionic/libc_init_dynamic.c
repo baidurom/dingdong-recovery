@@ -52,6 +52,26 @@
 #include "libc_init_common.h"
 #include <bionic_tls.h>
 
+#if defined(HAVE_AEE_FEATURE)
+#include <signal.h>
+#include <sys/system_properties.h>
+static void _core_direct_debug_init(void)
+{
+    char env[PROP_VALUE_MAX];
+    int len = 0;
+    
+    len = __system_property_get("persist.aee.core.direct", env);
+    if (len > 0 && !strncmp(env, "enable", 6)) {
+        signal(SIGILL, SIG_DFL);
+        signal(SIGABRT, SIG_DFL);
+        signal(SIGBUS, SIG_DFL);
+        signal(SIGFPE, SIG_DFL);
+        signal(SIGSEGV, SIG_DFL);
+        signal(SIGSTKFLT, SIG_DFL);
+    }
+}
+#endif
+
 /* We flag the __libc_preinit function as a constructor to ensure
  * that its address is listed in libc.so's .init_array section.
  * This ensures that the function is called by the dynamic linker
@@ -76,11 +96,36 @@ void __libc_preinit(void)
 
     __libc_init_common(elfdata);
 
+    /* Setup pthread routines accordingly to the environment.
+     * Requires system properties
+     */
+    extern void pthread_debug_init(void);
+    pthread_debug_init();
+
     /* Setup malloc routines accordingly to the environment.
      * Requires system properties
      */
     extern void malloc_debug_init(void);
     malloc_debug_init();
+
+#if defined(HAVE_AEE_FEATURE)
+    _core_direct_debug_init();
+#endif
+
+    /* Setup fdleak debug routines accordingly to the environment.
+     * Requires system properties
+     */
+    void fdleak_debug_init(void);
+    fdleak_debug_init();
+}
+
+void __libc_postfini(void)
+{
+    extern void fdleak_debug_fini(void);
+    fdleak_debug_fini();
+    
+    extern void malloc_debug_fini(void);
+    malloc_debug_fini();
 }
 
 /* This function is called from the executable's _start entry point

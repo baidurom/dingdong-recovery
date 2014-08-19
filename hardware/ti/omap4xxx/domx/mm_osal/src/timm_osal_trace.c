@@ -109,12 +109,12 @@ void __TIMM_OSAL_TraceFunction(const __TIMM_OSAL_TRACE_LOCATION * loc,
 #ifdef _Android
 
 #if ( TIMM_OSAL_DEBUG_TRACE_DETAIL > 1 )
-		LOGD("%s:%d\t%s()\t", simplify_path(loc->file), loc->line,
+		ALOGD("%s:%d\t%s()\t", simplify_path(loc->file), loc->line,
 		    loc->function);
 #endif
 		char string[1000];
 		vsprintf(string, fmt, ap);
-		LOGD("%s",string);
+		ALOGD("%s",string);
 
 #else
 

@@ -72,15 +72,6 @@ function RilCall(state, phoneNumber, callerName) {
 }
 
 /**
-*Create a SMS
-*/
-function RilSMS(messageRef, ackPDU) {
-    this.messageRef = messageRef;
-    this.ackPDU = ackPDU;
-    this.errorCode = 0;
-}
-
-/**
  * Simulated Radio
  */
 function Radio() {
@@ -109,30 +100,20 @@ function Radio() {
     // Number of active calls in calls
     var numberActiveCalls = 0;
 
-    // Number of active SMSs in SMSs
-    var numberActiveSMSs = 0;
-
     // Maximum number of active calls
     var maxNumberActiveCalls = 7;
     var maxConnectionsPerCall = 5; // only 5 connections allowed per call
 
-    // Maximum number of active SMSs
-    var maxNumberActiveSMSs = 10;
-
     // Flag to denote whether an incoming/waiting call is answered
     var incomingCallIsProcessed = false;
-
-    // Flag to denote whether an incoming/waiting SMS is answered
-    var incomingSMSIsProcessed = false;
 
     // Call transition flag
     var callTransitionFlag = false;  // default to auto-transition
 
     var lastCallFailCause = 0;
 
-    // Array of "active" calls and SMSs
+    // Array of "active" calls
     var calls = Array(maxNumberActiveCalls + 1);
-    var SMSs = Array(maxNumberActiveSMSs + 1);
 
     // The result returned by the request handlers
     var result = new Object();
@@ -236,28 +217,6 @@ function Radio() {
     }
 
     /**
-      * Add an active SMS
-     */
-    this.addSMS = function(messageRef, ackPDU) {
-         print('Radio: addSMS');
-         var c = null;
-         if (numberActiveSMSs < maxNumberActiveSMSs) {
-             numberActiveSMSs += 1;
-             c = new RilSMS(messageRef, ackPDU);
-             for (var i = 1; i < (maxNumberActiveSMSs + 1); i++) {
-                 print('Radio: addSMS, i=' + i);
-                 if (typeof SMSs[i] == 'undefined') {
-                     print('Radio: addSMS, SMSs[' + i + '] is undefined');
-                     SMSs[i] = c;
-                     break;
-                 }
-             }
-             this.printSMSs(SMSs);
-         }
-         return c;
-     }
-
-    /**
      * Remove the call, does nothing if the call is undefined.
      *
      * @param index into calls to remove.
@@ -293,18 +252,6 @@ function Radio() {
     }
 
     /**
-     * Print the SMS
-     *
-     * @param c is the RilSMS to print
-     */
-    this.printSMS = function(c) {
-        if ((c != null) && (typeof c != 'undefined')) {
-            print('c[' + c.index + ']: messageRef=' + c.messageRef + ' ackPDU=' + c.ackPDU +
-                  ' errorCode=' + c.errorCode + 'content');
-        }
-    }
-
-    /**
      * Print all the calls.
      *
      * @param callArray is an Array of RilCall's
@@ -319,23 +266,6 @@ function Radio() {
                 print('c[' + i + ']: undefined');
             } else {
                 this.printCall(callArray[i]);
-            }
-        }
-    }
-
-    /**
-     *Print all the SMSs
-     */
-    this.printSMSs = function(SMSArray) {
-        if (typeof SMSArray == 'undefined') {
-            SMSArray = SMSs;
-        }
-        print('SMSArray.length=' + SMSArray.length);
-        for (var i = 0; i < SMSArray.length; i++) {
-            if ((SMSArray[i] == null) || (typeof SMSArray[i] == 'undefined')) {
-                print('c[' + i + ']: undefined');
-            } else {
-                this.printCall(SMSArray[i]);
             }
         }
     }
@@ -775,29 +705,6 @@ function Radio() {
     }
 
     /**
-     * Handle RIL_REQUEST_SMS_ACKNOWLEDGE
-     *
-     * @param req is the Request
-     */
-    this.rilRequestSMSAcknowledge = function(req) { // 37
-        print('Radio: rilRequestSMSAcknowledge E');
-        var rsp = new Object();
-
-        // pack SMSs into rsp.SMSs
-        /*rsp.SMSs = new Array();
-        var i;
-        var j;
-        for (i = 0, j = 0; i < SMSs.length; i++) {
-            if (typeof SMSs[i] != 'undefined') {
-                rsp.SMSs[j++] = SMSs[i];
-            }
-        }
-        result.responseProtobuf = rilSchema[packageNameAndSeperator +
-                                            'RspSMSAcknowledge'].serialize(rsp);*/
-        return result;
-    }
-
-    /**
      * Handle RIL_REQUEST_ANSWER
      *
      * @param req is the Request
@@ -1231,31 +1138,6 @@ function Radio() {
     }
 
     /**
-     * send UNSOL_RESPONSE_NEW_SMS
-     */
-    this.ctrlServerCmdNewSMS = function(req) { // 1007
-        print('ctrlServerCmdNewSMS: req.reqNum=' + req.reqNum);
-        var rsp = new Object();
-        rsp.ackPDU = req.data.ackPDU;
-        print('ackPDU=' + rsp.ackPDU);
-        response = rilSchema[packageNameAndSeperator + 'RilSMS'].serialize(rsp);
-
-        sendRilUnsolicitedResponse(RIL_UNSOL_RESPONSE_NEW_SMS, response);
-
-        //Send the next alert in 3 seconds. [refer to ril.h definition]
-        if (tag == false) {
-            simulatedRadioWorker.addDelayed({
-                'reqNum': CMD_UNSOL_NEW_SMS
-            },
-            3000);
-            tag = true;
-            result.sendResponse = false;
-        }
-
-        return result;
-    }
-
-    /**
      * Process the request by dispatching to the request handlers
      */
     this.process = function(req) {
@@ -1325,8 +1207,6 @@ function Radio() {
                 this.rilRequestVoiceRegistrationState;
     this.radioDispatchTable[RIL_REQUEST_DATA_REGISTRATION_STATE] = // 21
                 this.rilRequestDataRegistrationState;
-    this.radioDispatchTable[RIL_REQUEST_SMS_ACKNOWLEDGE] = //37
-                this.rilRequestSMSAcknowledge;
     this.radioDispatchTable[RIL_REQUEST_ANSWER] = // 40
                 this.rilRequestAnswer;
     this.radioDispatchTable[RIL_REQUEST_QUERY_NETWORK_SELECTION_MODE] = // 45
@@ -1354,8 +1234,7 @@ function Radio() {
                 this.ctrlServerCmdSetCallActive;
     this.radioDispatchTable[CTRL_CMD_ADD_DIALING_CALL] =  // 1006
                 this.ctrlServerCmdAddDialingCall;
-    this.radioDispatchTable[CTRL_CMD_SET_NEW_SMS] = // 1007
-                this.ctrlServerCmdNewSMS;
+
     this.radioDispatchTable[CMD_DELAY_TEST] = // 2000
                 this.cmdDelayTest;
     this.radioDispatchTable[CMD_UNSOL_SIGNAL_STRENGTH] =  // 2001

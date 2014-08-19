@@ -22,6 +22,12 @@ LOCAL_PATH := $(call my-dir)
 # required type is 'primary'. Other possibilites are 'a2dp', 'usb', etc.
 include $(CLEAR_VARS)
 
+ifeq ($(strip $(BOARD_USES_MTK_AUDIO)),true)
+  LOCAL_CFLAGS += -DMTK_AUDIO
+else
+  LOCAL_CFLAGS += -DGENERIC_AUDIO
+endif
+
 LOCAL_MODULE := audio.primary.default
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_SRC_FILES := audio_hw.c

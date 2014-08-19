@@ -1,3 +1,38 @@
+# Copyright Statement:
+#
+# This software/firmware and related documentation ("MediaTek Software") are
+# protected under relevant copyright laws. The information contained herein
+# is confidential and proprietary to MediaTek Inc. and/or its licensors.
+# Without the prior written permission of MediaTek inc. and/or its licensors,
+# any reproduction, modification, use or disclosure of MediaTek Software,
+# and information contained herein, in whole or in part, shall be strictly prohibited.
+#
+# MediaTek Inc. (C) 2010. All rights reserved.
+#
+# BY OPENING THIS FILE, RECEIVER HEREBY UNEQUIVOCALLY ACKNOWLEDGES AND AGREES
+# THAT THE SOFTWARE/FIRMWARE AND ITS DOCUMENTATIONS ("MEDIATEK SOFTWARE")
+# RECEIVED FROM MEDIATEK AND/OR ITS REPRESENTATIVES ARE PROVIDED TO RECEIVER ON
+# AN "AS-IS" BASIS ONLY. MEDIATEK EXPRESSLY DISCLAIMS ANY AND ALL WARRANTIES,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE OR NONINFRINGEMENT.
+# NEITHER DOES MEDIATEK PROVIDE ANY WARRANTY WHATSOEVER WITH RESPECT TO THE
+# SOFTWARE OF ANY THIRD PARTY WHICH MAY BE USED BY, INCORPORATED IN, OR
+# SUPPLIED WITH THE MEDIATEK SOFTWARE, AND RECEIVER AGREES TO LOOK ONLY TO SUCH
+# THIRD PARTY FOR ANY WARRANTY CLAIM RELATING THERETO. RECEIVER EXPRESSLY ACKNOWLEDGES
+# THAT IT IS RECEIVER'S SOLE RESPONSIBILITY TO OBTAIN FROM ANY THIRD PARTY ALL PROPER LICENSES
+# CONTAINED IN MEDIATEK SOFTWARE. MEDIATEK SHALL ALSO NOT BE RESPONSIBLE FOR ANY MEDIATEK
+# SOFTWARE RELEASES MADE TO RECEIVER'S SPECIFICATION OR TO CONFORM TO A PARTICULAR
+# STANDARD OR OPEN FORUM. RECEIVER'S SOLE AND EXCLUSIVE REMEDY AND MEDIATEK'S ENTIRE AND
+# CUMULATIVE LIABILITY WITH RESPECT TO THE MEDIATEK SOFTWARE RELEASED HEREUNDER WILL BE,
+# AT MEDIATEK'S OPTION, TO REVISE OR REPLACE THE MEDIATEK SOFTWARE AT ISSUE,
+# OR REFUND ANY SOFTWARE LICENSE FEES OR SERVICE CHARGE PAID BY RECEIVER TO
+# MEDIATEK FOR SUCH MEDIATEK SOFTWARE AT ISSUE.
+#
+# The following software/firmware and/or related documentation ("MediaTek Software")
+# have been modified by MediaTek Inc. All revisions are subject to any receiver's
+# applicable license agreements with MediaTek Inc.
+
+
 #
 # Copyright (C) 2008 The Android Open Source Project
 #
@@ -53,16 +88,21 @@ $(error $(LOCAL_PATH): Package modules may not define LOCAL_MODULE)
 endif
 LOCAL_MODULE := $(LOCAL_PACKAGE_NAME)
 
-# Android packages should use Android resources or assets.
-ifneq (,$(LOCAL_JAVA_RESOURCE_DIRS))
-$(error $(LOCAL_PATH): Package modules may not set LOCAL_JAVA_RESOURCE_DIRS)
-endif
-ifneq (,$(LOCAL_JAVA_RESOURCE_FILES))
-$(error $(LOCAL_PATH): Package modules may not set LOCAL_JAVA_RESOURCE_FILES)
-endif
-
 ifeq ($(strip $(LOCAL_MANIFEST_FILE)),)
 LOCAL_MANIFEST_FILE := AndroidManifest.xml
+ ifneq ($(RESOURCE_OVERLAY_SUPPORT),)
+   MANIFEST_OVERLAY_SUPPORT := $(RESOURCE_OVERLAY_SUPPORT)
+ endif
+else
+# if manifest file specified in Android.mk,
+# disable manifest overlay mechanism
+MANIFEST_OVERLAY_SUPPORT :=
+endif
+
+# If you need to put the MANIFEST_FILE outside of LOCAL_PATH
+# you can use FULL_MANIFEST_FILE
+ifeq ($(strip $(LOCAL_FULL_MANIFEST_FILE)),)
+LOCAL_FULL_MANIFEST_FILE := $(LOCAL_PATH)/$(LOCAL_MANIFEST_FILE)
 endif
 
 ifneq ($(strip $(LOCAL_MODULE_CLASS)),)
@@ -83,15 +123,32 @@ endif
 
 ifeq (,$(LOCAL_ASSET_DIR))
 LOCAL_ASSET_DIR := $(LOCAL_PATH)/assets
+#
+# MediaTek assets overlay
+#
+ifneq ($(RESOURCE_OVERLAY_SUPPORT),)
+  overlay_assets_dir := $(shell perl $(MTK_ROOT_BUILD)/tools/assets_overlay.pl \
+                                     $(LOCAL_PATH) \
+                                     $(LOCAL_ASSET_DIR) \
+                                     $(TARGET_PRODUCT) \
+                                     '$(PRODUCT_PACKAGE_OVERLAYS)'; \
+                                if [ $$? != 0 ]; then echo ASSETS_OVERLAY_ERROR; fi \
+                         )
+  ifneq ($(filter ASSETS_OVERLAY_ERROR, $(overlay_assets_dir)),)
+    $(error errors in assets overlay process)
+  else
+    LOCAL_ASSET_DIR := $(strip $(overlay_assets_dir))
+  endif
+endif
 endif
 
 ifeq (,$(LOCAL_RESOURCE_DIR))
   LOCAL_RESOURCE_DIR := $(LOCAL_PATH)/res
 endif
 LOCAL_RESOURCE_DIR := \
-  $(wildcard $(foreach dir, $(PRODUCT_PACKAGE_OVERLAYS), \
-    $(addprefix $(dir)/, $(LOCAL_RESOURCE_DIR)))) \
   $(wildcard $(foreach dir, $(DEVICE_PACKAGE_OVERLAYS), \
+    $(addprefix $(dir)/, $(LOCAL_RESOURCE_DIR)))) \
+  $(wildcard $(foreach dir, $(PRODUCT_PACKAGE_OVERLAYS), \
     $(addprefix $(dir)/, $(LOCAL_RESOURCE_DIR)))) \
   $(LOCAL_RESOURCE_DIR)
 
@@ -105,7 +162,8 @@ all_resources := $(strip \
           $(call find-subdir-assets,$(dir)) \
          ) \
        ) \
-     ))
+     ) \
+    $(strip $(LOCAL_GENERATED_RESOURCES)))
 
 all_res_assets := $(strip $(all_assets) $(all_resources))
 
@@ -132,7 +190,7 @@ LOCAL_PROGUARD_ENABLED:=$(strip $(LOCAL_PROGUARD_ENABLED))
 ifndef LOCAL_PROGUARD_ENABLED
 ifneq ($(filter user userdebug, $(TARGET_BUILD_VARIANT)),)
     # turn on Proguard by default for user & userdebug build
-    LOCAL_PROGUARD_ENABLED :=full
+    LOCAL_PROGUARD_ENABLED :=
 endif
 endif
 ifeq ($(LOCAL_PROGUARD_ENABLED),disabled)
@@ -162,6 +220,35 @@ ifeq (false,$(LOCAL_DEX_PREOPT))
 LOCAL_DEX_PREOPT :=
 endif
 
+ifeq (true,$(EMMA_INSTRUMENT))
+ifndef LOCAL_EMMA_INSTRUMENT
+# No emma for test apks.
+ifeq (,$(filer tests,$(LOCAL_MODULE_TAGS))$(LOCAL_INSTRUMENTATION_FOR))
+LOCAL_EMMA_INSTRUMENT := true
+endif # No test apk
+endif # LOCAL_EMMA_INSTRUMENT is not set
+else
+LOCAL_EMMA_INSTRUMENT := false
+endif # EMMA_INSTRUMENT is true
+
+ifeq (true,$(LOCAL_EMMA_INSTRUMENT))
+ifeq (true,$(EMMA_INSTRUMENT_STATIC))
+LOCAL_STATIC_JAVA_LIBRARIES += emma
+else
+ifdef LOCAL_SDK_VERSION
+ifdef TARGET_BUILD_APPS
+# In unbundled build merge the emma library into the apk.
+LOCAL_STATIC_JAVA_LIBRARIES += emma
+else
+# If build against the SDK in full build, core.jar is not used,
+# we have to use prebiult emma.jar to make Proguard happy;
+# Otherwise emma classes are included in core.jar.
+LOCAL_PROGUARD_FLAGS += -libraryjars $(EMMA_JAR)
+endif # full build
+endif # LOCAL_SDK_VERSION
+endif # EMMA_INSTRUMENT_STATIC
+endif # LOCAL_EMMA_INSTRUMENT
+
 #################################
 include $(BUILD_SYSTEM)/java.mk
 #################################
@@ -171,7 +258,24 @@ ifeq ($(LOCAL_SDK_RES_VERSION),)
   LOCAL_SDK_RES_VERSION:=$(LOCAL_SDK_VERSION)
 endif
 
-full_android_manifest := $(LOCAL_PATH)/$(LOCAL_MANIFEST_FILE)
+full_android_manifest := $(LOCAL_FULL_MANIFEST_FILE)
+#
+# MediaTek manifest file overlay
+#
+ifneq ($(MANIFEST_OVERLAY_SUPPORT),)
+  overlay_manifest_file := \
+    $(foreach mf, $(PRODUCT_PACKAGE_OVERLAYS), \
+      $(if $(wildcard $(mf)/$(LOCAL_PATH)/$(LOCAL_MANIFEST_FILE)), \
+        $(mf)/$(LOCAL_PATH)/$(LOCAL_MANIFEST_FILE) \
+        , \
+       ) \
+     )
+
+  ifneq ($(strip $(overlay_manifest_file)),)
+    full_android_manifest := $(word 1,$(overlay_manifest_file))
+  endif
+endif
+
 $(LOCAL_INTERMEDIATE_TARGETS): \
     PRIVATE_ANDROID_MANIFEST := $(full_android_manifest)
 ifneq (,$(filter-out current, $(LOCAL_SDK_VERSION)))
@@ -228,6 +332,10 @@ ifdef LOCAL_EXPORT_PACKAGE_RESOURCES
 # files.
 resource_export_package := $(intermediates.COMMON)/package-export.apk
 $(R_file_stamp): $(resource_export_package)
+$(call intermediates-dir-for,APPS,mediatek-res,,COMMON)/package-export.apk:$(call intermediates-dir-for,APPS,framework-res,,COMMON)/src/R.stamp 
+$(call intermediates-dir-for,APPS,framework-res-yi2,,COMMON)/package-export.apk:$(call intermediates-dir-for,APPS,mediatek-res,,COMMON)/src/R.stamp $(call intermediates-dir-for,APPS,framework-res,,COMMON)/src/R.stamp
+$(call intermediates-dir-for,APPS,framework-res-yi3,,COMMON)/package-export.apk:$(call intermediates-dir-for,APPS,framework-res-yi2,,COMMON)/src/R.stamp $(call intermediates-dir-for,APPS,mediatek-res,,COMMON)/src/R.stamp $(call intermediates-dir-for,APPS,framework-res,,COMMON)/src/R.stamp
+$(call intermediates-dir-for,APPS,framework-res-yi,,COMMON)/package-export.apk:$(call intermediates-dir-for,APPS,framework-res-yi3,,COMMON)/src/R.stamp $(call intermediates-dir-for,APPS,mediatek-res,,COMMON)/src/R.stamp $(call intermediates-dir-for,APPS,framework-res,,COMMON)/src/R.stamp 
 
 # add-assets-to-package looks at PRODUCT_AAPT_CONFIG, but this target
 # can't know anything about PRODUCT.  Clear it out just for this target.
@@ -261,7 +369,7 @@ else
 # Most packages should link against the resources defined by framework-res.
 # Even if they don't have their own resources, they may use framework
 # resources.
-ifneq ($(filter-out current,$(LOCAL_SDK_RES_VERSION)),)
+ifneq ($(filter-out current,$(LOCAL_SDK_RES_VERSION))$(if $(TARGET_BUILD_APPS),$(filter current,$(LOCAL_SDK_RES_VERSION))),)
 # for released sdk versions, the platform resources were built into android.jar.
 framework_res_package_export := \
     $(HISTORICAL_SDK_VERSIONS_ROOT)/$(LOCAL_SDK_RES_VERSION)/android.jar
@@ -269,12 +377,42 @@ framework_res_package_export_deps := $(framework_res_package_export)
 else # LOCAL_SDK_RES_VERSION
 framework_res_package_export := \
     $(call intermediates-dir-for,APPS,framework-res,,COMMON)/package-export.apk
+ifeq ($(LOCAL_USE_YI_RES),true)
+LOCAL_NO_MTKRES := true
+framework_res_package_export += \
+        $(call intermediates-dir-for,APPS,framework-res-yi,,COMMON)/package-export.apk
+endif
+ifneq ($(LOCAL_NO_MTKRES),true)
+framework_res_package_export += \
+	$(call intermediates-dir-for,APPS,mediatek-res,,COMMON)/package-export.apk
+endif
+ifeq ($(LOCAL_USE_YI2_RES),true)
+framework_res_package_export += \
+        $(call intermediates-dir-for,APPS,framework-res-yi2,,COMMON)/package-export.apk
+else
+ifeq ($(LOCAL_USE_YI3_RES),true)
+framework_res_package_export += \
+        $(call intermediates-dir-for,APPS,framework-res-yi2,,COMMON)/package-export.apk \
+        $(call intermediates-dir-for,APPS,framework-res-yi3,,COMMON)/package-export.apk
+else
+ifeq ($(LOCAL_USE_YI4_RES),true)
+framework_res_package_export += \
+        $(call intermediates-dir-for,APPS,framework-res-yi2,,COMMON)/package-export.apk \
+        $(call intermediates-dir-for,APPS,framework-res-yi3,,COMMON)/package-export.apk \
+        $(call intermediates-dir-for,APPS,framework-res-yi4,,COMMON)/package-export.apk
+endif # LOCAL_USE_YI4_RES
+endif # LOCAL_USE_YI3_RES
+endif # LOCAL_USE_YI2_RES
+
 # We can't depend directly on the export.apk file; it won't get its
 # PRIVATE_ vars set up correctly if we do.  Instead, depend on the
 # corresponding R.stamp file, which lists the export.apk as a dependency.
 framework_res_package_export_deps := \
-    $(dir $(framework_res_package_export))src/R.stamp
-endif # LOCAL_SDK_VERSION
+    $(foreach pkg, $(framework_res_package_export), $(dir $(pkg))src/R.stamp)
+endif # LOCAL_SDK_RES_VERSION
+$(R_file_stamp): $(framework_res_package_export_deps)
+$(LOCAL_INTERMEDIATE_TARGETS): \
+    PRIVATE_AAPT_INCLUDES := $(framework_res_package_export)
 endif # LOCAL_NO_STANDARD_LIBRARIES
 
 ifneq ($(full_classes_jar),)
@@ -296,12 +434,12 @@ jni_shared_libraries := \
 # libstlport_shared.so should never go to the system image.
 # Instead it should be packaged into the apk.
 ifeq (stlport_shared,$(LOCAL_NDK_STL_VARIANT))
-ifndef LOCAL_NDK_VERSION
-$(error LOCAL_NDK_VERSION has to be defined together with LOCAL_NDK_STL_VARIANT, \
+ifndef LOCAL_SDK_VERSION
+$(error LOCAL_SDK_VERSION has to be defined together with LOCAL_NDK_STL_VARIANT, \
     LOCAL_PACKAGE_NAME=$(LOCAL_PACKAGE_NAME))
 endif
 jni_shared_libraries += \
-    $(HISTORICAL_NDK_VERSIONS_ROOT)/android-ndk-r$(LOCAL_NDK_VERSION)/sources/cxx-stl/stlport/libs/$(TARGET_CPU_ABI)/libstlport_shared.so
+    $(HISTORICAL_NDK_VERSIONS_ROOT)/current/sources/cxx-stl/stlport/libs/$(TARGET_CPU_ABI)/libstlport_shared.so
 endif
 
 # Set the abi directory used by the local JNI shared libraries.
@@ -319,20 +457,37 @@ endif
 # Secure release builds will have their packages signed after the fact,
 # so it's ok for these private keys to be in the clear.
 ifeq ($(LOCAL_CERTIFICATE),)
+  ifeq ($(MTK_SIGNATURE_CUSTOMIZATION),yes)
+    LOCAL_CERTIFICATE := releasekey
+  else
     LOCAL_CERTIFICATE := $(DEFAULT_SYSTEM_DEV_CERTIFICATE)
+  endif
+    
 endif
 
 ifeq ($(LOCAL_CERTIFICATE),EXTERNAL)
   # The special value "EXTERNAL" means that we will sign it with the
   # default devkey, apply predexopt, but then expect the final .apk
   # (after dexopting) to be signed by an outside tool.
+  ifeq ($(MTK_SIGNATURE_CUSTOMIZATION),yes)
+    LOCAL_CERTIFICATE := releasekey
+  else
   LOCAL_CERTIFICATE := $(DEFAULT_SYSTEM_DEV_CERTIFICATE)
+  endif
   PACKAGES.$(LOCAL_PACKAGE_NAME).EXTERNAL_KEY := 1
 endif
 
 # If this is not an absolute certificate, assign it to a generic one.
 ifeq ($(dir $(strip $(LOCAL_CERTIFICATE))),./)
+  ifeq ($(MTK_SIGNATURE_CUSTOMIZATION),yes)
+    ifeq ($(MTK_INTERNAL),yes)
+      LOCAL_CERTIFICATE := $(SRC_TARGET_DIR)/product/security/common/$(LOCAL_CERTIFICATE)
+    else
+      LOCAL_CERTIFICATE := $(SRC_TARGET_DIR)/product/security/$(TARGET_PRODUCT)/$(LOCAL_CERTIFICATE)
+    endif
+  else
     LOCAL_CERTIFICATE := $(dir $(DEFAULT_SYSTEM_DEV_CERTIFICATE))$(LOCAL_CERTIFICATE)
+  endif
 endif
 private_key := $(LOCAL_CERTIFICATE).pk8
 certificate := $(LOCAL_CERTIFICATE).x509.pem
@@ -356,24 +511,14 @@ ifneq ($(TARGET_BUILD_APPS),)
     # Include all resources for unbundled apps.
     LOCAL_AAPT_INCLUDE_ALL_RESOURCES := true
 endif
-aapt_config := $(PRODUCT_AAPT_CONFIG)
-aapt_pref_config := $(PRODUCT_AAPT_PREF_CONFIG)
-ifneq ($(LOCAL_PRODUCT_AAPT_CONFIG),)
-    aapt_config += $(LOCAL_PRODUCT_AAPT_CONFIG)
-    aapt_config := $(subst $(space),$(comma),$(strip $(aapt_config)))
-    aapt_pref_config += $(LOCAL_PRODUCT_AAPT_CONFIG)
-    aapt_pref_config := $(subst $(space),$(comma),$(strip $(aapt_pref_config)))
-endif
 ifeq ($(LOCAL_AAPT_INCLUDE_ALL_RESOURCES),true)
     $(LOCAL_BUILT_MODULE): PRIVATE_PRODUCT_AAPT_CONFIG :=
     $(LOCAL_BUILT_MODULE): PRIVATE_PRODUCT_AAPT_PREF_CONFIG :=
 else
-    $(LOCAL_BUILT_MODULE): PRIVATE_PRODUCT_AAPT_CONFIG := $(aapt_config)
-    $(LOCAL_BUILT_MODULE): PRIVATE_PRODUCT_AAPT_PREF_CONFIG := $(aapt_pref_config)
+    $(LOCAL_BUILT_MODULE): PRIVATE_PRODUCT_AAPT_CONFIG := $(PRODUCT_AAPT_CONFIG)
+    $(LOCAL_BUILT_MODULE): PRIVATE_PRODUCT_AAPT_PREF_CONFIG := $(PRODUCT_AAPT_PREF_CONFIG)
 endif
 $(LOCAL_BUILT_MODULE): $(all_res_assets) $(jni_shared_libraries) $(full_android_manifest)
-	@echo "check if internal resources are used by $(PRIVATE_MODULE) under $(PRIVATE_PATH)..."
-	@build/tools/check_internal_resource.sh $(PRIVATE_MODULE) $(PRIVATE_PATH)
 	@echo "target Package: $(PRIVATE_MODULE) ($@)"
 	$(create-empty-package)
 	$(add-assets-to-package)
@@ -382,6 +527,10 @@ ifneq ($(jni_shared_libraries),)
 endif
 ifneq ($(full_classes_jar),)
 	$(add-dex-to-package)
+endif
+	$(add-carried-java-resources)
+ifneq ($(extra_jar_args),)
+	$(add-java-resources-to-package)
 endif
 	$(sign-package)
 	@# Alignment must happen after all other zip operations.
@@ -402,5 +551,15 @@ PACKAGES.$(LOCAL_PACKAGE_NAME).OVERRIDES := $(strip $(LOCAL_OVERRIDES_PACKAGES))
 PACKAGES.$(LOCAL_PACKAGE_NAME).RESOURCE_FILES := $(all_resources)
 
 PACKAGES := $(PACKAGES) $(LOCAL_PACKAGE_NAME)
+
+# Lint phony targets
+.PHONY: lint-$(LOCAL_PACKAGE_NAME)
+lint-$(LOCAL_PACKAGE_NAME): PRIVATE_PATH := $(LOCAL_PATH)
+lint-$(LOCAL_PACKAGE_NAME): PRIVATE_LINT_FLAGS := $(LOCAL_LINT_FLAGS)
+lint-$(LOCAL_PACKAGE_NAME) :
+	@echo lint $(PRIVATE_PATH)
+	$(LINT) $(PRIVATE_LINT_FLAGS) $(PRIVATE_PATH)
+
+lintall : lint-$(LOCAL_PACKAGE_NAME)
 
 endif # skip_definition

@@ -65,6 +65,7 @@ struct {
     { "net.lte",          AID_RADIO,    0 },
     { "net.cdma",         AID_RADIO,    0 },
     { "ril.",             AID_RADIO,    0 },
+    { "mux.",             AID_RADIO,    0 },
     { "gsm.",             AID_RADIO,    0 },
     { "persist.radio",    AID_RADIO,    0 },
     { "net.dns",          AID_RADIO,    0 },
@@ -77,7 +78,9 @@ struct {
     { "service.",         AID_SYSTEM,   0 },
     { "wlan.",            AID_SYSTEM,   0 },
     { "dhcp.",            AID_SYSTEM,   0 },
+    { "bwc.mm.",          AID_SYSTEM,   0 },
     { "dhcp.",            AID_DHCP,     0 },
+    { "debug.",           AID_SYSTEM,   0 },
     { "debug.",           AID_SHELL,    0 },
     { "log.",             AID_SHELL,    0 },
     { "service.adb.root", AID_SHELL,    0 },
@@ -85,6 +88,18 @@ struct {
     { "persist.sys.",     AID_SYSTEM,   0 },
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
+    { "gps.",             AID_GPS,     AID_SYSTEM },
+    { "persist.af.",      AID_MEDIA,   0 },
+    { "af.",              AID_MEDIA,   0 },
+    { "a2dp.",            AID_MEDIA,   0 },
+    { "streamin.",        AID_MEDIA,   0 },
+    { "streamout.",       AID_MEDIA,   0 },
+    { "bwc.mm.",          AID_MEDIA,   0 },
+    { "mediatek.",        AID_RADIO,   0 },
+    { "bt.",        AID_BLUETOOTH,    0 },
+    { "persist.mtk.wcn.combo.",        AID_SYSTEM,    0 },
+    { "nvram_init",      AID_NVRAM,   0 },
+    { "persist.mtklog.",  AID_SHELL,   0 },
     { NULL, 0, 0 }
 };
 
@@ -97,9 +112,12 @@ struct {
     unsigned int uid;
     unsigned int gid;
 } control_perms[] = {
-    { "dumpstate",AID_SHELL, AID_LOG },
-    { "ril-daemon",AID_RADIO, AID_RADIO },
-     {NULL, 0, 0 }
+    { "dumpstate", AID_SHELL, AID_LOG },
+    { "ril-daemon", AID_RADIO, AID_RADIO },
+    { "muxreport-daemon", AID_RADIO, AID_RADIO },
+    { "md_minilog_util", AID_RADIO, AID_RADIO},
+    { "sysctl", AID_SHELL, AID_SHELL},
+    {NULL, 0, 0 }
 };
 
 typedef struct {
@@ -148,9 +166,15 @@ out:
 /* (8 header words + 247 toc words) = 1020 bytes */
 /* 1024 bytes header and toc + 247 prop_infos @ 128 bytes = 32640 bytes */
 
-#define PA_COUNT_MAX  247
-#define PA_INFO_START 1024
-#define PA_SIZE       32768
+/* System property area = [pa part|pi part] */
+
+//#define PA_COUNT_MAX  247
+#define PA_COUNT_MAX 375
+#define PA_INFO_START (4*(8 + PA_COUNT_MAX+1))
+#define PA_SIZE (PA_INFO_START + PA_COUNT_MAX*128 + 128)
+
+#define PA_COUNT_WARN ((PA_COUNT_MAX*9)/10) 
+
 
 static workspace pa_workspace;
 static prop_info *pa_info_array;
@@ -261,6 +285,7 @@ static void write_persistent_property(const char *name, const char *value)
     char path[PATH_MAX];
     int fd, length;
 
+    NOTICE("Sync Persist[%s:%s] Start\n", name, value);
     snprintf(path, sizeof(path), "%s/%s", PERSISTENT_PROPERTY_DIR, name);
 
     fd = open(tempPath, O_WRONLY|O_CREAT|O_TRUNC, 0600);
@@ -269,14 +294,28 @@ static void write_persistent_property(const char *name, const char *value)
         return;
     }
     write(fd, value, strlen(value));
+    fsync(fd);
     close(fd);
 
     if (rename(tempPath, path)) {
         unlink(tempPath);
         ERROR("Unable to rename persistent property file %s to %s\n", tempPath, path);
     }
+    NOTICE("Sync Persist[%s:%s] Done\n", name, value);
 }
-
+void property_show(void)
+{
+    prop_area *pa = __system_property_area__;
+    unsigned count = pa->count;
+    unsigned *toc = pa->toc;
+    prop_info *pi;
+    unsigned i;
+    for(i = 0; i< count; i++){
+        unsigned entry = *toc++;
+        pi = TOC_TO_INFO(pa, entry);
+        klog_write(4, "<4> #%3d[+%2d]%-32s = %s\n", i+1, (pi->serial) & 0xffffff, pi->name, pi->value);
+    }
+}
 int property_set(const char *name, const char *value)
 {
     prop_area *pa;
@@ -285,15 +324,28 @@ int property_set(const char *name, const char *value)
     int namelen = strlen(name);
     int valuelen = strlen(value);
 
-    if(namelen >= PROP_NAME_MAX) return -1;
-    if(valuelen >= PROP_VALUE_MAX) return -1;
-    if(namelen < 1) return -1;
+    INFO("PropSet[%s:%s] Start\n", name, value);
+    if(namelen >= PROP_NAME_MAX){
+        ERROR("PropSet Error:[%s:%s] namelen >= %d\n", name, value, PROP_NAME_MAX);
+        return -1;
+    }
+    if(valuelen >= PROP_VALUE_MAX){
+        ERROR("PropSet Error:[%s:%s] valuelen >= %d\n", name, value, PROP_NAME_MAX);
+        return -1;
+    }
+    if(namelen < 1){
+        ERROR("PropSet Error:[%s:%s] namelen < 1\n", name, value);
+        return -1;
+    }
 
     pi = (prop_info*) __system_property_find(name);
 
     if(pi != 0) {
         /* ro.* properties may NEVER be modified once set */
-        if(!strncmp(name, "ro.", 3)) return -1;
+        if(!strncmp(name, "ro.", 3)){
+            ERROR("PropSet Error:[%s:%s]  ro.* properties may NEVER be modified once set\n", name, value);
+            return -1;
+        }
 
         pa = __system_property_area__;
         update_prop_info(pi, value, valuelen);
@@ -301,7 +353,15 @@ int property_set(const char *name, const char *value)
         __futex_wake(&pa->serial, INT32_MAX);
     } else {
         pa = __system_property_area__;
-        if(pa->count == PA_COUNT_MAX) return -1;
+        if(pa->count == PA_COUNT_WARN){
+            ERROR("[Property warning] limit would be arrived:%d (Max:%d). Use getprop to review your properties!\n", PA_COUNT_WARN, PA_COUNT_MAX);
+            property_show();
+        }
+        if(pa->count == PA_COUNT_MAX){
+            ERROR("Unable to set Property. Property limit has arrived: %d\n", pa->count);
+            property_show();
+            return -1;
+        }
 
         pi = pa_info_array + pa->count;
         pi->serial = (valuelen << 24);
@@ -335,21 +395,6 @@ int property_set(const char *name, const char *value)
         write_persistent_property(name, value);
     }
     property_changed(name, value);
-    return 0;
-}
-
-static int property_list(void (*propfn)(const char *key, const char *value, void *cookie),
-                  void *cookie)
-{
-    char name[PROP_NAME_MAX];
-    char value[PROP_VALUE_MAX];
-    const prop_info *pi;
-    unsigned n;
-
-    for(n = 0; (pi = __system_property_find_nth(n)); n++) {
-        __system_property_read(pi, name, value);
-        propfn(name, value, cookie);
-    }
     return 0;
 }
 
@@ -505,11 +550,14 @@ static void load_persistent_properties()
     persistent_properties_loaded = 1;
 }
 
-void property_init(bool load_defaults)
+void property_init(void)
 {
     init_property_area();
-    if (load_defaults)
-        load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT);
+}
+
+void property_load_boot_defaults(void)
+{
+    load_properties_from_file(PROP_PATH_RAMDISK_DEFAULT);
 }
 
 int properties_inited(void)
@@ -524,7 +572,9 @@ int properties_inited(void)
  */
 void load_persist_props(void)
 {
+#ifdef ALLOW_LOCAL_PROP_OVERRIDE
     load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
+#endif /* ALLOW_LOCAL_PROP_OVERRIDE */
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
 }
@@ -535,9 +585,13 @@ void start_property_service(void)
 
     load_properties_from_file(PROP_PATH_SYSTEM_BUILD);
     load_properties_from_file(PROP_PATH_SYSTEM_DEFAULT);
+#ifdef ALLOW_LOCAL_PROP_OVERRIDE
     load_properties_from_file(PROP_PATH_LOCAL_OVERRIDE);
+#endif /* ALLOW_LOCAL_PROP_OVERRIDE */
     /* Read persistent properties after all default values have been loaded. */
     load_persistent_properties();
+
+    patch_properties(); // added by MTK
 
     fd = create_socket(PROP_SERVICE_NAME, SOCK_STREAM, 0666, 0, 0);
     if(fd < 0) return;

@@ -61,15 +61,24 @@ enum audio_source {
     AUDIO_SOURCE_CAMCORDER = 5,
     AUDIO_SOURCE_VOICE_RECOGNITION = 6,
     AUDIO_SOURCE_VOICE_COMMUNICATION = 7,
-    AUDIO_SOURCE_FM_RX = 8,
-    AUDIO_SOURCE_FM_RX_A2DP = 9,
+#ifndef ANDROID_DEFAULT_CODE
+	AUDIO_SOURCE_VOICE_UNLOCK =80,
+	AUDIO_SOURCE_CUSTOMIZATION1 =81,
+	AUDIO_SOURCE_CUSTOMIZATION2 =82,
+	AUDIO_SOURCE_CUSTOMIZATION3 =83,
+    AUDIO_SOURCE_MATV =98,
+    AUDIO_SOURCE_FM =99,
+    AUDIO_SOURCE_MAX = AUDIO_SOURCE_FM,
+#else
     AUDIO_SOURCE_MAX = AUDIO_SOURCE_VOICE_COMMUNICATION,
+#endif
 
     AUDIO_SOURCE_LIST_END  // must be last - used to validate audio source type
 };
 
 class AudioSystem {
 public:
+#if 1
     enum stream_type {
         DEFAULT          =-1,
         VOICE_CALL       = 0,
@@ -82,7 +91,12 @@ public:
         ENFORCED_AUDIBLE = 7, // Sounds that cannot be muted by user and must be routed to speaker
         DTMF             = 8,
         TTS              = 9,
-        FM               = 10,
+//#ifndef ANDROID_DEFAULT_CODE
+#if 1
+        FM                = 10,
+        MATV            = 11,
+        BOOT            = 12, //only used for bootanimation and output from speakerand headset
+#endif
         NUM_STREAM_TYPES
     };
 
@@ -90,6 +104,9 @@ public:
     enum pcm_sub_format {
         PCM_SUB_16_BIT          = 0x1, // must be 1 for backward compatibility
         PCM_SUB_8_BIT           = 0x2, // must be 2 for backward compatibility
+#ifndef ANDROID_DEFAULT_CODE
+        PCM_SUB_VM                = 0x4
+#endif
     };
 
     enum audio_sessions {
@@ -135,13 +152,14 @@ public:
         HE_AAC_V1           = 0x05000000,
         HE_AAC_V2           = 0x06000000,
         VORBIS              = 0x07000000,
-        EVRC                = 0x08000000,
-        QCELP               = 0x09000000,
         MAIN_FORMAT_MASK    = 0xFF000000,
         SUB_FORMAT_MASK     = 0x00FFFFFF,
         // Aliases
         PCM_16_BIT          = (PCM|PCM_SUB_16_BIT),
-        PCM_8_BIT          = (PCM|PCM_SUB_8_BIT)
+        PCM_8_BIT          = (PCM|PCM_SUB_8_BIT),
+#ifndef ANDROID_DEFAULT_CODE
+        VM_FMT               = (PCM|PCM_SUB_VM)
+#endif
     };
 
     enum audio_channels {
@@ -218,6 +236,7 @@ public:
         MODE_RINGTONE,
         MODE_IN_CALL,
         MODE_IN_COMMUNICATION,
+        MODE_IN_CALL_2,
         NUM_MODES  // not a valid entry, denotes end-of-list
     };
 
@@ -227,9 +246,12 @@ public:
         NS_ENABLE     = 0x0002,
         NS_DISABLE    = 0,
         TX_IIR_ENABLE = 0x0004,
-        TX_DISABLE    = 0
+        TX_DISABLE    = 0,
+        AGC_NS_IIR_ALL_ENABLE = AGC_ENABLE | NS_ENABLE | TX_IIR_ENABLE
     };
 
+    // DO NOT USE: the "audio_devices" enumeration below is obsolete, use type "audio_devices_t" and
+    //   audio device enumeration from system/audio.h instead.
     enum audio_devices {
         // output devices
         DEVICE_OUT_EARPIECE = 0x1,
@@ -245,42 +267,44 @@ public:
         DEVICE_OUT_AUX_DIGITAL = 0x400,
         DEVICE_OUT_ANLG_DOCK_HEADSET = 0x800,
         DEVICE_OUT_DGTL_DOCK_HEADSET = 0x1000,
-        DEVICE_OUT_FM = 0x2000,
-        DEVICE_OUT_ANC_HEADSET = 0x4000,
-        DEVICE_OUT_ANC_HEADPHONE = 0x8000,
+        DEVICE_OUT_DEFAULT = 0x8000,
+#ifndef ANDROID_DEFAULT_CODE
         DEVICE_OUT_FM_TX = 0x10000,
-        DEVICE_OUT_DIRECTOUTPUT = 0x20000,
-        DEVICE_OUT_PROXY = 0x40000,
-        DEVICE_OUT_DEFAULT = 0x80000,
+#endif
+
         DEVICE_OUT_ALL = (DEVICE_OUT_EARPIECE | DEVICE_OUT_SPEAKER | DEVICE_OUT_WIRED_HEADSET |
                 DEVICE_OUT_WIRED_HEADPHONE | DEVICE_OUT_BLUETOOTH_SCO | DEVICE_OUT_BLUETOOTH_SCO_HEADSET |
                 DEVICE_OUT_BLUETOOTH_SCO_CARKIT | DEVICE_OUT_BLUETOOTH_A2DP | DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
                 DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER | DEVICE_OUT_AUX_DIGITAL |
                 DEVICE_OUT_ANLG_DOCK_HEADSET | DEVICE_OUT_DGTL_DOCK_HEADSET |
-                DEVICE_OUT_ANC_HEADSET | DEVICE_OUT_ANC_HEADPHONE |
-                DEVICE_OUT_FM | DEVICE_OUT_FM_TX | DEVICE_OUT_DIRECTOUTPUT |
-                DEVICE_OUT_PROXY | DEVICE_OUT_DEFAULT),
+#ifndef ANDROID_DEFAULT_CODE
+                DEVICE_OUT_FM_TX |
+#endif
+                DEVICE_OUT_DEFAULT),
         DEVICE_OUT_ALL_A2DP = (DEVICE_OUT_BLUETOOTH_A2DP | DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
                 DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER),
 
         // input devices
-        DEVICE_IN_COMMUNICATION = 0x100000,
-        DEVICE_IN_AMBIENT = 0x200000,
-        DEVICE_IN_BUILTIN_MIC = 0x400000,
-        DEVICE_IN_BLUETOOTH_SCO_HEADSET = 0x800000,
-        DEVICE_IN_WIRED_HEADSET = 0x1000000,
-        DEVICE_IN_AUX_DIGITAL = 0x2000000,
-        DEVICE_IN_VOICE_CALL = 0x4000000,
-        DEVICE_IN_BACK_MIC = 0x8000000,
-        DEVICE_IN_ANC_HEADSET = 0x10000000,
-        DEVICE_IN_FM_RX = 0x20000000,
-        DEVICE_IN_FM_RX_A2DP = 0x40000000,
+        DEVICE_IN_COMMUNICATION = 0x10000,
+        DEVICE_IN_AMBIENT = 0x20000,
+        DEVICE_IN_BUILTIN_MIC = 0x40000,
+        DEVICE_IN_BLUETOOTH_SCO_HEADSET = 0x80000,
+        DEVICE_IN_WIRED_HEADSET = 0x100000,
+        DEVICE_IN_AUX_DIGITAL = 0x200000,
+        DEVICE_IN_VOICE_CALL = 0x400000,
+        DEVICE_IN_BACK_MIC = 0x800000,
         DEVICE_IN_DEFAULT = 0x80000000,
-
+#ifndef ANDROID_DEFAULT_CODE
+        DEVICE_IN_FM = 0x1000000,
+        DEVICE_IN_AUX_DIGITAL2 = 0x2000000,
+#endif
         DEVICE_IN_ALL = (DEVICE_IN_COMMUNICATION | DEVICE_IN_AMBIENT | DEVICE_IN_BUILTIN_MIC |
                 DEVICE_IN_BLUETOOTH_SCO_HEADSET | DEVICE_IN_WIRED_HEADSET | DEVICE_IN_AUX_DIGITAL |
-                DEVICE_IN_VOICE_CALL | DEVICE_IN_BACK_MIC | DEVICE_IN_ANC_HEADSET |
-                DEVICE_IN_FM_RX | DEVICE_IN_FM_RX_A2DP | DEVICE_IN_DEFAULT)
+                DEVICE_IN_VOICE_CALL | DEVICE_IN_BACK_MIC |
+#ifndef ANDROID_DEFAULT_CODE
+                DEVICE_IN_FM | DEVICE_IN_AUX_DIGITAL2 |
+#endif
+                DEVICE_IN_DEFAULT)
     };
 
     // request to open a direct output with getOutput() (by opposition to sharing an output with other AudioTracks)
@@ -301,6 +325,11 @@ public:
         FORCE_BT_DESK_DOCK,
         FORCE_ANALOG_DOCK,
         FORCE_DIGITAL_DOCK,
+        FORCE_NO_BT_A2DP,
+        FORCE_SYSTEM_ENFORCED,
+#ifndef ANDROID_DEFAULT_CODE
+        FORCE_NO_SYSTEM_ENFORCED,//HoChi
+#endif
         NUM_FORCE_CONFIG,
         FORCE_DEFAULT = FORCE_NONE
     };
@@ -311,6 +340,10 @@ public:
         FOR_MEDIA,
         FOR_RECORD,
         FOR_DOCK,
+        FOR_SYSTEM,
+#ifndef ANDROID_DEFAULT_CODE
+		FOR_PROPRIETARY,//HoChi
+#endif
         NUM_FORCE_USE
     };
 
@@ -325,15 +358,24 @@ public:
         NUM_DEVICE_STATES
     };
 
+#endif
+
     static uint32_t popCount(uint32_t u) {
         return popcount(u);
     }
 
+#if 1
     static bool isOutputDevice(audio_devices device) {
-        return audio_is_output_device((audio_devices_t)device);
+        if ((popcount(device) == 1) && ((device & ~DEVICE_OUT_ALL) == 0))
+             return true;
+         else
+             return false;
     }
     static bool isInputDevice(audio_devices device) {
-        return audio_is_input_device((audio_devices_t)device);
+        if ((popcount(device) == 1) && ((device & ~DEVICE_IN_ALL) == 0))
+             return true;
+         else
+             return false;
     }
     static bool isA2dpDevice(audio_devices device) {
         return audio_is_a2dp_device((audio_devices_t)device);
@@ -345,10 +387,10 @@ public:
         return audio_is_low_visibility((audio_stream_type_t)stream);
     }
     static bool isValidFormat(uint32_t format) {
-        return audio_is_valid_format(format);
+        return audio_is_valid_format((audio_format_t) format);
     }
     static bool isLinearPCM(uint32_t format) {
-        return audio_is_linear_pcm(format);
+        return audio_is_linear_pcm((audio_format_t) format);
     }
     static bool isOutputChannel(uint32_t channel) {
         return audio_is_output_channel(channel);
@@ -357,6 +399,7 @@ public:
         return audio_is_input_channel(channel);
     }
 
+#endif
 };
 
 };  // namespace android

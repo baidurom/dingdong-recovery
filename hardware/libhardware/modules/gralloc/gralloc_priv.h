@@ -29,6 +29,12 @@
 
 #include <linux/fb.h>
 
+// [MTK] {{{
+#ifdef MTK_ION_SUPPORT
+#include <linux/ion_drv.h>
+#endif
+// [MTK] }}}
+
 /*****************************************************************************/
 
 struct private_module_t;
@@ -78,8 +84,22 @@ struct private_handle_t {
     int     base;
     int     pid;
 
+// [MTK] {{{
+#ifdef MTK_ION_SUPPORT
+    struct ion_allocation_data *ion_alloc_data;
+    int ion_dev_fd; //to pass lock/unlock ioctl to ion
+#endif
+// [MTK] }}}
+
 #ifdef __cplusplus
+
+// [MTK] {{{
+#ifdef MTK_ION_SUPPORT
+    static const int sNumInts = 8;
+#else
     static const int sNumInts = 6;
+#endif
+// [MTK] }}}
     static const int sNumFds = 1;
     static const int sMagic = 0x3141592;
 
@@ -101,7 +121,12 @@ struct private_handle_t {
                 h->numInts != sNumInts || h->numFds != sNumFds ||
                 hnd->magic != sMagic) 
         {
-            LOGE("invalid gralloc handle (at %p)", h);
+            // [MTK] {{{
+            ALOGE("invalid gralloc handle (at %p),%x=%x, %x=%x,%x=%x,%x=%x,%x=%x",
+                h, h->version, sizeof(native_handle),
+                h->numInts,sNumInts, h->numFds, sNumFds,
+                hnd->magic, sMagic);
+            // [MTK] }}}
             return -EINVAL;
         }
         return 0;

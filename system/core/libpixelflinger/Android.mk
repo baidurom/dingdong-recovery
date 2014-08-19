@@ -43,6 +43,13 @@ ifeq ($(TARGET_ARCH),arm)
 PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
 endif
 
+ifeq ($(TARGET_ARCH),mips)
+PIXELFLINGER_SRC_FILES += codeflinger/MIPSAssembler.cpp
+PIXELFLINGER_SRC_FILES += codeflinger/mips_disassem.c
+PIXELFLINGER_SRC_FILES += arch-mips/t32cb16blend.S
+PIXELFLINGER_CFLAGS += -fstrict-aliasing -fomit-frame-pointer
+endif
+
 LOCAL_SHARED_LIBRARIES := libcutils
 
 ifneq ($(TARGET_ARCH),arm)
@@ -65,6 +72,10 @@ ifneq ($(BUILD_TINY_ANDROID),true)
 # libhardware, but this at least gets us built.
 LOCAL_SHARED_LIBRARIES += libhardware_legacy
 LOCAL_CFLAGS += -DWITH_LIB_HARDWARE
+endif
+ifneq ($(TARGET_BUILD_VARIANT),user)
+LOCAL_CFLAGS += -DDLMALLOC_DEBUG
+LOCAL_SHARED_LIBRARIES += libdl
 endif
 include $(BUILD_SHARED_LIBRARY)
 

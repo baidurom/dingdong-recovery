@@ -121,12 +121,12 @@ OMX_ERRORTYPE TIOMX_Init()
 
     if(pthread_mutex_lock(&mutex) != 0)
     {
-        LOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
 
     count++;
-    LOGD("init count = %d\n", count);
+    ALOGD("init count = %d\n", count);
 
     if (count == 1)
     {
@@ -135,7 +135,7 @@ OMX_ERRORTYPE TIOMX_Init()
 
     if(pthread_mutex_unlock(&mutex) != 0)
     {
-        LOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
     return eError;
@@ -176,7 +176,7 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
 
     if(pthread_mutex_lock(&mutex) != 0)
     {
-        LOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
 
@@ -208,13 +208,13 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
     for (refIndex=0; refIndex < MAX_TABLE_SIZE; refIndex++) {
         //get the index for the component in the table
         if (strcmp(componentTable[refIndex].name, cComponentName) == 0) {
-            LOGD("Found component %s with refCount %d\n",
+            ALOGD("Found component %s with refCount %d\n",
                   cComponentName, componentTable[refIndex].refCount);
 
             /* check if the component is already loaded */
             if (componentTable[refIndex].refCount >= MAX_CONCURRENT_INSTANCES) {
                 err = OMX_ErrorInsufficientResources;
-                LOGE("Max instances of component %s already created.\n", cComponentName);
+                ALOGE("Max instances of component %s already created.\n", cComponentName);
                 goto UNLOCK_MUTEX;
             } else {  // we have not reached the limit yet
                 /* do what was done before need to limit concurrent instances of each component */
@@ -240,7 +240,7 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
 
                 pModules[i] = dlopen(buf, RTLD_LAZY | RTLD_GLOBAL);
                 if( pModules[i] == NULL ) {
-                    LOGE("dlopen %s failed because %s\n", buf, dlerror());
+                    ALOGE("dlopen %s failed because %s\n", buf, dlerror());
                     err = OMX_ErrorComponentNotFound;
                     goto UNLOCK_MUTEX;
                 }
@@ -250,7 +250,7 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
                 pComponentInit = dlsym(pModules[i], "OMX_ComponentInit");
                 pErr = dlerror();
                 if( (pErr != NULL) || (pComponentInit == NULL) ) {
-                    LOGE("%d:: dlsym failed for module %p\n", __LINE__, pModules[i]);
+                    ALOGE("%d:: dlsym failed for module %p\n", __LINE__, pModules[i]);
                     err = OMX_ErrorInvalidComponent;
                     goto CLEAN_UP;
                 }
@@ -261,7 +261,7 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
                 *pHandle = malloc(sizeof(OMX_COMPONENTTYPE));
                 if(*pHandle == NULL) {
                     err = OMX_ErrorInsufficientResources;
-                    LOGE("%d:: malloc of pHandle* failed\n", __LINE__);
+                    ALOGE("%d:: malloc of pHandle* failed\n", __LINE__);
                     goto CLEAN_UP;
                 }
 
@@ -272,7 +272,7 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
                 if (OMX_ErrorNone == err) {
                     err = (componentType->SetCallbacks)(*pHandle, pCallBacks, pAppData);
                     if (err != OMX_ErrorNone) {
-                        LOGE("%d :: Core: SetCallBack failed %d\n",__LINE__, err);
+                        ALOGE("%d :: Core: SetCallBack failed %d\n",__LINE__, err);
                         goto CLEAN_UP;
                     }
                     /* finally, OMX_ComponentInit() was successful and
@@ -283,7 +283,7 @@ OMX_ERRORTYPE TIOMX_GetHandle( OMX_HANDLETYPE* pHandle, OMX_STRING cComponentNam
                     goto UNLOCK_MUTEX;  // Component is found, and thus we are done
                 }
                 else if (err == OMX_ErrorInsufficientResources) {
-                        LOGE("%d :: Core: Insufficient Resources for Component %d\n",__LINE__, err);
+                        ALOGE("%d :: Core: Insufficient Resources for Component %d\n",__LINE__, err);
                         goto CLEAN_UP;
                 }
             }
@@ -307,7 +307,7 @@ CLEAN_UP:
 UNLOCK_MUTEX:
     if(pthread_mutex_unlock(&mutex) != 0)
     {
-        LOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
         err = OMX_ErrorUndefined;
     }
     return (err);
@@ -337,7 +337,7 @@ OMX_ERRORTYPE TIOMX_FreeHandle (OMX_HANDLETYPE hComponent)
 
     if(pthread_mutex_lock(&mutex) != 0)
     {
-        LOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
 
@@ -348,14 +348,14 @@ OMX_ERRORTYPE TIOMX_FreeHandle (OMX_HANDLETYPE hComponent)
     }
 
     if(i == COUNTOF(pModules)) {
-        LOGE("%d :: Core: component %p is not found\n", __LINE__, hComponent);
+        ALOGE("%d :: Core: component %p is not found\n", __LINE__, hComponent);
         retVal = OMX_ErrorBadParameter;
         goto EXIT;
     }
 
     retVal = pHandle->ComponentDeInit(hComponent);
     if (retVal != OMX_ErrorNone) {
-        LOGE("%d :: ComponentDeInit failed %d\n",__LINE__, retVal);
+        ALOGE("%d :: ComponentDeInit failed %d\n",__LINE__, retVal);
         goto EXIT;
     }
 
@@ -364,7 +364,7 @@ OMX_ERRORTYPE TIOMX_FreeHandle (OMX_HANDLETYPE hComponent)
         for (handleIndex=0; handleIndex < componentTable[refIndex].refCount; handleIndex++){
             /* get the position for the component in the table */
             if (componentTable[refIndex].pHandle[handleIndex] == hComponent){
-                LOGD("Found matching pHandle(%p) at index %d with refCount %d",
+                ALOGD("Found matching pHandle(%p) at index %d with refCount %d",
                       hComponent, refIndex, componentTable[refIndex].refCount);
                 if (componentTable[refIndex].refCount) {
                     componentTable[refIndex].refCount -= 1;
@@ -387,7 +387,7 @@ EXIT:
     /* The unload is now complete, so set the error code to pass and exit */
     if(pthread_mutex_unlock(&mutex) != 0)
     {
-        LOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
 
@@ -409,7 +409,7 @@ EXIT:
 OMX_ERRORTYPE TIOMX_Deinit()
 {
     if(pthread_mutex_lock(&mutex) != 0) {
-        LOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex lock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
 
@@ -417,10 +417,10 @@ OMX_ERRORTYPE TIOMX_Deinit()
         count--;
     }
 
-    LOGD("deinit count = %d\n", count);
+    ALOGD("deinit count = %d\n", count);
 
     if(pthread_mutex_unlock(&mutex) != 0) {
-        LOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
+        ALOGE("%d :: Core: Error in Mutex unlock\n",__LINE__);
         return OMX_ErrorUndefined;
     }
 
@@ -548,11 +548,11 @@ OMX_API OMX_ERRORTYPE TIOMX_GetRolesOfComponent (
     {
         if (cComponentName == NULL)
         {
-            LOGE("cComponentName is NULL\n");
+            ALOGE("cComponentName is NULL\n");
         }
         if (pNumRoles == NULL)
         {
-            LOGE("pNumRoles is NULL\n");
+            ALOGE("pNumRoles is NULL\n");
         }
         eError = OMX_ErrorBadParameter;
         goto EXIT;       
@@ -569,7 +569,7 @@ OMX_API OMX_ERRORTYPE TIOMX_GetRolesOfComponent (
     if (!bFound)
     {
         eError = OMX_ErrorComponentNotFound;
-        LOGE("component %s not found\n", cComponentName);
+        ALOGE("component %s not found\n", cComponentName);
         goto EXIT;
     } 
     if (roles == NULL)
@@ -593,7 +593,7 @@ OMX_API OMX_ERRORTYPE TIOMX_GetRolesOfComponent (
         else
         {
             eError = OMX_ErrorBadParameter;
-            LOGE("pNumRoles (%d) is less than actual number (%d) of roles \
+            ALOGE("pNumRoles (%d) is less than actual number (%d) of roles \
                    for this component %s\n", *pNumRoles, componentTable[i].nRoles, cComponentName);
         }
     }
@@ -631,11 +631,11 @@ OMX_API OMX_ERRORTYPE TIOMX_GetComponentsOfRole (
     {
        if (role == NULL)
        {
-           LOGE("role is NULL");
+           ALOGE("role is NULL");
        }
        if (pNumComps == NULL)
        {
-           LOGE("pNumComps is NULL\n");
+           ALOGE("pNumComps is NULL\n");
        }
        eError = OMX_ErrorBadParameter;
        goto EXIT;
@@ -645,7 +645,7 @@ OMX_API OMX_ERRORTYPE TIOMX_GetComponentsOfRole (
     if (!tableCount)
     {
         eError = OMX_ErrorUndefined;
-        LOGE("Component table is empty. Please reload OMX Core\n");
+        ALOGE("Component table is empty. Please reload OMX Core\n");
         goto EXIT;
     }
 
@@ -667,7 +667,7 @@ OMX_API OMX_ERRORTYPE TIOMX_GetComponentsOfRole (
     if (compOfRoleCount == 0)
     {
         eError = OMX_ErrorComponentNotFound;
-        LOGE("Component supporting role %s was not found\n", role);
+        ALOGE("Component supporting role %s was not found\n", role);
     }
     if (compNames == NULL)
     {
@@ -684,7 +684,7 @@ OMX_API OMX_ERRORTYPE TIOMX_GetComponentsOfRole (
                the array is not large enough
             */
             eError = OMX_ErrorBadParameter;
-            LOGE("pNumComps (%d) is less than the actual number (%d) of components \
+            ALOGE("pNumComps (%d) is less than the actual number (%d) of components \
                   supporting role %s\n", *pNumComps, compOfRoleCount, role);
         }
         else
@@ -758,7 +758,7 @@ OMX_ERRORTYPE TIOMX_BuildComponentTable()
     }
     tableCount = numFiles;
     if (eError != OMX_ErrorNone){
-        LOGE("Could not build Component Table\n");
+        ALOGE("Could not build Component Table\n");
     }
 
     return eError;

@@ -438,7 +438,7 @@ static void debugShowFPS()
         mFps = ((mFrameCount - mLastFrameCount) * float(s2ns(1))) / diff;
         mLastFpsTime = now;
         mLastFrameCount = mFrameCount;
-        LOGD("Camera %d Frames, %f FPS", mFrameCount, mFps);
+        ALOGD("Camera %d Frames, %f FPS", mFrameCount, mFps);
     }
     // XXX: mFPS has the value we want
 }

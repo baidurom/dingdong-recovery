@@ -298,6 +298,9 @@ public:
     {
         public:
             GPSData mGPSData;
+            char mMake[EXIF_MODEL_SIZE];
+            char mModel[EXIF_MAKE_SIZE];
+            unsigned int mFocalNum, mFocalDen;
             bool mMakeValid;
             bool mModelValid;
     };
@@ -446,7 +449,8 @@ private:
                                BaseCameraAdapter::AdapterState state);
     status_t convertGPSCoord(double coord, int &deg, int &min, int &sec, int &secDivisor);
     status_t setupEXIF();
-    status_t setupEXIF_libjpeg(ExifElementsTable*);
+    status_t setupEXIF_libjpeg(ExifElementsTable*, OMX_TI_ANCILLARYDATATYPE*,
+                               OMX_TI_WHITEBALANCERESULTTYPE*);
 
     //Focus functionality
     status_t doAutoFocus();
@@ -454,6 +458,7 @@ private:
     status_t checkFocus(OMX_PARAM_FOCUSSTATUSTYPE *eFocusStatus);
     status_t returnFocusStatus(bool timeoutReached);
     status_t getFocusMode(OMX_IMAGE_CONFIG_FOCUSCONTROLTYPE &focusMode);
+    void handleFocusCallback();
 
 
     //Focus distances
@@ -634,12 +639,13 @@ private:
     status_t sendCallBacks(CameraFrame frame, OMX_IN OMX_BUFFERHEADERTYPE *pBuffHeader, unsigned int mask, OMXCameraPortParameters *port);
 
     status_t apply3Asettings( Gen3A_settings& Gen3A );
-    status_t apply3ADefaults(Gen3A_settings &Gen3A);
+    status_t init3AParams(Gen3A_settings &Gen3A);
 
     // AutoConvergence
     status_t setAutoConvergence(OMX_TI_AUTOCONVERGENCEMODETYPE pACMode, OMX_S32 pManualConverence);
     status_t getAutoConvergence(OMX_TI_AUTOCONVERGENCEMODETYPE *pACMode, OMX_S32 *pManualConverence);
 
+    status_t setExtraData(bool enable, OMX_U32, OMX_EXT_EXTRADATATYPE);
     OMX_OTHER_EXTRADATATYPE *getExtradata(OMX_OTHER_EXTRADATATYPE *extraData, OMX_EXTRADATATYPE type);
 
     class CommandHandler : public Thread {
@@ -668,7 +674,7 @@ private:
                 COMMAND_EXIT = -1,
                 CAMERA_START_IMAGE_CAPTURE = 0,
                 CAMERA_PERFORM_AUTOFOCUS = 1,
-                CAMERA_SWITCH_TO_EXECUTING
+                CAMERA_SWITCH_TO_EXECUTING,
             };
 
         private:
@@ -706,6 +712,7 @@ public:
         enum {
             COMMAND_EXIT = -1,
             CAMERA_FILL_BUFFER_DONE,
+            CAMERA_FOCUS_STATUS,
         };
 
     private:
@@ -817,6 +824,7 @@ private:
     //Face detection status
     bool mFaceDetectionRunning;
     bool mFaceDetectionPaused;
+    bool mFDSwitchAlgoPriority;
 
     camera_face_t  faceDetectionLastOutput [MAX_NUM_FACES_SUPPORTED];
     int faceDetectionNumFacesLastOutput;
@@ -862,6 +870,7 @@ private:
     unsigned int mPending3Asettings;
     Mutex m3ASettingsUpdateLock;
     Gen3A_settings mParameters3A;
+    const char *mPictureFormatFromClient;
 
     OMX_TI_CONFIG_3A_FACE_PRIORITY mFacePriority;
     OMX_TI_CONFIG_3A_REGION_PRIORITY mRegionPriority;
@@ -873,6 +882,8 @@ private:
     int mSnapshotCount;
     bool mCaptureConfigured;
     unsigned int mPendingCaptureSettings;
+    OMX_TI_ANCILLARYDATATYPE* mCaptureAncillaryData;
+    OMX_TI_WHITEBALANCERESULTTYPE* mWhiteBalanceData;
 
     //Temporal bracketing management data
     mutable Mutex mBracketingLock;
@@ -882,12 +893,14 @@ private:
     bool mBracketingEnabled;
     int mBracketingRange;
 
+    bool mIternalRecordingHint;
+
     CameraParameters mParameters;
+    bool mOmxInitialized;
     OMXCameraAdapterComponentContext mCameraAdapterParameters;
     bool mFirstTimeInit;
 
     ///Semaphores used internally
-    Semaphore mDoAFSem;
     Semaphore mInitSem;
     Semaphore mFlushSem;
     Semaphore mUsePreviewDataSem;
@@ -925,6 +938,9 @@ private:
     nsecs_t mLastFPSTime;
     Mutex mFrameCountMutex;
     Condition mFirstFrameCondition;
+
+    Mutex mDoAFMutex;
+    Condition mDoAFCond;
 
     size_t mSensorIndex;
     CodingMode mCodingMode;

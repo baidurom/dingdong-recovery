@@ -57,6 +57,10 @@
 #include <resolv.h>
 #include "resolv_static.h"
 
+#include "logd.h"
+#define debug_log(format, ...)  \
+    __libc_android_log_print(ANDROID_LOG_DEBUG, "libc-netbsd", (format), ##__VA_ARGS__ )
+
 /*
  * Revision information.  This is the release date in YYYYMMDD format.
  * It can change every day so the right thing to do with it is use it

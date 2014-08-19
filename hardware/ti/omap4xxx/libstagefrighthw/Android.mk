@@ -7,7 +7,8 @@ LOCAL_SRC_FILES := \
     TIOMXPlugin.cpp
 
 LOCAL_C_INCLUDES:= \
-        $(TOP)/frameworks/base/include/media/stagefright/openmax
+        $(TOP)/frameworks/native/include/media/openmax \
+        $(TOP)/frameworks/native/include/media/hardware
 
 LOCAL_SHARED_LIBRARIES :=       \
         libbinder               \

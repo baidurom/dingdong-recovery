@@ -60,12 +60,11 @@ LOCAL_C_INCLUDES += \
     $(LOCAL_PATH)/../libtiutils \
     hardware/ti/omap4xxx/tiler \
     hardware/ti/omap4xxx/ion \
-    frameworks/base/include/ui \
-    frameworks/base/include/utils \
     hardware/ti/omap4xxx/domx/omx_core/inc \
     hardware/ti/omap4xxx/domx/mm_osal/inc \
     frameworks/base/include/media/stagefright \
-    frameworks/base/include/media/stagefright/openmax \
+    frameworks/native/include/media/hardware \
+    frameworks/native/include/media/openmax \
     external/jpeg \
     external/jhead
 
@@ -80,7 +79,7 @@ LOCAL_SHARED_LIBRARIES:= \
     libcamera_client \
     libgui \
     libdomx \
-    libion \
+    libion_ti \
     libjpeg \
     libexif
 
@@ -125,7 +124,7 @@ LOCAL_SHARED_LIBRARIES:= \
     libcutils \
     libtiutils \
     libcamera_client \
-    libion \
+    libion_ti \
 
 LOCAL_CFLAGS := -fno-short-enums -DCOPY_IMAGE_BUFFER
 

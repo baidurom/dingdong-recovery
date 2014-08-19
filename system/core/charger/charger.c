@@ -21,18 +21,19 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/input.h>
-#include <linux/netlink.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/poll.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <time.h>
 #include <unistd.h>
+
+#include <sys/socket.h>
+#include <linux/netlink.h>
 
 #include <cutils/android_reboot.h>
 #include <cutils/klog.h>
@@ -974,7 +975,9 @@ int main(int argc, char **argv)
 
     ev_sync_key_state(set_key_callback, charger);
 
+#ifndef CHARGER_DISABLE_INIT_BLANK
     gr_fb_blank(true);
+#endif
 
     charger->next_screen_transition = now - 1;
     charger->next_key_check = -1;

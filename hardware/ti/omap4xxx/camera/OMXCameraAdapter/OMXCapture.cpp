@@ -40,6 +40,7 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
     int w, h;
     OMX_COLOR_FORMATTYPE pixFormat;
     const char *valstr = NULL;
+    int varint = 0;
 
     LOG_FUNCTION_NAME;
 
@@ -62,69 +63,48 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
     CAMHAL_LOGVB("Image: cap.mWidth = %d", (int)cap->mWidth);
     CAMHAL_LOGVB("Image: cap.mHeight = %d", (int)cap->mHeight);
 
-    if ( (valstr = params.getPictureFormat()) != NULL )
-        {
-        if (strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_YUV422I) == 0)
-            {
+    if ((valstr = params.getPictureFormat()) != NULL) {
+        if (strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_YUV422I) == 0) {
             CAMHAL_LOGDA("CbYCrY format selected");
             pixFormat = OMX_COLOR_FormatCbYCrY;
-            }
-        else if(strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_YUV420SP) == 0)
-            {
+            mPictureFormatFromClient = CameraParameters::PIXEL_FORMAT_YUV422I;
+        } else if(strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_YUV420SP) == 0) {
             CAMHAL_LOGDA("YUV420SP format selected");
             pixFormat = OMX_COLOR_FormatYUV420SemiPlanar;
-            }
-        else if(strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_RGB565) == 0)
-            {
+            mPictureFormatFromClient = CameraParameters::PIXEL_FORMAT_YUV420SP;
+        } else if(strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_RGB565) == 0) {
             CAMHAL_LOGDA("RGB565 format selected");
             pixFormat = OMX_COLOR_Format16bitRGB565;
-            }
-        else if(strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_JPEG) == 0)
-            {
+            mPictureFormatFromClient = CameraParameters::PIXEL_FORMAT_RGB565;
+        } else if (strcmp(valstr, (const char *) CameraParameters::PIXEL_FORMAT_JPEG) == 0) {
             CAMHAL_LOGDA("JPEG format selected");
             pixFormat = OMX_COLOR_FormatUnused;
             mCodingMode = CodingNone;
-            }
-        else if(strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_JPS) == 0)
-            {
+            mPictureFormatFromClient = CameraParameters::PIXEL_FORMAT_JPEG;
+        } else if (strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_JPS) == 0) {
             CAMHAL_LOGDA("JPS format selected");
             pixFormat = OMX_COLOR_FormatUnused;
             mCodingMode = CodingJPS;
-            }
-        else if(strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_MPO) == 0)
-            {
+            mPictureFormatFromClient = TICameraParameters::PIXEL_FORMAT_JPS;
+        } else if (strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_MPO) == 0) {
             CAMHAL_LOGDA("MPO format selected");
             pixFormat = OMX_COLOR_FormatUnused;
             mCodingMode = CodingMPO;
-            }
-        else if(strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_RAW_JPEG) == 0)
-            {
-            CAMHAL_LOGDA("RAW + JPEG format selected");
-            pixFormat = OMX_COLOR_FormatUnused;
-            mCodingMode = CodingRAWJPEG;
-            }
-        else if(strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_RAW_MPO) == 0)
-            {
-            CAMHAL_LOGDA("RAW + MPO format selected");
-            pixFormat = OMX_COLOR_FormatUnused;
-            mCodingMode = CodingRAWMPO;
-            }
-        else if(strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_RAW) == 0)
-            {
+            mPictureFormatFromClient = TICameraParameters::PIXEL_FORMAT_MPO;
+        } else if (strcmp(valstr, (const char *) TICameraParameters::PIXEL_FORMAT_RAW) == 0) {
             CAMHAL_LOGDA("RAW Picture format selected");
             pixFormat = OMX_COLOR_FormatRawBayer10bit;
-            }
-        else
-            {
+            mPictureFormatFromClient = TICameraParameters::PIXEL_FORMAT_RAW;
+        } else {
             CAMHAL_LOGEA("Invalid format, JPEG format selected as default");
             pixFormat = OMX_COLOR_FormatUnused;
-            }
+            mPictureFormatFromClient = NULL;
         }
-    else
-        {
+    } else {
         CAMHAL_LOGEA("Picture format is NULL, defaulting to JPEG");
         pixFormat = OMX_COLOR_FormatUnused;
-        }
+        mPictureFormatFromClient = NULL;
+    }
 
     // JPEG capture is not supported in video mode by OMX Camera
     // Set capture format to yuv422i...jpeg encode will
@@ -142,6 +122,8 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
         cap->mColorFormat = pixFormat;
         }
 
+#ifdef OMAP_ENHANCEMENT
+
     str = params.get(TICameraParameters::KEY_EXP_BRACKETING_RANGE);
     if ( NULL != str ) {
         parseExpRange(str, mExposureBracketingValues, EXP_BRACKET_RANGE, mExposureBracketingValidEntries);
@@ -151,12 +133,15 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
         mExposureBracketingValidEntries = 0;
     }
 
-    if ( params.getInt(CameraParameters::KEY_ROTATION) != -1 )
+#endif
+
+    varint = params.getInt(CameraParameters::KEY_ROTATION);
+    if ( varint != -1 )
         {
-        if (params.getInt(CameraParameters::KEY_ROTATION) != mPictureRotation) {
+        if ( ( unsigned int )  varint != mPictureRotation) {
             mPendingCaptureSettings |= SetRotation;
         }
-        mPictureRotation = params.getInt(CameraParameters::KEY_ROTATION);
+        mPictureRotation = varint;
         }
     else
         {
@@ -166,11 +151,14 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
 
     CAMHAL_LOGVB("Picture Rotation set %d", mPictureRotation);
 
+#ifdef OMAP_ENHANCEMENT
+
     // Read Sensor Orientation and set it based on perating mode
 
-     if (( params.getInt(TICameraParameters::KEY_SENSOR_ORIENTATION) != -1 ) && (mCapMode == OMXCameraAdapter::VIDEO_MODE))
+     varint = params.getInt(TICameraParameters::KEY_SENSOR_ORIENTATION);
+     if (( varint != -1 ) && (mCapMode == OMXCameraAdapter::VIDEO_MODE))
         {
-         mSensorOrientation = params.getInt(TICameraParameters::KEY_SENSOR_ORIENTATION);
+         mSensorOrientation = varint;
          if (mSensorOrientation == 270 ||mSensorOrientation==90)
              {
              CAMHAL_LOGEA(" Orientation is 270/90. So setting counter rotation  to Ducati");
@@ -185,12 +173,13 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
 
      CAMHAL_LOGVB("Sensor Orientation  set : %d", mSensorOrientation);
 
-    if ( params.getInt(TICameraParameters::KEY_BURST)  >= 1 )
+    varint = params.getInt(TICameraParameters::KEY_BURST);
+    if ( varint >= 1 )
         {
-        if (params.getInt(TICameraParameters::KEY_BURST) != mBurstFrames) {
+        if (varint != mBurstFrames) {
             mPendingCaptureSettings |= SetExpBracket;
         }
-        mBurstFrames = params.getInt(TICameraParameters::KEY_BURST);
+        mBurstFrames = varint;
         }
     else
         {
@@ -200,13 +189,16 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
 
     CAMHAL_LOGVB("Burst Frames set %d", mBurstFrames);
 
-    if ( ( params.getInt(CameraParameters::KEY_JPEG_QUALITY)  >= MIN_JPEG_QUALITY ) &&
-         ( params.getInt(CameraParameters::KEY_JPEG_QUALITY)  <= MAX_JPEG_QUALITY ) )
+#endif
+
+    varint = params.getInt(CameraParameters::KEY_JPEG_QUALITY);
+    if ( ( varint >= MIN_JPEG_QUALITY ) &&
+         ( varint  <= MAX_JPEG_QUALITY ) )
         {
-        if (params.getInt(CameraParameters::KEY_JPEG_QUALITY) != mPictureQuality) {
+        if ( ( unsigned int ) varint != mPictureQuality) {
             mPendingCaptureSettings |= SetQuality;
         }
-        mPictureQuality = params.getInt(CameraParameters::KEY_JPEG_QUALITY);
+        mPictureQuality = varint;
         }
     else
         {
@@ -216,12 +208,13 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
 
     CAMHAL_LOGVB("Picture Quality set %d", mPictureQuality);
 
-    if ( params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH)  >= 0 )
+    varint = params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH);
+    if ( varint >= 0 )
         {
-        if (params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH) != mThumbWidth) {
+        if ( ( unsigned int ) varint != mThumbWidth) {
             mPendingCaptureSettings |= SetThumb;
         }
-        mThumbWidth = params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_WIDTH);
+        mThumbWidth = varint;
         }
     else
         {
@@ -232,12 +225,13 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
 
     CAMHAL_LOGVB("Picture Thumb width set %d", mThumbWidth);
 
-    if ( params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT)  >= 0 )
+    varint = params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT);
+    if ( varint >= 0 )
         {
-        if (params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT) != mThumbHeight) {
+        if ( ( unsigned int ) varint != mThumbHeight) {
             mPendingCaptureSettings |= SetThumb;
         }
-        mThumbHeight = params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_HEIGHT);
+        mThumbHeight = varint;
         }
     else
         {
@@ -248,13 +242,14 @@ status_t OMXCameraAdapter::setParametersCapture(const CameraParameters &params,
 
     CAMHAL_LOGVB("Picture Thumb height set %d", mThumbHeight);
 
-    if ( ( params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY)  >= MIN_JPEG_QUALITY ) &&
-         ( params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY)  <= MAX_JPEG_QUALITY ) )
+    varint = params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY);
+    if ( ( varint >= MIN_JPEG_QUALITY ) &&
+         ( varint <= MAX_JPEG_QUALITY ) )
         {
-        if (params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY) != mThumbQuality) {
+        if ( ( unsigned int ) varint != mThumbQuality) {
             mPendingCaptureSettings |= SetThumb;
         }
-        mThumbQuality = params.getInt(CameraParameters::KEY_JPEG_THUMBNAIL_QUALITY);
+        mThumbQuality = varint;
         }
     else
         {
@@ -775,6 +770,12 @@ status_t OMXCameraAdapter::startImageCapture()
         }
     }
 
+    // need to enable wb data for video snapshot to fill in exif data
+    if ((ret == NO_ERROR) && (mCapMode == VIDEO_MODE)) {
+        // video snapshot uses wb data from snapshot frame
+        ret = setExtraData(true, mCameraAdapterParameters.mPrevPortIndex, OMX_WhiteBalance);
+    }
+
     //OMX shutter callback events are only available in hq mode
     if ( (HIGH_QUALITY == mCapMode) || (HIGH_QUALITY_ZSL== mCapMode))
         {
@@ -866,6 +867,7 @@ status_t OMXCameraAdapter::startImageCapture()
 
 EXIT:
     CAMHAL_LOGEB("Exiting function %s because of ret %d eError=%x", __FUNCTION__, ret, eError);
+    setExtraData(false, mCameraAdapterParameters.mPrevPortIndex, OMX_WhiteBalance);
     mWaitingForSnapshot = false;
     mCaptureSignalled = false;
     performCleanupAfterError();
@@ -945,6 +947,13 @@ status_t OMXCameraAdapter::stopImageCapture()
             goto EXIT;
         }
     }
+
+    // had to enable wb data for video snapshot to fill in exif data
+    // now that we are done...disable
+    if ((ret == NO_ERROR) && (mCapMode == VIDEO_MODE)) {
+        ret = setExtraData(false, mCameraAdapterParameters.mPrevPortIndex, OMX_WhiteBalance);
+    }
+
     CAMHAL_LOGDB("Capture set - 0x%x", eError);
 
     mCaptureSignalled = true; //set this to true if we exited because of timeout

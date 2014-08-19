@@ -58,10 +58,11 @@ static audio_policy_dev_state_t ap_get_device_connection_state(
     return AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE;
 }
 
-static void ap_set_phone_state(struct audio_policy *pol, int state)
+static void ap_set_phone_state(struct audio_policy *pol, audio_mode_t state)
 {
 }
 
+// deprecated, never called
 static void ap_set_ringer_mode(struct audio_policy *pol, uint32_t mode,
                                uint32_t mask)
 {
@@ -96,9 +97,9 @@ static int ap_init_check(const struct audio_policy *pol)
 static audio_io_handle_t ap_get_output(struct audio_policy *pol,
                                        audio_stream_type_t stream,
                                        uint32_t sampling_rate,
-                                       uint32_t format,
-                                       uint32_t channels,
-                                       audio_policy_output_flags_t flags)
+                                       audio_format_t format,
+                                       audio_channel_mask_t channelMask,
+                                       audio_output_flags_t flags)
 {
     return 0;
 }
@@ -120,10 +121,10 @@ static void ap_release_output(struct audio_policy *pol,
 {
 }
 
-static audio_io_handle_t ap_get_input(struct audio_policy *pol, int inputSource,
+static audio_io_handle_t ap_get_input(struct audio_policy *pol, audio_source_t inputSource,
                                       uint32_t sampling_rate,
-                                      uint32_t format,
-                                      uint32_t channels,
+                                      audio_format_t format,
+                                      audio_channel_mask_t channelMask,
                                       audio_in_acoustics_t acoustics)
 {
     return 0;
@@ -163,26 +164,42 @@ static int ap_get_stream_volume_index(const struct audio_policy *pol,
     return -ENOSYS;
 }
 
+static int ap_set_stream_volume_index_for_device(struct audio_policy *pol,
+                                      audio_stream_type_t stream,
+                                      int index,
+                                      audio_devices_t device)
+{
+    return -ENOSYS;
+}
+
+static int ap_get_stream_volume_index_for_device(const struct audio_policy *pol,
+                                      audio_stream_type_t stream,
+                                      int *index,
+                                      audio_devices_t device)
+{
+    return -ENOSYS;
+}
+
 static uint32_t ap_get_strategy_for_stream(const struct audio_policy *pol,
                                            audio_stream_type_t stream)
 {
     return 0;
 }
 
-static uint32_t ap_get_devices_for_stream(const struct audio_policy *pol,
+static audio_devices_t ap_get_devices_for_stream(const struct audio_policy *pol,
                                           audio_stream_type_t stream)
 {
     return 0;
 }
 
 static audio_io_handle_t ap_get_output_for_effect(struct audio_policy *pol,
-                                            struct effect_descriptor_s *desc)
+                                            const struct effect_descriptor_s *desc)
 {
     return 0;
 }
 
 static int ap_register_effect(struct audio_policy *pol,
-                              struct effect_descriptor_s *desc,
+                              const struct effect_descriptor_s *desc,
                               audio_io_handle_t output,
                               uint32_t strategy,
                               int session,
@@ -201,7 +218,7 @@ static int ap_set_effect_enabled(struct audio_policy *pol, int id, bool enabled)
     return -ENOSYS;
 }
 
-static bool ap_is_stream_active(const struct audio_policy *pol, int stream,
+static bool ap_is_stream_active(const struct audio_policy *pol, audio_stream_type_t stream,
                                 uint32_t in_past_ms)
 {
     return false;
@@ -250,6 +267,8 @@ static int create_default_ap(const struct audio_policy_device *device,
     dap->policy.init_stream_volume = ap_init_stream_volume;
     dap->policy.set_stream_volume_index = ap_set_stream_volume_index;
     dap->policy.get_stream_volume_index = ap_get_stream_volume_index;
+    dap->policy.set_stream_volume_index_for_device = ap_set_stream_volume_index_for_device;
+    dap->policy.get_stream_volume_index_for_device = ap_get_stream_volume_index_for_device;
     dap->policy.get_strategy_for_stream = ap_get_strategy_for_stream;
     dap->policy.get_devices_for_stream = ap_get_devices_for_stream;
     dap->policy.get_output_for_effect = ap_get_output_for_effect;

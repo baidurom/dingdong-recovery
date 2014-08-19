@@ -58,6 +58,10 @@ public:
     virtual status_t    setParameters(const String8& keyValuePairs) { return NO_ERROR;}
     virtual String8     getParameters(const String8& keys);
     virtual unsigned int  getInputFramesLost() const { return 0; }
+    #ifndef ANDROID_DEFAULT_CODE
+    virtual status_t    addAudioEffect(effect_handle_t effect) { return NO_ERROR; }
+    virtual status_t    removeAudioEffect(effect_handle_t effect) { return NO_ERROR; }
+    #endif
 };
 
 class AudioHardwareStub : public  AudioHardwareBase
@@ -72,6 +76,40 @@ public:
     // mic mute
     virtual status_t    setMicMute(bool state) { mMicMute = state;  return  NO_ERROR; }
     virtual status_t    getMicMute(bool* state) { *state = mMicMute ; return NO_ERROR; }
+    // add by chipeng to add EM parameter
+    virtual status_t SetEMParameter(void *ptr, int len)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t GetEMParameter(void *ptr, int len)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t SetAudioCommand(int par1, int par2)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t GetAudioCommand(int par1)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t SetAudioData(int par1,size_t len,void *ptr)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t GetAudioData(int par1,size_t len,void *ptr)
+    {
+        return NO_ERROR;
+    }
+    // add by Tina to set ACF Preview parameter
+    virtual status_t SetACFPreviewParameter(void *ptr, int len)
+    {
+        return NO_ERROR;
+    }
+    virtual status_t SetHCFPreviewParameter(void *ptr, int len)
+    {
+        return NO_ERROR;
+    }
 
     // create I/O streams
     virtual AudioStreamOut* openOutputStream(
@@ -90,6 +128,75 @@ public:
                                 status_t *status,
                                 AudioSystem::audio_in_acoustics acoustics);
     virtual    void        closeInputStream(AudioStreamIn* in);
+
+
+    /////////////////////////////////////////////////////////////////////////
+    //    for PCMxWay Interface API ...   Stan
+    /////////////////////////////////////////////////////////////////////////
+    virtual int xWayPlay_Start(int sample_rate)
+    {
+        return NO_ERROR;
+    }
+    virtual int xWayPlay_Stop(void)
+    {
+        return NO_ERROR;
+    }
+    virtual int xWayPlay_Write(void *buffer, int size_bytes)
+    {
+        return NO_ERROR;
+    }
+    virtual int xWayPlay_GetFreeBufferCount(void)
+    {
+        return NO_ERROR;
+    }
+    virtual int xWayRec_Start(int sample_rate)
+    {
+        return NO_ERROR;
+    }
+    virtual int xWayRec_Stop(void)
+    {
+        return NO_ERROR;
+    }
+    virtual int xWayRec_Read(void *buffer, int size_bytes)
+    {
+        return NO_ERROR;
+    }
+    //add by wendy
+    virtual int ReadRefFromRing(void*buf, uint32_t datasz,void* DLtime)
+    {
+       return NO_ERROR;
+    }    
+    virtual int GetVoiceUnlockULTime(void* DLtime)
+    {
+       return NO_ERROR;
+    }
+    virtual int SetVoiceUnlockSRC(uint outSR, uint outChannel)
+    {
+       return NO_ERROR;
+    }
+    
+    virtual bool startVoiceUnlockDL()
+    {
+       return NO_ERROR;
+    }
+    
+    virtual bool stopVoiceUnlockDL()
+    {
+       return NO_ERROR;
+    }
+     virtual void freeVoiceUnlockDLInstance()
+    {
+        return;
+    }
+    virtual int GetVoiceUnlockDLLatency()
+    {
+     return NO_ERROR;
+    }
+    virtual bool getVoiceUnlockDLInstance()
+    {
+     return 0;
+    }
+
 
 protected:
     virtual status_t    dump(int fd, const Vector<String16>& args);

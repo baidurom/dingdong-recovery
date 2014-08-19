@@ -325,7 +325,6 @@ var CTRL_CMD_SET_CALL_TRANSITION_FLAG = 1003
 var CTRL_CMD_SET_CALL_ALERT           = 1004
 var CTRL_CMD_SET_CALL_ACTIVE          = 1005
 var CTRL_CMD_ADD_DIALING_CALL         = 1006
-var CTRL_CMD_SET_NEW_SMS              = 1007
 
 /* status for control commands, defined in ctrl.proto */
 var CTRL_STATUS_OK = 0

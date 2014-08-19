@@ -299,11 +299,15 @@ static int wpa_driver_tista_scan( void *priv, const u8 *ssid, size_t ssid_len )
 
 	res = wpa_driver_tista_private_send(priv, TIWLN_802_11_START_APP_SCAN_SET, &scanParams, sizeof(scanParams), NULL, 0);
 
-	if (0 != res)
+	if (0 != res) {
 		wpa_printf(MSG_ERROR, "ERROR - Failed to do tista scan!");
-	else
+		if (wpa_s->scanning) {
+			res = 0;
+			wpa_printf(MSG_ERROR, "Ongoing Scan action...");
+		}
+	} else {
 		wpa_printf(MSG_DEBUG, "wpa_driver_tista_scan success");
-
+	}
 	timeout = 30;
 	wpa_printf(MSG_DEBUG, "Scan requested (ret=%d) - scan timeout %d sec",
 			res, timeout);
@@ -326,7 +330,7 @@ Return Value: pointer to BSSID
 const u8 *wpa_driver_tista_get_mac_addr( void *priv )
 {
 	struct wpa_driver_ti_data *drv = (struct wpa_driver_ti_data *)priv;
-	u8 mac[ETH_ALEN];
+	u8 mac[ETH_ALEN] = {0};
 
 	TI_CHECK_DRIVER( drv->driver_is_loaded, NULL );
 	if(0 != wpa_driver_tista_private_send(priv, CTRL_DATA_MAC_ADDRESS, NULL, 0,
@@ -351,6 +355,7 @@ static int wpa_driver_tista_get_rssi(void *priv, int *rssi_data, int *rssi_beaco
 	struct wpa_driver_ti_data *drv = (struct wpa_driver_ti_data *)priv;
 	TCuCommon_RoamingStatisticsTable buffer;
 
+	os_memset(&buffer, 0, sizeof(TCuCommon_RoamingStatisticsTable));
 	*rssi_data = 0;
 	*rssi_beacon = 0;
 	if (wpa_driver_tista_get_bssid(priv, bssid) == 0 &&
@@ -444,7 +449,7 @@ static int wpa_driver_tista_enable_bt_coe(void *priv, u32 mode)
 static int wpa_driver_tista_get_bt_coe_status(void *priv, u32 *mode)
 {
 	struct wpa_driver_ti_data *drv = (struct wpa_driver_ti_data *)priv;
-	u32 mode_get;
+	u32 mode_get = 0;
 
 	if(0 != wpa_driver_tista_private_send(priv, SOFT_GEMINI_GET_CONFIG, NULL, 0,
 		&mode_get, sizeof(u32)))
@@ -577,6 +582,17 @@ static int wpa_driver_tista_driver_rx_data_filter_statistics( void *priv,
 	return res;
 }
 
+static int get_num_of_channels(char *country)
+{
+	int channels = NUMBER_SCAN_CHANNELS_FCC;
+
+	if (os_strcasecmp(country, "EU"))
+		channels = NUMBER_SCAN_CHANNELS_ETSI;
+	else if (os_strcasecmp(country, "JP"))
+		channels = NUMBER_SCAN_CHANNELS_MKK1;
+	return channels;
+}
+
 /*-----------------------------------------------------------------------------
 Routine Name: wpa_driver_tista_driver_cmd
 Routine Description: executes driver-specific commands
@@ -654,6 +670,11 @@ static int wpa_driver_tista_driver_cmd( void *priv, char *cmd, char *buf, size_t
  		wpa_printf(MSG_DEBUG,"Link Speed command");
 		drv->link_speed = wpa_s->link_speed / 1000000;
 		ret = sprintf(buf,"LinkSpeed %u\n", drv->link_speed);
+		wpa_printf(MSG_DEBUG, "buf %s", buf);
+	}
+	else if( os_strncasecmp(cmd, "country", 7) == 0 ) {
+		drv->scan_channels = get_num_of_channels(cmd + 8);
+		ret = sprintf(buf,"Scan-Channels = %d\n", drv->scan_channels);
 		wpa_printf(MSG_DEBUG, "buf %s", buf);
 	}
 	else if( os_strncasecmp(cmd, "scan-channels", 13) == 0 ) {
@@ -736,6 +757,7 @@ static int wpa_driver_tista_driver_cmd( void *priv, char *cmd, char *buf, size_t
 		u32 mode;
 		TPowerMgr_PowerMode tMode;
 
+		os_memset(&tMode, 0, sizeof(TPowerMgr_PowerMode));
 		ret = wpa_driver_tista_config_power_management( priv, &tMode, 0 );
 		if( ret == 0 ) {
 			ret = sprintf(buf, "powermode = %u\n", tMode.PowerMode);
@@ -774,6 +796,7 @@ static int wpa_driver_tista_driver_cmd( void *priv, char *cmd, char *buf, size_t
 		TCuCommon_RxDataFilteringStatistics stats;
 		int len, i;
 
+		os_memset(&stats, 0, sizeof(TCuCommon_RxDataFilteringStatistics));
 		wpa_printf(MSG_DEBUG,"Rx Data Filter Statistics command");
 		ret = wpa_driver_tista_driver_rx_data_filter_statistics( priv, &stats );
 		if( ret == 0 ) {
@@ -1401,6 +1424,7 @@ const struct wpa_driver_ops wpa_driver_custom_ops = {
 	.scan = wpa_driver_tista_scan,
 #ifdef WPA_SUPPLICANT_VER_0_6_X
 	.get_scan_results2 = wpa_driver_tista_get_scan_results,
+	.combo_scan = NULL,
 #else
 	.get_scan_results = wpa_driver_tista_get_scan_results,
 #endif

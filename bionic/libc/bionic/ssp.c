@@ -75,6 +75,11 @@ void __stack_chk_fail(void)
     sigdelset(&sigmask, SIGABRT);
     sigprocmask(SIG_BLOCK, &sigmask, NULL);
 
+    /* temporary, so deliver SIGSEGV can be caught by debuggerd */
+    sigemptyset(&sigmask);
+    sigaddset(&sigmask, SIGSEGV);
+    sigprocmask(SIG_UNBLOCK, &sigmask, NULL);
+
     /* Use /proc/self/exe link to obtain the program name for logging
      * purposes. If it's not available, we set it to "<unknown>" */
     if ((count = readlink("/proc/self/exe", path, sizeof(path) - 1)) == -1) {
@@ -93,6 +98,8 @@ void __stack_chk_fail(void)
     sa.sa_handler = SIG_DFL;
     sigaction(SIGABRT, &sa, NULL);
 
+    /* temporary, so stack overflow case can be caught */
+    *((long*)0xdead2aed) = 0xaed;
     /* Terminate the process and exit immediately */
     kill(getpid(), SIGABRT);
 

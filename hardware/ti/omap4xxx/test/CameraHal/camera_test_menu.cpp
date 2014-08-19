@@ -7,11 +7,8 @@
 #include <semaphore.h>
 #include <pthread.h>
 
-#include <surfaceflinger/Surface.h>
-#include <surfaceflinger/ISurface.h>
-#include <surfaceflinger/ISurfaceComposer.h>
-#include <surfaceflinger/ISurfaceComposerClient.h>
-#include <surfaceflinger/SurfaceComposerClient.h>
+#include <gui/Surface.h>
+#include <gui/SurfaceComposerClient.h>
 
 #include <camera/Camera.h>
 #include <camera/ICamera.h>
@@ -294,8 +291,7 @@ audio_Codecs audioCodecs[] = {
   { AUDIO_ENCODER_AMR_NB, "AMR_NB" },
   { AUDIO_ENCODER_AMR_WB, "AMR_WB" },
   { AUDIO_ENCODER_AAC, "AAC" },
-  { AUDIO_ENCODER_AAC_PLUS, "AAC+" },
-  { AUDIO_ENCODER_EAAC_PLUS, "EAAC+" },
+  { AUDIO_ENCODER_HE_AAC, "AAC+" },
   { AUDIO_ENCODER_LIST_END, "disabled"},
 };
 
@@ -513,19 +509,19 @@ void saveFile(const sp<IMemory>& mem) {
     sprintf(fn, "/sdcard/preview%03d.yuv", counter);
     fd = open(fn, O_CREAT | O_WRONLY | O_TRUNC, 0777);
     if(fd < 0) {
-        LOGE("Unable to open file %s: %s", fn, strerror(fd));
+        ALOGE("Unable to open file %s: %s", fn, strerror(fd));
         goto out;
     }
 
     size = mem->size();
     if (size <= 0) {
-        LOGE("IMemory object is of zero size");
+        ALOGE("IMemory object is of zero size");
         goto out;
     }
 
     buff = (unsigned char *)mem->pointer();
     if (!buff) {
-        LOGE("Buffer pointer is invalid");
+        ALOGE("Buffer pointer is invalid");
         goto out;
     }
 
@@ -603,19 +599,19 @@ void my_jpeg_callback(const sp<IMemory>& mem) {
     fd = open(fn, O_CREAT | O_WRONLY | O_TRUNC, 0777);
 
     if(fd < 0) {
-        LOGE("Unable to open file %s: %s", fn, strerror(fd));
+        ALOGE("Unable to open file %s: %s", fn, strerror(fd));
         goto out;
     }
 
     size = mem->size();
     if (size <= 0) {
-        LOGE("IMemory object is of zero size");
+        ALOGE("IMemory object is of zero size");
         goto out;
     }
 
     buff = (unsigned char *)mem->pointer();
     if (!buff) {
-        LOGE("Buffer pointer is invalid");
+        ALOGE("Buffer pointer is invalid");
         goto out;
     }
 
@@ -757,10 +753,10 @@ int createPreviewSurface(unsigned int width, unsigned int height, int32_t pixFor
         return -1;
     }
 
-    surfaceControl = client->createSurface(0,
+    surfaceControl = client->createSurface(String8("camera_test_menu"),
                                            previewWidth,
                                            previewHeight,
-                                           pixFormat);
+                                           pixFormat, 0);
 
     previewSurface = surfaceControl->getSurface();
 
@@ -2509,4 +2505,3 @@ int main(int argc, char *argv[]) {
     system("echo camerahal_test > /sys/power/wake_unlock");
     return 0;
 }
-

@@ -29,7 +29,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sys/queue.h>
-
+#include "logd.h"
 static pthread_mutex_t handler_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER;
 
 struct atfork_t
@@ -74,6 +74,7 @@ void __bionic_atfork_run_prepare()
 void __bionic_atfork_run_child()
 {
     struct atfork_t *cursor;
+    pthread_mutexattr_t  attr;
 
     /* Call pthread_atfork() child handlers */
     for (cursor = atfork_head.cqh_first;
@@ -84,7 +85,9 @@ void __bionic_atfork_run_child()
         }
     }
 
-    pthread_mutex_unlock(&handler_mutex);
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&handler_mutex, &attr);
 }
 
 void __bionic_atfork_run_parent()
@@ -105,6 +108,7 @@ void __bionic_atfork_run_parent()
 
 int pthread_atfork(void (*prepare)(void), void (*parent)(void), void(*child)(void))
 {
+#if SUPPORT_PTHREAD_ATFORK
     struct atfork_t *entry = malloc(sizeof(struct atfork_t));
 
     if (entry == NULL) {
@@ -118,6 +122,9 @@ int pthread_atfork(void (*prepare)(void), void (*parent)(void), void(*child)(voi
     pthread_mutex_lock(&handler_mutex);
     CIRCLEQ_INSERT_TAIL(&atfork_head, entry, entries);
     pthread_mutex_unlock(&handler_mutex);
-
+#else
+    __libc_android_log_print(6, "libc", "not support pthread_atfork due to possible deadlock issue");
+    return EINVAL;
+#endif
     return 0;
 }

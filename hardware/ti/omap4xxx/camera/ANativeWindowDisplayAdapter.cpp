@@ -177,8 +177,8 @@ ANativeWindowDisplayAdapter::ANativeWindowDisplayAdapter():mDisplayThread(NULL),
     mFailedDQs = 0;
 
     mPaused = false;
-    mXOff = 0;
-    mYOff = 0;
+    mXOff = -1;
+    mYOff = -1;
     mFirstInit = false;
 
     mFD = -1;
@@ -267,6 +267,10 @@ int ANativeWindowDisplayAdapter::setPreviewWindow(preview_stream_ops_t* window)
         CAMHAL_LOGEA("NULL window object passed to DisplayAdapter");
         LOG_FUNCTION_NAME_EXIT;
         return BAD_VALUE;
+    }
+
+    if ( window == mANativeWindow ) {
+        return ALREADY_EXISTS;
     }
 
     ///Destroy the existing window object, if it exists
@@ -454,8 +458,8 @@ int ANativeWindowDisplayAdapter::disableDisplay(bool cancel_buffer)
         mDisplayEnabled = false;
 
         ///Reset the offset values
-        mXOff = 0;
-        mYOff = 0;
+        mXOff = -1;
+        mYOff = -1;
 
         ///Reset the frame width and height values
         mFrameWidth =0;
@@ -536,7 +540,7 @@ void* ANativeWindowDisplayAdapter::allocateBuffer(int width, int height, const c
     // Set gralloc usage bits for window.
     err = mANativeWindow->set_usage(mANativeWindow, CAMHAL_GRALLOC_USAGE);
     if (err != 0) {
-        LOGE("native_window_set_usage failed: %s (%d)", strerror(-err), -err);
+        ALOGE("native_window_set_usage failed: %s (%d)", strerror(-err), -err);
 
         if ( ENODEV == err ) {
             CAMHAL_LOGEA("Preview surface abandoned!");
@@ -550,7 +554,7 @@ void* ANativeWindowDisplayAdapter::allocateBuffer(int width, int height, const c
     ///Set the number of buffers needed for camera preview
     err = mANativeWindow->set_buffer_count(mANativeWindow, numBufs);
     if (err != 0) {
-        LOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err), -err);
+        ALOGE("native_window_set_buffer_count failed: %s (%d)", strerror(-err), -err);
 
         if ( ENODEV == err ) {
             CAMHAL_LOGEA("Preview surface abandoned!");
@@ -571,7 +575,7 @@ void* ANativeWindowDisplayAdapter::allocateBuffer(int width, int height, const c
             /*toOMXPixFormat(format)*/HAL_PIXEL_FORMAT_TI_NV12);  // Gralloc only supports NV12 alloc!
 
     if (err != 0) {
-        LOGE("native_window_set_buffers_geometry failed: %s (%d)", strerror(-err), -err);
+        ALOGE("native_window_set_buffers_geometry failed: %s (%d)", strerror(-err), -err);
 
         if ( ENODEV == err ) {
             CAMHAL_LOGEA("Preview surface abandoned!");
@@ -826,7 +830,7 @@ status_t ANativeWindowDisplayAdapter::returnBuffersToWindow()
              }
          }
      else
-         LOGE("mANativeWindow is NULL");
+         ALOGE("mANativeWindow is NULL");
 
      ///Clear the frames with camera adapter map
      mFramesWithCameraAdapterMap.clear();
@@ -1095,7 +1099,7 @@ status_t ANativeWindowDisplayAdapter::PostFrame(ANativeWindowDisplayAdapter::Dis
         mapper.unlock((buffer_handle_t) mGrallocHandleMap[i]);
         ret = mANativeWindow->enqueue_buffer(mANativeWindow, mBufferHandleMap[i]);
         if (ret != 0) {
-            LOGE("Surface::queueBuffer returned error %d", ret);
+            ALOGE("Surface::queueBuffer returned error %d", ret);
         }
 
         mFramesWithCameraAdapterMap.removeItem((int) dispFrame.mBuffer);
@@ -1137,7 +1141,7 @@ status_t ANativeWindowDisplayAdapter::PostFrame(ANativeWindowDisplayAdapter::Dis
         // cancel buffer and dequeue another one
         ret = mANativeWindow->cancel_buffer(mANativeWindow, mBufferHandleMap[i]);
         if (ret != 0) {
-            LOGE("Surface::queueBuffer returned error %d", ret);
+            ALOGE("Surface::queueBuffer returned error %d", ret);
         }
 
         mFramesWithCameraAdapterMap.removeItem((int) dispFrame.mBuffer);
