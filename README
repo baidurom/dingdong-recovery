@@ -1,11 +1,12 @@
-1 the project is build android recovery only;
-2 before building, make sure copy project prebuilt, bionic and hardware to the directory ,which from ICS.
-3 Steps as following:
-    $ . build/envsetup.sh
-    $ lunch
-    $ make crespo
-  please see the out/patch_device/crespo/ , find recovery.img 
-4 please check Makefile to obtain the supported devices;
+Download dingdong recovery sourcecode, please using follow command':
 
- 
+git clone https://github.com/baidurom/dingdong-recovery.git
+
+QCOM branch name: qcom
+
+1 the project is build android recovery only;
+2 Steps as following:
+    $ . build/envsetup.sh
+    $ make maguro
+  please see the out/patch_device/maguro/ , find recovery.img 
 
