@@ -6,6 +6,6 @@ MTK branch name: mtk
 
 1 the project is build android recovery only;
 2 Steps as following:
-    $ ./dingdongRec_make.sh a820 -p mt6589
+    $ ./dingdongRec_make.sh a820 -p mt6589 -t xhdpi
   please see the out/patch_device/a820/ , find recovery.img 
 
