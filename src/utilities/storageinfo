@@ -1,0 +1,6 @@
+#!/sbin/sh
+#df -h | sed 's/^[ \t]/tmp/g' | awk '{printf "%-9s %-9s %-9s %-9s %-9s\n",$6,$5,$2,$3,$4}' > /tmp/storageinfo
+df -h | sed 's/^[ \t]/tmp/g' | awk '{printf "%-9s %-9s %-9s %-9s %-9s\n",$6,$5,$2,$3,$4}' > /tmp/info
+sed 's/^[ \t]*//g' /tmp/info | sed '/^$/d' > /tmp/storageinfo
+rm -f /tmp/info
+exit 0

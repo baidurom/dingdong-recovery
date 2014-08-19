@@ -1,0 +1,90 @@
+;; Copyright 2007, Google Inc.
+;; flash driver script
+;;
+
+local &arg_ptn
+local &arg_img
+local &arg_extra
+local &arg_size
+
+local &result
+global &img_size
+local &status
+local &load_addr_cmd
+local &load_addr
+
+ENTRY &arg_ptn &arg_img &arg_extra
+
+do setup.cmm
+
+if ("&arg_extra"!="again")
+(
+  area
+  area.clear
+)
+
+if ("&arg_ptn"=="")
+(
+  print "USAGE: do flash <partition> <image>"
+  enddo
+)
+
+if ("&arg_extra"!="again")
+(
+  sys.down
+  sys.cpu scorpion
+  if "&QC_jtag_cfg"=="chain"
+  (
+    sys.jtagclock rtck
+  )
+  else
+  (
+    sys.jtagclock 5MHz
+  )
+  sys.mode attach
+  if state.run()
+  (
+    break
+  )
+  data.load.elf "&(NANDWRITE)"
+)
+
+d.s &SYSTEM_HDR_ADDR %LE %LONG 0xffffffff
+&load_addr_cmd="loadaddr:"
+do debug &load_addr_cmd &SYSTEM_HDR_ADDR
+&load_addr=data.long(d:&SYSTEM_HDR_ADDR)
+if ("&load_addr"=="0xffffffff")
+(
+  &load_addr="&SYSTEM_HDR_ADDR"
+)
+
+print "Load address &load_addr"
+
+if ("&arg_img"=="MEMORY")
+(
+  &img_size=&arg_extra
+)
+else
+(
+  if ("&arg_img"!="")
+  (
+    if y.exist("\\flashimg")
+      symbol.delete \\flashimg
+    data.load.binary &arg_img &load_addr /name flashimg /noclear
+    &img_size=os.file.size(&arg_img)
+  )
+  else
+  (
+    &img_size=0
+  )
+)
+
+&arg_ptn="flash:&arg_ptn"
+
+if ("&arg_extra"!="dont_flash")
+(
+  do debug &arg_ptn &load_addr &img_size
+)
+
+entry &result
+enddo &result

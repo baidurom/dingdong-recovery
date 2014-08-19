@@ -1,0 +1,15 @@
+; MSM7200 ARM9 in JTAG Chained Mode
+
+system.option.TRST ON
+system.option.CFLUSH ON
+system.option.ResBreak ON
+system.option.EnReset ON
+system.option.WaitReset ON
+system.jtagclock RTCK
+
+sys.cpu arm926ej
+system.multicore irpre 5.
+system.multicore drpre 1.
+system.multicore irpost 0.
+system.multicore drpost 0.
+sys.mode attach

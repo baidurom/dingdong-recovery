@@ -1,0 +1,73 @@
+;;
+;; Script to attach to the ARM9 on the MSM7200 Primary JTAG interface
+;; and reconfigure the Primary JTAG interface to ARM9+ARM11 w/ RTCK.
+;; chained mode.  The MSM7200 'MODE' pins must be 0001 for this to work.
+;;
+;; TDI -> ARM9 (4 bit IR) -> ARM11 (5 bit IR) -> TDO
+;;
+
+; these are common to both the ARM9 and the ARM11
+system.option.TRST ON
+system.option.CFLUSH ON
+system.option.ResBreak ON
+system.option.EnReset ON
+system.option.WaitReset ON
+system.jtagclock RTCK
+
+print "ARM9: attaching"
+sys.cpu arm926ej
+system.multicore irpre 0.
+system.multicore drpre 0.
+system.multicore irpost 0.
+system.multicore drpost 0.
+
+sys.mode attach
+if state.run()
+(
+  break
+)
+
+print "ARM9: selecting chained JTAG mode (expect bus error)"
+; we're probably going to error out after 
+; we thwack the mode register
+on error gosub 
+( 
+  return 
+)
+
+; reconfigure primary jtag mode register for arm9+arm11 w/ RTCK
+; TLMM_INT_JTAG_CTL = 9
+;d.s 0xa860020c %long 0x1f
+;d.s 0xa860020c %long 0x0
+d.s 0xa900026c %long 9
+
+system.down
+
+on error
+
+sys.cpu arm926ej
+system.multicore irpre 5.
+system.multicore drpre 1.
+system.multicore irpost 0.
+system.multicore drpost 0.
+
+print "ARM9: resuming execution"
+sys.mode attach
+
+;confirm that this worked (it did)
+;local &reg
+;&reg=data.long(d:0xa900026c)
+;print "ARM9: TLMM_INT_JTAG_CTL = &reg"
+
+go
+system.down
+
+print "ARM11: attaching"
+sys.cpu arm1136j
+system.multicore irpre 0.
+system.multicore drpre 0.
+system.multicore irpost 4.
+system.multicore drpost 1.
+
+sys.mode attach
+print "ARM11: ready"

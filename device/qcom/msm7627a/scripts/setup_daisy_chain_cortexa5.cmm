@@ -1,0 +1,52 @@
+;**********************************************************************
+; This script does the necessary settings for daisy chain on CORTEXA5
+;**********************************************************************
+
+  System.Down
+
+;Disassembler selection - Automatically selects correct one.
+  System.Option DisMode Auto
+
+;select CPU and options
+     SYSTEM.CPU CortexA5
+    SYStem.CONFIG MEMORYACCESSPORT   0
+    SYStem.CONFIG DEBUGACCESSPORT    0
+    SYStem.CONFIG COREBASE           0xC0510000
+    SYStem.CONFIG ETMBASE            0xC0520000
+    SYStem.CONFIG TPIUBASE           0xC0530000
+     System.Option EnReset    OFF
+   System.Option.CFLUSH on
+System.Option.ResBreak off
+System.Option.ENRESET off
+System.Option.WAITRESET off
+    ETM.OFF
+    PRINT VERSION.BUILD()
+    DATA.LOG   10000
+    AREA
+    SYSTEM.JtagClock Rtck
+;****************************************************************************
+; Configure on chip triggers
+;****************************************************************************
+  tronchip.set RESET off
+  tronchip.set fiq off
+  tronchip.set irq off
+  tronchip.set dabort off
+  tronchip.set pabort off
+  tronchip.set swi off
+  tronchip.set undef off
+
+;Configure the JTAG scan chain clock
+  SYStem.JtagClock RTCK
+
+;Configure the JTAG scan chain shift parameters
+;Configure daisy-chain JTAG scan chain for CORTEXA5
+  
+SYS.MC.DAPIRPOST 4.  ;
+SYS.MC.DAPDRPOST  1.  ;
+SYS.MC.DAPIRPRE  0.  ; 
+SYS.MC.DAPDRPRE   0.  ;
+
+  System.Option.TRST off
+  System.Up
+  print "CORTEXA5 configured for JTAG daisy-chain mode"
+  

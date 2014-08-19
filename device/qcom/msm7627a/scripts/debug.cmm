@@ -1,0 +1,74 @@
+;; Copyright 2007, Google Inc.
+;;
+;; script to communicate with debug/utility programs using the jtag.c interface
+;;
+
+local &cmd
+local &arg0
+local &arg1
+local &arg2
+
+local &pc
+local &str
+local &n
+
+entry &cmd &arg0 &arg1 &arg2
+
+area
+
+print
+mainloop:
+
+b.reset
+b.set jtag_hook /onchip
+go
+wait !run()
+b.reset
+
+&pc=y.varname(A:register(pc))
+if ("&pc"!="jtag_hook")
+(
+  print "ERROR: not stopped at jtag_hook()"
+  enddo 1
+)
+
+;; if there's a message, process it
+;; and then keep waiting (if it's non-final)
+;; 
+&n=data.long(_jtag_msg)
+if (&n==3)
+(
+  print "> " data.string(_jtag_msg_buffer)
+  d.s _jtag_msg %long 0
+  goto mainloop
+)
+if (&n==1)
+(
+  print
+  print "OKAY: " data.string(_jtag_msg_buffer)
+  d.s _jtag_msg %long 0
+  enddo 0
+)
+if (&n==2)
+(
+  print
+  print "FAIL: " data.string(_jtag_msg_buffer)
+  d.s _jtag_msg %long 0
+  enddo 1
+)
+
+if ("&cmd"!="")
+(
+  &n=data.long(_jtag_cmd)
+  if (&n!=0)
+    goto mainloop
+
+  d.s _jtag_cmd_buffer "&cmd"
+  d.s _jtag_arg0 %long &arg0
+  d.s _jtag_arg1 %long &arg1
+  d.s _jtag_arg2 %long &arg2
+  d.s _jtag_cmd %long 1
+  &cmd=""
+)
+
+goto mainloop

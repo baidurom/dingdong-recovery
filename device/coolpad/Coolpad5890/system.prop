@@ -1,0 +1,342 @@
+#
+# system.prop for surf
+#
+
+rild.libpath=/system/lib/libril-qc-1.so
+rild.libargs=
+persist.rild.nitz_plmn=
+persist.rild.nitz_long_ons_0=
+persist.rild.nitz_long_ons_1=
+persist.rild.nitz_long_ons_2=
+persist.rild.nitz_long_ons_3=
+persist.rild.nitz_short_ons_0=
+persist.rild.nitz_short_ons_1=
+persist.rild.nitz_short_ons_2=
+persist.rild.nitz_short_ons_3=
+ril.subscription.types=NV,RUIM
+DEVICE_PROVISIONED=1
+keyguard.no_require_sim=1
+debug.sf.hw=1
+debug.composition.7x27A.type=dyn
+debug.composition.7x25A.type=dyn
+debug.composition.8x25.type=dyn
+debug.hwc.dynThreshold=1.91
+ro.sf.7x27A.lcd_density=240
+ro.sf.8x25.lcd_density=240
+dalvik.vm.heapsize=24m
+ro.sf.lcd_density=240
+persist.gralloc.cp.level3=1
+
+#
+# system props for the cne module
+#
+persist.cne.bat.range.low.med=30
+persist.cne.bat.range.med.high=60
+persist.cne.loc.policy.op=/system/etc/OperatorPolicy.xml
+persist.cne.loc.policy.user=/system/etc/UserPolicy.xml
+persist.cne.bwbased.rat.sel=false
+persist.cne.snsr.based.rat.mgt=false
+persist.cne.bat.based.rat.mgt=false
+persist.cne.rat.acq.time.out=30000
+persist.cne.rat.acq.retry.tout=0
+persist.cne.fmc.init.time.out=30
+persist.cne.fmc.comm.time.out=130
+persist.cne.fmc.retry=false
+persist.cne.feature=0
+
+#
+# system props for the MM modules
+#
+media.stagefright.enable-player=true
+media.stagefright.enable-meta=false
+media.stagefright.enable-scan=true
+media.stagefright.enable-http=true
+media.stagefright.enable-fma2dp=true
+media.stagefright.enable-aac=true
+media.stagefright.enable-qcp=true
+# Headset hook delay in milli seconds
+headset.hook.delay=500
+
+#
+# system prop for audio post processing
+#
+audio.legacy.postproc=true
+
+#
+# system prop for opengles version
+#
+ro.opengles.version=131072
+
+#
+# system props for the data modules
+#
+ro.use_data_netmgrd=true
+persist.data.ds_fmc_app.mode=0
+
+#
+# system props for IMS module
+#
+persist.ims.regmanager.mode=0
+
+#
+# system prop for requesting Master role in incoming Bluetooth connection.
+#
+ro.bluetooth.request.master=true
+
+# 
+# system prop for Bluetooth Output Power 
+# 
+qcom.bt.dev_power_class = 2
+
+#
+# system prop for Bluetooth FTP profile
+#
+ro.qualcomm.bluetooth.ftp=true
+
+# modify by zhouqingming for bluetooth server  begin
+#
+# system prop for Bluetooth SAP profile
+#
+ro.qualcomm.bluetooth.sap=false 
+
+#
+# system prop for Bluetooth dun profile
+#
+ro.qualcomm.bluetooth.dun=false
+
+#
+# system prop for Bluetooth nap profile
+#
+ro.qualcomm.bluetooth.nap=false
+
+# disable srm/srmp server
+debug.obex.force_srm_capable=false 
+debug.obex.force_srmp_enabled=false 
+
+# modify by zhouqingming for bluetooth server  end
+
+#
+# system prop for Bluetooth Auto connect for remote initated connections
+#
+ro.bluetooth.remote.autoconnect=true
+
+#
+#system property for Bluetooth discoverability timeout in seconds
+#0: Always discoverable
+#debug.bt.discoverable_time=0
+
+#
+# System prop to disable strict mode flash on display
+#
+persist.sys.strictmode.visual=false
+
+#
+# System prop to enable/disable OMH. Enabled by default
+#
+persist.omh.enabled=0
+
+#System prop to enable ehrpd capability
+ro.config.ehrpd=true
+
+# System property for cabl
+ro.qualcomm.cabl=0
+
+#
+# System prop for sending transmit power request to RIL during WiFi hotspot on/off
+#
+ro.ril.transmitpower=true
+
+#
+#
+#System prop to determine availability of
+#analog fm path
+#
+ro.fm.analogpath.supported=true
+
+#
+#System property for FM transmitter
+#
+ro.fm.transmitter=false
+
+#
+#System property for single instance recording
+#
+ro.fm.mulinst.recording.support=false
+ro.config.fm_type=libqcomfm_if
+#
+#for using emmc partition instead sdcard
+#
+
+#
+# system props for SD card emulation of emmc partition
+#
+ro.emmc.sdcard.partition=20
+persist.sys.emmcsdcard.enabled=0
+persist.sys.external.enabled=0
+ro.baidu.2nd_storage.format=enable
+
+# wangzirui@baidu.com add
+# switcher of default write in Settings
+ro.baidu.default_write.settable=true
+# this property should be "false" if device don't support change mountpoints
+# also, service "ext_sd_primary" and "int_sd_primary" must be set proper in init.rc
+# before this property be set "true"
+ro.baidu.mountpoint.settable=true
+
+#
+# system property to enforce Phone Mode view
+#
+ro.screen.layout=normal
+#
+#System prop for setting the pixel format
+#
+#ro.staticwallpaper.pixelformat=RGB_565
+
+#
+#System prop for disabling the meta data mode for encoder
+#
+debug.camcorder.disablemeta=0
+
+#
+# Simulate sdcard on /data/media
+#
+persist.fuse_sdcard=false
+
+#
+# System prop for using landscape preview layout in camera
+#
+debug.camera.landscape=true
+
+#
+# System prop for capping scroll velocity
+#
+ro.max.fling_velocity=4000
+
+#
+#
+# System prop for enabling camera shutter sound
+#
+ro.camera.sound.forced=1
+#
+#
+# System prop for enabling discontinuity for HLS Variant Playlist
+#
+httplive.enable.discontinuity=true
+
+#
+# Enable Dynamic sampling to help with cases like mp3 playback.
+#
+dev.pm.dyn_samplingrate=1
+#
+# On Strider below period is found to improve power numbers for AAC MP4
+#
+dev.pm.dyn_sample_period=700000
+#
+# System prop for enabling the cdrom feature
+#
+persist.service.cdrom.enable=1
+
+#for enable poweroff charging feature
+persist.pwroffcharging.enable=1
+
+#enable read network preference from NV 10
+persist.radio.mode_pref_nv10=1
+
+#
+#  System prop for mapping to TTY Device for CSVT
+#
+hw.tty.vtdevice=/dev/smd11
+
+# Add 20120823 TS-FMC-V2 start
+#
+# System prop for enabling the fmc feature
+#
+ro.config.cwenable=1
+
+#
+# System prop for enabling the fmc v2.0 feature
+#
+ro.config.fmcv2support=1
+# Add 20120823 TS-FMC-V2 end
+
+# add FM voice routing to speaker
+ro.fm.speaker=true
+ro.fm.isAnalog=true
+
+# set default mtu to 1380
+persist.data_netmgrd_mtu=1380
+#
+# System prop for enabling forced sound in camera start/stop tones
+#
+ro.camera.sound.forced=1
+
+#snapdragon value add features
+#
+ro.qc.sdk.camera.facialproc=false
+ro.qc.sdk.gestures.camera=false
+
+#
+# Snapdragon value add features
+#
+ro.qc.sdk.camera.facialproc=true
+ro.qc.sdk.gestures.camera=false
+#
+# Enable swaprect feature
+#
+debug.sf.swaprect=1
+
+
+# set default read card prop
+ro.multi.rild=true
+
+# default network mode: cdma auto
+ro.telephony.default_network=4
+
+# specific feature for coolpad5890
+ro.telephony.coolpad_single=true
+
+# prop for device specific telephony feature property
+# value is int(32 bit), use mask to identify diff feature
+# 00000000 00000000 00000000 00000001 = 0x00000001 first bit, *** flag
+# for 5890, switchCdmaGsm is satisfied
+ro.baidu.telephony.dev_spec=1048576
+
+#
+# ADDITIONAL_BUILD_PROPERTIES
+#
+dalvik.vm.heapstartsize=8m
+dalvik.vm.heapgrowthlimit=80m
+keyguard.no_require_sim=true
+ro.com.android.dataroaming=true
+ro.carrier=unknown
+ro.vendor.extension_library=/system/lib/libqc-opt.so
+dalvik.vm.heapsize=256m
+dalvik.vm.heaputilization=0.25
+dalvik.vm.heapidealfree=8388608
+dalvik.vm.heapconcurrentstart=2097152
+ro.yulong.version.wcdma=MSM8625
+ro.yulong.version.cdma=MSM8625
+ro.yulong.version.gsm=MSM8625
+ro.yulong.version.wcdmasoft=MSM8625-2040
+ro.yulong.version.cdmasoft=MSM8625-2040
+ro.yulong.version.gsmsoft=MSM8625-2040
+ro.yulong.version.bluetooth=BCM4330
+ro.yulong.version.wifi=BCM4330
+ro.yulong.version.gps=MSM8625GPS
+ro.yulong.version.audiowcdma=5890_WCDMA_20130205
+ro.yulong.version.audiocdma=5890_CDMA_20130205
+ro.yulong.version.audiogsm=5890_GSM_20130205
+ro.yulong.version.camera=MT9T113
+ro.yulong.version.camerasub=MT9T113
+ro.yulong.version.hardware=P0
+persist.radio.adb_log_on=1
+persist.sys.timezone=Asia/Shanghai
+persist.sys.fastbootup.mode=0
+ro.yulong.version.tag=LC
+persist.yulong.log.level=YVV7
+ro.config.cwenable=1
+persist.yulong.version.bm=1
+net.bt.name=Android
+#dalvik.vm.stack-trace-file=/data/anr/traces.txt
+ro.baidu.use_btwlancoex=true
+ro.baidu.led.dev_spec=9

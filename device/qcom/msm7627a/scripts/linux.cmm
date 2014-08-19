@@ -1,0 +1,82 @@
+
+sys.down
+
+do setup.cmm
+
+sys.cpu arm1136j
+sys.jtagclock rtck
+
+sys.mode attach
+
+if state.run() 
+(
+  break
+)
+
+data.load &KERNEL &KERNEL_ADDR /name kernel
+data.load.ELF &KERNEL_ELF /NOCODE /RELPATH /PATH &KERNEL_SRC
+
+if ("&RAMDISK"!="")
+(
+  data.load &RAMDISK &RAMDISK_ADDR /name ramdisk /noclear
+  &RAMDISK_SIZE=y.sizeof("\\ramdisk")
+)
+else
+(
+  &RAMDISK_SIZE=0
+)
+
+local &tags
+&tags=&TAGS_ADDR
+
+d.s &tags+0x00 %long 2
+d.s &tags+0x04 %long 0x54410001
+&tags=&tags+0x08
+
+if (&RAMDISK_SIZE!=0)
+(
+  d.s &tags+0x00 %long 4
+  d.s &tags+0x04 %long 0x54420005
+  d.s &tags+0x08 %long &RAMDISK_ADDR
+  d.s &tags+0x0C %long &RAMDISK_SIZE
+  &tags=&tags+0x10
+)
+
+if ("&CMDLINE"!="")
+(
+  d.s &tags+0x00 %long 0x42
+  d.s &tags+0x04 %long 0x54410009
+  &tags=&tags+0x08
+  d.s &tags++0x100 %byte 0
+  d.s &tags "&CMDLINE"
+  &tags=&tags+0x100
+)
+
+d.s &tags+0x00 %long 0
+d.s &tags+0x04 %long 0
+
+
+register.set pc &KERNEL_ADDR
+register.set r0 0
+register.set r1 &MACHINE_ID
+register.set r2 &TAGS_ADDR
+
+tronchip.set dabort off
+tronchip.set pabort off
+
+term.reset
+term.size 50 100
+term.scroll.on
+term
+
+break.select program onchip
+break.delete
+;break.set __irq_usr
+;break.set __irq_svc
+;break.set pte_hack
+;break.set cpu_v6_set_pte
+;break.set panic
+;break.set do_DataAbort\10
+
+go
+

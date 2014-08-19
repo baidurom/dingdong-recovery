@@ -1,0 +1,194 @@
+#
+# system.prop for surf
+#
+
+rild.libpath=/system/lib/libril-qc-1.so
+rild.libargs=-d /dev/smd0
+persist.rild.nitz_plmn=
+persist.rild.nitz_long_ons_0=
+persist.rild.nitz_long_ons_1=
+persist.rild.nitz_long_ons_2=
+persist.rild.nitz_long_ons_3=
+persist.rild.nitz_short_ons_0=
+persist.rild.nitz_short_ons_1=
+persist.rild.nitz_short_ons_2=
+persist.rild.nitz_short_ons_3=
+ril.subscription.types=NV,RUIM
+DEVICE_PROVISIONED=1
+keyguard.no_require_sim=1
+debug.sf.hw=1
+debug.composition.7x27A.type=mdp
+debug.composition.7x25A.type=mdp
+debug.composition.8x25.type=dyn
+debug.hwc.dynThreshold=1.91
+dalvik.vm.heapsize=24m
+ro.sf.lcd_density=240
+#
+# system props for the cne module
+#
+persist.cne.bat.range.low.med=30
+persist.cne.bat.range.med.high=60
+persist.cne.loc.policy.op=/system/etc/OperatorPolicy.xml
+persist.cne.loc.policy.user=/system/etc/UserPolicy.xml
+persist.cne.bwbased.rat.sel=false
+persist.cne.snsr.based.rat.mgt=false
+persist.cne.bat.based.rat.mgt=false
+persist.cne.rat.acq.time.out=30000
+persist.cne.rat.acq.retry.tout=0
+persist.cne.fmc.init.time.out=30
+persist.cne.fmc.comm.time.out=130
+persist.cne.fmc.retry=false
+persist.cne.feature=0
+
+#
+# system props for the MM modules
+#
+media.stagefright.enable-player=true
+media.stagefright.enable-meta=false
+media.stagefright.enable-scan=true
+media.stagefright.enable-http=true
+media.stagefright.enable-fma2dp=true
+media.stagefright.enable-aac=true
+media.stagefright.enable-qcp=true
+# Headset hook delay in milli seconds
+headset.hook.delay=500
+
+#
+# system prop for audio post processing
+#
+audio.legacy.postproc=true
+
+#
+# system prop for opengles version
+#
+ro.opengles.version=131072
+
+#
+# system props for the data modules
+#
+ro.use_data_netmgrd=true
+persist.data.ds_fmc_app.mode=0
+
+#
+# system props for IMS module
+#
+persist.ims.regmanager.mode=0
+
+#
+# system prop for requesting Master role in incoming Bluetooth connection.
+#
+ro.bluetooth.request.master=true
+
+#
+# system prop for Bluetooth FTP profile
+#
+ro.qualcomm.bluetooth.ftp=true
+
+#
+# system prop for Bluetooth SAP profile
+#
+ro.qualcomm.bluetooth.sap=true
+
+#
+# system prop for Bluetooth Auto connect for remote initated connections
+#
+ro.bluetooth.remote.autoconnect=true
+
+#
+#system property for Bluetooth discoverability timeout in seconds
+#0: Always discoverable
+#debug.bt.discoverable_time=0
+
+#
+# System prop to disable strict mode flash on display
+#
+persist.sys.strictmode.visual=false
+
+#
+# System prop to enable/disable OMH. Enabled by default
+#
+persist.omh.enabled=1
+
+#System prop to enable ehrpd capability
+ro.config.ehrpd=true
+
+# System property for cabl
+ro.qualcomm.cabl=1
+
+# System props for telephony
+# System prop to turn on CdmaLTEPhone always
+telephony.lteOnCdmaDevice=1
+
+#
+# System prop for sending transmit power request to RIL during WiFi hotspot on/off
+#
+ro.ril.transmitpower=true
+
+#
+#
+#System prop to determine availability of
+#analog fm path
+#
+ro.fm.analogpath.supported=true
+
+#
+#System property for FM transmitter
+#
+ro.fm.transmitter=false
+
+#
+#System property for single instance recording
+#
+ro.fm.mulinst.recording.support=false
+
+#
+# system props for SD card emulation of emmc partition
+#
+ro.emmc.sdcard.partition=18
+
+#
+# system property to enforce Phone Mode view
+#
+ro.screen.layout=normal
+#
+#System prop for setting the pixel format
+#
+ro.staticwallpaper.pixelformat=RGB_565
+
+#
+#System prop for disabling the meta data mode for encoder
+#
+debug.camcorder.disablemeta=0
+
+#
+# Simulate sdcard on /data/media
+#
+persist.fuse_sdcard=false
+
+#
+# System prop for using landscape preview layout in camera
+#
+debug.camera.landscape=true
+
+#
+# System prop for capping scroll velocity
+#
+ro.max.fling_velocity=4000
+
+#
+# System prop for enabling discontinuity for HLS Variant Playlist
+#
+httplive.enable.discontinuity=true
+
+#
+# Enable Dynamic sampling to help with cases like mp3 playback.
+#
+dev.pm.dyn_samplingrate=1
+#
+# On Strider below period is found to improve power numbers for AAC MP4
+#
+dev.pm.dyn_sample_period=700000
+#
+# System prop for enabling the cdrom feature
+#
+persist.service.cdrom.enable=1

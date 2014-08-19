@@ -1,0 +1,176 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Setup Android T32 debugging environment
+;; Sample script
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; Declare local variables
+ENTRY &AndroidRoot
+
+local &kernelPath
+local &T32Path
+
+;; Break if already running
+if run()
+(
+	break
+)
+
+;; Setup Windows
+  winclear
+  ; Display code listing
+  WINPOS 0.0 0.0 68% 65% 12. 1. W000
+  DATA.list
+
+  ; Display register window
+  WINPOS 68% 0. 32% 50% 0. 0. W002
+  register /spotlight
+
+  ; Display variables in HEX and with symbol names
+  setup.var %open.on %hex
+
+  ; Display stackframe with local variables
+  WINPOS  68% 50% 32% 48% 0. 0. W003
+  Var.Frame /Locals /Caller
+
+;; Setup window area to display messages when setting this up
+WINPOS 0% 65% 34% 35% 0. 0. W001
+Area.create MAIN
+Area.clear MAIN
+Area.view MAIN
+Area.select MAIN
+
+print "   _   _  _ ___  ___  ___ ___ ___  "
+print "  /_\ | \| |   \| _ \/ _ \_ _|   \ "
+print " / _ \| .` | |) |   / (_) | || |) |"
+print "/_/ \_\_|\_|___/|_|_\\___/___|___/ "
+print " "
+print "ANDROID root directory: &AndroidRoot"
+
+&kernelPath="&AndroidRoot/kernel"
+&T32LinuxScriptPath="c:/T32/demo/arm/kernel/linux"
+
+; Generic start-up
+Break.Delete		; remove any breakpoints
+MAP.RESet		; reset debuggers memory mapping
+MMU.RESet		; reset debuggers MMU
+sYmbol.RESet		; remove any symbols
+
+; Linux start-up
+TrOnchip.Set DABORT OFF		; turn off breakpoint on data abort
+TrOnchip.Set PABORT OFF		; turn off breakpoint on program abort
+TrOnchip.Set UNDEF OFF		; turn off breakpoint on undefined instruction
+SYStem.Option MMUSPACES ON	; enable space ids to virtual addresses
+
+print "Loading Linux kernel symbols..."
+data.load.elf "&AndroidRoot/out/target/product/msm7630_surf/obj/KERNEL_OBJ/vmlinux" /nocode /gnu
+
+; Declare the MMU format to the debugger
+ ; - table format is "LINUX"
+ ; - table base address is at label "swapper_pg_dir"
+ ; - kernel address translation
+ ; Map the virtual kernel symbols to physical addresses to give
+ ; the debugger access to it before CPU MMU is initialized
+
+MMU.RESET
+MMU.FORMAT LINUX swapper_pg_dir 0x80000000--0x8fffffff 0x00200000
+MMU.COMMON 0x800000000--0x8FFFFFFF
+MMU.AUTOSCAN ON
+MMU.TABLEWALK ON
+MMU.ON
+
+
+; Configure Trace32 for Linux debugging
+TASK.CONFIG "&T32LinuxScriptPath/linux.t32"		; Load Linux awareness
+MENU.ReProgram "&T32LinuxScriptPath/linux.men"		; Load Linux menu
+HELP.FILTER.Add rtoslinux				; Add linux awareness manual to help filter
+
+TASK.sYmbol.Option MMUSCAN OFF				; not necessary with table walk
+
+sYmbol.AutoLoad.CHECKLINUX "do &LinuxT32ScriptPath/autoload " 	; Switch on symbol autoloader
+
+GROUP.Create "kernel" 0x800000000--0x8FFFFFFFF /RED
+
+
+; Configure Autoloader to automatically load symbols for process debugging
+Task.SYMBOL.Option Autoload Process
+
+; Display Linux processes
+WINPOS  34% 65% 34% 35% 0. 0. W003
+task.dtask
+mode.hll
+
+;; Setup break points in linux kernel to ease debugging
+b.s \\vmlinux\panic\panic
+
+&symbolPath="&AndroidRoot/out/target/product/msm7630_surf/symbols/system/lib"
+
+;; The following addresses are based on prelink library map defined in
+;; build/core/prelink-linux-arm.map.  Addresses may need to be customized
+;; based on target
+&libopencore_commonAddr=0x63900000
+&libopencore_playerAddr=0x64800000
+&libopencore_authorAddr=0x65D00000
+&libhardware_legacyAddr=0x67E00000
+&libhardwareAddr=0x67E00000
+&libaudioflingerAddr=0x68D00000
+&libmediaAddr=0x69000000
+&libmediaplayerserviceAddr=0x69200000
+&libvorbisidecAddr=0x69400000
+&libsonivoxAddr=0x69500000
+&libaudioAddr=0x69700000
+&libaudiopolicyAddr=0x69A00000
+&libskiaAddr=0x6B100000
+&libuiAddr=0x6B900000
+&libEGLAddr=0x6BE00000
+&libGLESv1_CMAddr=0x6C200000
+&libpixelflingerAddr=0x6C900000
+&libdvmAddr=0x6CA00000
+&libandroid_runtimeAddr=0x6D300000
+&liblogAddr=0x6FA00000
+&libcAddr=0x6FD00000
+
+;; Get the application ID
+;&appsID=task.proc.spaceid("mediaserver");
+;if &appsID==0xffffffff
+;(
+;    print "Error getting mediaserver ID.. exit"
+;	enddo
+;)
+;print "ID"
+;print &appsID
+
+;; Load libraries
+print "Loading Android library symbols..."
+data.load.elf &symbolPath\libopencore_common.so &libopencore_commonAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libopencore_player.so &libopencore_playerAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libopencore_author.so &libopencore_authorAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libhardware.so &libhardwareAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libaudioflinger.so &libaudioflingerAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libmedia.so &libmediaAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libmediaplayerservice.so &libmediaplayerserviceAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libvorbisidec.so &libvorbisidecAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libsonivox.so &libsonivoxAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libaudio.so &libaudioAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libaudiopolicy.so &libaudiopolicyAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libskia.so &libskiaAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libui.so &libuiAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libEGL.so &libEGLAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libGLESv1_CM.so &libGLESv1_CMAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libpixelflinger.so &libpixelflingerAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libdvm.so &libdvmAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libandroid_runtime.so &libandroid_runtimeAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\liblog.so &liblogAddr /gnu /nocode /noclear 
+data.load.elf &symbolPath\libc.so &libcAddr /gnu /nocode /noclear 
+
+
+;Source Paths for libraries
+print "Adding default source paths..."
+y.spath.srd "&AndroidRoot/kernel"
+y.spath.srd "&AndroidRoot/hardware/msm7k"
+y.spath.srd "&AndroidRoot/frameworks/base"
+y.spath.srd "&AndroidRoot/system/core"
+
+print "Done."
+ENDDO

@@ -1,0 +1,11 @@
+1 the project is build android recovery only;
+2 before building, make sure copy project prebuilt, bionic and hardware to the directory ,which from ICS.
+3 Steps as following:
+    $ . build/envsetup.sh
+    $ lunch
+    $ make crespo
+  please see the out/patch_device/crespo/ , find recovery.img 
+4 please check Makefile to obtain the supported devices;
+
+ 
+

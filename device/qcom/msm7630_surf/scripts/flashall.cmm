@@ -1,0 +1,36 @@
+
+local &status
+
+do setup.cmm
+
+do flash userdata
+entry &status
+if (&status!=0)
+  enddo
+print
+
+if ("&KERNEL"!="")
+(
+  do flash kernel &KERNEL again
+  entry &status
+  if (&status!=0)
+    enddo
+  print
+)
+
+if ("&RAMDISK"!="")
+(
+  do flash ramdisk &RAMDISK again
+  entry &status
+  if (&status!=0)
+    enddo
+  print
+)
+
+if ("&SYSTEM_IMG"!="")
+(
+  do flash system &SYSTEM_IMG again
+  entry &status
+  if (&status!=0)
+    enddo
+)

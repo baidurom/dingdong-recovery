@@ -1,0 +1,84 @@
+; Copyright 2007, Google Inc.
+
+; files
+;
+global &KERNEL
+global &KERNEL_ELF
+global &KERNEL_SRC
+global &RAMDISK
+global &SECOND_STAGE
+global &SYSTEM_IMG
+global &CMDLINE
+global &NANDWRITE_ELF
+
+; memory locations
+;
+global &TAGS_ADDR
+global &KERNEL_ADDR
+global &RAMDISK_ADDR
+global &RAMDISK_SIZE
+global &SECOND_STAGE_ADDR
+global &SYSTEM_IMG_ADDR
+global &SYSTEM_IMG_SIZE
+global &SYSTEM_PHY_BASE_ADDR
+global &SYSTEM_HDR_ADDR
+
+; misc
+global &MACHINE_ID
+
+global &TOP
+global &OUT
+global &NANDWRITE
+
+; relative path back up to the top of the device tree from here
+;
+&TOP="../../../../"
+
+; directory where the results of the device build live
+;
+&OUT="&(TOP)out/target/product/msm7627a/"
+
+; ----------------------------------------------------------------------
+; configure your memory layout, binary images, and commandline below:
+; ----------------------------------------------------------------------
+
+&SYSTEM_PHY_BASE_ADDR=  0x00200000
+&SECOND_STAGE_ADDR=     0x00300000
+&KERNEL_ADDR=           &SYSTEM_PHY_BASE_ADDR+0x00008000
+&RAMDISK_ADDR=          &SYSTEM_PHY_BASE_ADDR+0x01000000
+&TAGS_ADDR=             &SYSTEM_PHY_BASE_ADDR+0x00000100
+&SYSTEM_IMG_ADDR=       &SYSTEM_PHY_BASE_ADDR+0x01000000
+&SYSTEM_HDR_ADDR=       &SYSTEM_PHY_BASE_ADDR+0x04000000
+
+;&MACHINE_ID=         0x59f ; halibut
+;&MACHINE_ID=         0x5a0 ; trout
+&MACHINE_ID=         0x0f5da6 ; MSM 7627 SURF
+;&MACHINE_ID=         0x0f5da7 ; MSM 7627 FFA
+
+;&KERNEL_SRC=         "../../../git/kernel-msm/"
+&KERNEL_SRC=         "&(TOP)../kernel/"
+;&KERNEL_SRC=         "/scratch/linux-msm/"
+;&KERNEL_SRC=         "/work/kernel/mergebox/"
+&KERNEL=             "&(KERNEL_SRC)arch/arm/boot/zImage"
+&KERNEL_ELF=         "&(KERNEL_SRC)vmlinux"
+
+&SECOND_STAGE=""
+;&SECOND_STAGE=      "wait"
+;&SECOND_STAGE=      "&(OUT)usbloader"
+
+&RAMDISK=            "&(OUT)ramdisk.img"
+&SYSTEM_IMG=         "&(OUT)system.img"
+&NANDWRITE=          "&(OUT)nandwrite"
+
+;&CMDLINE=         "mem=50M"
+;&CMDLINE=         "mem=64M"
+&CMDLINE=         "mem=83M"
+&CMDLINE=         "&(CMDLINE) console=ttyMSM2"
+;&CMDLINE= "&(CMDLINE) board_halibut.ffa=1"
+;&CMDLINE=         "&(CMDLINE) console=tty1"
+;&CMDLINE=         "&(CMDLINE) androidboot.console=ttyMSM0"
+;&CMDLINE=         "&(CMDLINE) console=ttyDCC0"
+;&CMDLINE=         "&(CMDLINE) androidboot.console=ttyDCC0"
+;&CMDLINE=         "&(CMDLINE) console=null"
+
+; ----------------------------------------------------------------------

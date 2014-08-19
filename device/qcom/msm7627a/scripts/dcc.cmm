@@ -1,0 +1,21 @@
+
+sys.cpu arm1136j
+sys.jtagclock rtck
+
+sys.mode attach
+
+if state.run() 
+(
+  break
+)
+
+tronchip.set dabort off
+tronchip.set pabort off
+
+term.reset
+term.size 50 100
+term.scroll.on
+term
+
+go
+

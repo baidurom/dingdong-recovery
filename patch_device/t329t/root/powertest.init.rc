@@ -1,0 +1,856 @@
+import init.usb.rc
+
+on early-init
+    # Set init and its forked children's oom_adj.
+    write /proc/1/oom_adj -16
+
+    start ueventd
+
+# create mountpoints
+    mkdir /mnt 0775 root system
+
+on init
+
+sysclktz 0
+
+loglevel 3
+
+# setup the global environment
+    export PATH /system/sbin:/system/bin:/system/xbin:/sbin:/bin:/vendor/bin
+    export LD_LIBRARY_PATH /system/lib:/lib:/usr/lib:/system/lib/ste_omxcomponents/:/vendor/lib
+    export ANDROID_BOOTLOGO 1
+    export ANDROID_ROOT /system
+    export ANDROID_ASSETS /system/app
+    export ANDROID_DATA /data
+    export EXTERNAL_STORAGE /mnt/sdcard
+    export ASEC_MOUNTPOINT /mnt/asec
+    export LOOP_MOUNTPOINT /mnt/obb
+    export BOOTCLASSPATH /system/framework/core.jar:/system/framework/core-junit.jar:/system/framework/bouncycastle.jar:/system/framework/ext.jar:/system/framework/framework.jar:/system/framework/framework2.jar:/system/framework/android.policy.jar:/system/framework/services.jar:/system/framework/apache-xml.jar:/system/framework/filterfw.jar:/system/framework/com.htc.android.bluetooth.jar:/system/framework/usbnet.jar:/system/framework/HTCDev.jar:/system/framework/HTCCommonctrl.jar:/system/framework/HTCExtension.jar
+
+# HTC_DEV_MARK, Michael_Jiang, removed for compiling user version to test rooted bootimage.
+#/system/framework/wimax.jar
+#/system/framework/com.orange.authentication.simcard.jar
+
+    export OMX_STE_ENS_COMPONENTS_DIR /system/lib/ste_omxcomponents/
+    export OMX_BELLAGIO_LOADER_REGISTRY /system/omxloaders
+
+# Backward compatibility
+    symlink /system/etc /etc
+    symlink /sys/kernel/debug /d
+#HTC_AUD_ADD miller, mount debugfs for MFG audio loopback    
+    mount debugfs /sys/kernel/debug /sys/kernel/debug
+
+# Right now vendor lives on the same filesystem as system,
+# but someday that may change.
+    symlink /system/vendor /vendor
+
+# create mountpoints
+    mkdir /mnt/sdcard 0000 system system
+    symlink /mnt/sdcard /sdcard
+
+# Create cgroup mount point for cpu accounting
+    mkdir /acct
+    mount cgroup none /acct cpuacct
+    mkdir /acct/uid
+
+    mkdir /system 0775 system system
+    mkdir /modemfs 0771 system system
+    mkdir /data 0771 system system
+    mkdir /cache 0770 system cache
+    mkdir /config 0500 root root
+
+    # Directory for putting things only root should see.
+    mkdir /mnt/secure 0700 root root
+
+    # Directory for staging bindmounts
+    mkdir /mnt/secure/staging 0700 root root
+
+    # Directory-target for where the secure container
+    # imagefile directory will be bind-mounted
+    mkdir /mnt/secure/asec  0700 root root
+
+    # Secure container public mount points.
+    mkdir /mnt/asec  0700 root system
+    mount tmpfs tmpfs /mnt/asec mode=0755,gid=1000
+
+    # Shared memory file system
+    mkdir /dev/shm 0700 audio system
+    mount tmpfs tmpfs /dev/shm mode=0755,gid=1000
+
+    # Filesystem image public mount points.
+    mkdir /mnt/obb 0700 root system
+    mount tmpfs tmpfs /mnt/obb mode=0755,gid=1000
+
+    write /proc/sys/kernel/panic_on_oops 1
+    write /proc/sys/kernel/hung_task_timeout_secs 0
+    write /proc/cpu/alignment 4
+    write /proc/sys/kernel/sched_latency_ns 10000000
+#    write /proc/sys/kernel/sched_wakeup_granularity_ns 2000000
+    write /proc/sys/kernel/sched_compat_yield 1
+    write /proc/sys/kernel/sched_child_runs_first 0
+    write /proc/sys/kernel/sched_rt_period_us 10000000
+    write /proc/sys/kernel/sched_rt_runtime_us 9500000
+
+# Create cgroup mount points for process groups
+    mkdir /dev/cpuctl
+    mount cgroup none /dev/cpuctl cpu
+    chown system system /dev/cpuctl
+    chown system system /dev/cpuctl/tasks
+    chmod 0777 /dev/cpuctl/tasks
+    write /dev/cpuctl/cpu.shares 1024
+
+    mkdir /dev/cpuctl/fg_boost
+    chown system system /dev/cpuctl/fg_boost/tasks
+    chmod 0777 /dev/cpuctl/fg_boost/tasks
+    write /dev/cpuctl/fg_boost/cpu.shares 1024
+
+    mkdir /dev/cpuctl/bg_non_interactive
+    chown system system /dev/cpuctl/bg_non_interactive/tasks
+    chmod 0777 /dev/cpuctl/bg_non_interactive/tasks
+    # 5.0 %
+    write /dev/cpuctl/bg_non_interactive/cpu.shares 52
+
+    # STE: create /tmp directory needed by psccd and CSPSA
+    mkdir /tmp
+
+# Allow everybody to read the xt_qtaguid resource tracking misc dev.
+# This is needed by any process that uses socket tagging.
+    chmod 0644 /dev/xt_qtaguid
+
+on init
+    write /sys/class/android_usb/android0/iSerial $ro.serialno
+    write /sys/class/android_usb/android0/f_rndis/manufacturer HTC
+    write /sys/class/android_usb/android0/f_rndis/vendorID 0BB4
+    write /sys/class/android_usb/android0/f_rndis/wceis 0
+
+on fs
+# mount mtd partitions
+    # Mount /system rw first to give the filesystem a chance to save a checkpoint
+    #HTC_KER_MARK mount ext4 /dev/block/mmcblk0p2 /system ro
+
+    # Start CSPSA before synchronously running the factory reset utility that
+    # checks the factory reset triggers in sysfs and CSPSA and then formats
+    # the block device belonging to /data.
+    start cspsa
+    exec /system/bin/logwrapper /system/bin/factoryreset -f /sys/socinfo/reset_reason -r factory-reset -c CSPSA0 -p 0xfffffffc:31 /dev/block/mmcblk0p5
+
+    # Once any factory reset is completed (this is why exec is used above) it is
+    # OK to mount the remaining file system volumes.
+    #HTC_KER_MARK mount ext4 /dev/block/mmcblk0p4 /cache nosuid nodev nodelalloc,noauto_da_alloc
+    #HTC_KER_MARK mount ext4 /dev/block/mmcblk0p5 /data nosuid nodev nodelalloc,noauto_da_alloc
+    mount ext4 emmc@modemfs /modemfs nosuid nodev
+
+on post-fs
+    # once everything is setup, no need to modify /
+#    mount rootfs rootfs / ro remount
+
+    # We chown/chmod /cache again so because mount is run as root + defaults
+    chown system cache /cache
+    chmod 0770 /cache
+
+    # This may have been created by the recovery system with odd permissions
+    chown system cache /cache/recovery
+    chmod 0770 /cache/recovery
+
+    #change permissions on vmallocinfo so we can grab it from bugreports
+    chown root log /proc/vmallocinfo
+    chmod 0440 /proc/vmallocinfo
+
+    #change permissions on kmsg & sysrq-trigger so bugreports can grab kthread stacks
+    chown root system /proc/kmsg
+    chmod 0440 /proc/kmsg
+    chown root system /proc/sysrq-trigger
+    chmod 0220 /proc/sysrq-trigger
+
+    chown system system /system
+    chmod 0775 /system
+
+    chown radio radio /modemfs
+    chmod 0770 /modemfs
+    chown radio radio /modemfs/CONF
+    chmod 0755 /modemfs/CONF
+    chown radio radio /modemfs/CONF/MCE
+    chmod 0755 /modemfs/CONF/MCE
+    chown radio radio /modemfs/CONF/MCE/MCE.CFG
+    chmod 0644 /modemfs/CONF/MCE/MCE.CFG
+    chown radio radio /modemfs/PERM
+    chmod 0755 /modemfs/PERM
+    chown radio radio /modemfs/PERM/PROT
+    chmod 0755 /modemfs/PERM/PROT
+    chown radio radio /modemfs/PERM/PROT/LABEP.CFG
+    chmod 0644 /modemfs/PERM/PROT/LABEP.CFG
+    chown radio radio /modemfs/PERM/PROT/PPVALUES.DAT
+    chmod 0644 /modemfs/PERM/PROT/PPVALUES.DAT
+
+   # create the lost+found directories, so as to enforce our permissions
+    mkdir /cache/lost+found 0770 root root
+
+# STE: Set permissions for wake locks before services are launched that use them
+    chown radio system /sys/power/state
+    chown radio system /sys/power/wake_lock
+    chown radio system /sys/power/wake_unlock
+    chmod 0660 /sys/power/state
+    chmod 0660 /sys/power/wake_lock
+    chmod 0660 /sys/power/wake_unlock
+
+on post-fs-data
+    # We chown/chmod /data again so because mount is run as root + defaults
+    chown system system /data
+    chmod 0771 /data
+
+    # Create dump dir and collect dumps.
+    # Do this before we mount cache so eventually we can use cache for
+    # storing dumps on platforms which do not have a dedicated dump partition.
+    mkdir /data/dontpanic 0750 root log
+
+    # Collect apanic data, free resources and re-arm trigger
+    copy /proc/apanic_console /data/dontpanic/apanic_console
+    chown root log /data/dontpanic/apanic_console
+    chmod 0640 /data/dontpanic/apanic_console
+
+    copy /proc/apanic_threads /data/dontpanic/apanic_threads
+    chown root log /data/dontpanic/apanic_threads
+    chmod 0640 /data/dontpanic/apanic_threads
+
+    write /proc/apanic_console 1
+
+    # create basic filesystem structure
+    mkdir /data/misc 01771 system misc
+    mkdir /data/misc/hcid 0770 bluetooth bluetooth
+    mkdir /data/misc/bluetoothd 0770 bluetooth bluetooth
+    mkdir /data/misc/bluetooth 0770 system system
+    mkdir /data/misc/keystore 0700 keystore keystore
+    mkdir /data/misc/keychain 0771 system system
+    mkdir /data/misc/vpn 0770 system vpn
+    mkdir /data/misc/systemkeys 0700 system system
+    mkdir /data/misc/psdata
+
+    # give system access to ril_config
+    copy -u /system/etc/ril_config /data/misc/ril_config
+    chmod 0660 /data/misc/ril_config
+    chown root radio /data/misc/ril_config
+
+    # Create directory for STE OMX debug logs
+    mkdir /data/ste-debug 0777 root root
+
+    mkdir /data/local 0751 root root
+    mkdir /data/local/tmp 0771 shell shell
+    mkdir /data/data 0771 system system
+    mkdir /data/app-private 0771 system system
+    mkdir /data/app 0771 system system
+    mkdir /data/property 0700 root root
+
+    # give system access to sterc_script when enabling usb nap
+    copy -u /system/etc/psdata/sterc_conf /data/misc/psdata/sterc_conf
+    copy -u /system/etc/psdata/sterc_script_connect /data/misc/psdata/sterc_script_connect
+    copy -u /system/etc/psdata/sterc_script_disconnect /data/misc/psdata/sterc_script_disconnect
+    copy -u /system/etc/psdata/sterc_conf_alt /data/misc/psdata/sterc_conf_alt
+    copy -u /system/etc/psdata/sterc_script_connect_alt /data/misc/psdata/sterc_script_connect_alt
+    copy -u /system/etc/psdata/sterc_script_connect_dun /data/misc/psdata/sterc_script_connect_dun
+    copy -u /system/etc/psdata/sterc_script_disconnect_dun /data/misc/psdata/sterc_script_disconnect_dun
+    chmod 0660 /data/misc/psdata/sterc_conf
+    chmod 0500 /data/misc/psdata/sterc_script_connect
+    chmod 0500 /data/misc/psdata/sterc_script_disconnect
+    chmod 0660 /data/misc/psdata/sterc_conf_alt
+    chmod 0500 /data/misc/psdata/sterc_script_connect_alt
+    chmod 0500 /data/misc/psdata/sterc_script_connect_dun
+    chmod 0500 /data/misc/psdata/sterc_script_disconnect_dun
+    chown root radio /data/misc/psdata/sterc_conf
+    chown root radio /data/misc/psdata/sterc_conf_alt
+
+    # give system access to stepscc_conf
+    copy -u /system/etc/psdata/stepscc_conf /data/misc/psdata/stepscc_conf
+    chmod 0660 /data/misc/psdata/stepscc_conf
+    chown root radio /data/misc/psdata/stepscc_conf
+
+    # create dalvik-cache, so as to enforce our permissions
+    mkdir /data/dalvik-cache 0771 system system
+
+    # create resource-cache and double-check the perms
+    mkdir /data/resource-cache 0771 system system
+    chown system system /data/resource-cache
+    chmod 0771 /data/resource-cache
+
+    # create the lost+found directories, so as to enforce our permissions
+    mkdir /data/lost+found 0770 root root
+
+    # create directory for DRM plug-ins
+    mkdir /data/drm 0774 drm drm
+
+    # STE: Modem Log Relay runs as system
+    chown system system /dev/db8500-modem-trace
+    chmod 0600 /dev/db8500-modem-trace
+    chown system system /dev/dbx500_mloader_fw
+    chmod 0600 /dev/dbx500_mloader_fw
+
+    #STE: create var/run, var/lib for avahi
+    mkdir /var
+    mkdir /var/run
+    mkdir /var/lib
+
+    #STE: Change permissions for modem_log_relay config file
+    chmod 666 /data/misc/trace_auto.conf
+
+    # If there is no fs-post-data action in the init.<device>.rc file, you
+    # must uncomment this line, otherwise encrypted filesystems
+    # won't work.
+    # Set indication (checked by vold) that we have finished this action
+    #setprop vold.post_fs_data_done 1
+
+    chown system system /sys/class/android_usb/android0/f_mass_storage/lun/file
+    chmod 0660 /sys/class/android_usb/android0/f_mass_storage/lun/file
+    chown system system /sys/class/android_usb/android0/f_rndis/ethaddr
+    chmod 0660 /sys/class/android_usb/android0/f_rndis/ethaddr
+
+    # 3LM settings
+    setprop ro.3lm.production 1
+
+    # 3LM encryption
+    setprop ro.3lm.legacy_encryption 1
+    mkdir /data/secure 0755 system system
+    mkdir /data/secure/data 0755 system system
+    mount tmpfs tmpfs /data/secure/data mode=0755,gid=1000
+
+# STE: Set permission rights for ping
+    chmod 4755 /system/bin/ping
+
+# STE: set proper access to modem storage pipe
+    chown radio radio /dev/rpc
+    chmod 0600 /dev/rpc
+
+on early-boot
+
+# STE: Enable line below if you want console in charging mode
+#   start console
+
+# STE: Launch core services in case charging mode is entered
+    start watchdog-kicker
+
+# STE: Prepare modem
+    class_start modem-u8500
+    class_start modem-core
+
+#Enumerating DUMMY Mass Storage for charge only mode.
+
+
+#USB initialization
+#HTC_KER_MARK     write /sys/class/android_usb/android0/idVendor 04CC
+#HTC_KER_MARK     write /sys/class/android_usb/android0/idProduct 2323
+#HTC_KER_MARK     write /sys/class/android_usb/android0/bDeviceClass 2
+#HTC_KER_MARK     write /sys/class/android_usb/android0/iManufacturer ST-Ericsson
+#HTC_KER_MARK     write /sys/class/android_usb/android0/iProduct Android Phone
+#HTC_KER_MARK     write /sys/class/android_usb/android0/functions mass_storage
+#HTC_KER_MARK     write /sys/class/android_usb/android0/enable 1
+#HTC_KER_MARK     write /sys/devices/platform/ab8500-i2c.0/ab8500-usb.0/boot_time_device 1
+
+# STE: Enable autonomous power management in CM
+    write /sys/module/cm/parameters/enable_auto_pm 1
+    exec /system/bin/chargemode
+
+on boot
+
+# basic network init
+    ifup lo
+    hostname localhost
+    domainname localdomain
+
+# set RLIMIT_NICE to allow priorities from 19 to -20
+    setrlimit 13 40 40
+
+# Set timeout value for rmnet stats.
+    write /sys/devices/virtual/net/rmnet0/timeout_suspend 5000000
+
+# Memory management.  Basic kernel parameters, and allow the high
+# level system server to be able to adjust the kernel OOM driver
+# paramters to match how it is managing things.
+    write /proc/sys/vm/overcommit_memory 1
+    write /proc/sys/vm/min_free_order_shift 4
+    chown root system /sys/module/lowmemorykiller/parameters/adj
+    chmod 0664 /sys/module/lowmemorykiller/parameters/adj
+    chown root system /sys/module/lowmemorykiller/parameters/minfree
+    chmod 0664 /sys/module/lowmemorykiller/parameters/minfree
+
+    # Set init and its forked children's oom_adj.
+    write /proc/1/oom_score_adj -16
+
+    # Tweak background writeout
+    write /proc/sys/vm/dirty_expire_centisecs 200
+    write /proc/sys/vm/dirty_background_ratio  5
+
+    # Permissions for System Server and daemons.
+    chown radio system /sys/android_power/state
+    chown radio system /sys/android_power/request_state
+    chown radio system /sys/android_power/acquire_full_wake_lock
+    chown radio system /sys/android_power/acquire_partial_wake_lock
+    chown radio system /sys/android_power/release_wake_lock
+    chown system system /sys/class/timed_output/vibrator/enable
+    chown system system /sys/class/leds/lp5521_pri:channel0/brightness
+    chown system system /sys/class/leds/lp5521_pri:channel1/brightness
+    chown system system /sys/class/leds/lp5521_pri:channel2/brightness
+    chown system system /sys/class/leds/lp5521_pri:channel0/device/engine1_load
+    chown system system /sys/class/leds/lp5521_pri:channel0/device/engine2_load
+    chown system system /sys/class/leds/lp5521_pri:channel0/device/engine3_load
+    chown system system /sys/class/leds/lp5521_pri:channel0/device/engine1_mode
+    chown system system /sys/class/leds/lp5521_pri:channel0/device/engine2_mode
+    chown system system /sys/class/leds/lp5521_pri:channel0/device/engine3_mode
+    chown system system /sys/class/leds/keyboard-backlight/brightness
+    chown system system /sys/class/leds/lcd-backlight/brightness
+    chown system system /sys/class/leds/button-backlight/brightness
+    chown system system /sys/class/leds/jogball-backlight/brightness
+    chown system system /sys/class/leds/amber/brightness
+    chown system system /sys/class/leds/green/brightness
+    chown system system /sys/class/leds/blue/brightness
+    chown system system /sys/class/leds/amber/device/grpfreq
+    chown system system /sys/class/leds/amber/device/grppwm
+    chown system system /sys/class/leds/amber/blink
+    chown system system /sys/class/leds/amber/brightness
+    chown system system /sys/class/leds/green/brightness
+    chown system system /sys/class/leds/green/blink
+    chown system system /sys/class/leds/blue/brightness
+    chown system system /sys/class/leds/red/device/grpfreq
+    chown system system /sys/class/leds/red/device/grppwm
+    chown system system /sys/class/leds/red/device/blink
+
+    chown system system /sys/class/leds/flashlight/brightness
+    chmod 0777 /sys/class/leds/flashlight/brightness
+
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-005c/enable
+    chown system system /sys/class/timed_output/vibrator/enable
+    chown system system /sys/module/sco/parameters/disable_esco
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0029/power_state
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0068/device1/gyro_range
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0068/device1/sampling_frequency
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0068/device1/mode
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-001e/device2/mode
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-001e/device2/magn_range
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-001e/device2/sampling_frequency
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0018/device0/accel_range
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0018/device0/mode
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0018/device0/sampling_frequency
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0019/device0/mode
+    chown system system /sys/devices/platform/nmk-i2c.2/i2c-2/2-0019/device0/accel_range
+    chown radio radio /sys/devices/platform/sim-detect.0/voltage
+    chown audio audio /sys/devices/system/cpu/usecase/voice-call
+    chown audio audio /sys/devices/system/cpu/usecase/low-power-audio
+    chown system system /sys/kernel/ipv4/tcp_wmem_min
+    chown system system /sys/kernel/ipv4/tcp_wmem_def
+    chown system system /sys/kernel/ipv4/tcp_wmem_max
+    chown system system /sys/kernel/ipv4/tcp_rmem_min
+    chown system system /sys/kernel/ipv4/tcp_rmem_def
+    chown system system /sys/kernel/ipv4/tcp_rmem_max
+    chown root radio /proc/cmdline
+    chown audio audio /dev/shm
+
+# ST-Ericsson Set radio device and parameters permissions
+    chown system system /sys/module/radio_cg2900/parameters/band
+    chown system system /sys/module/radio_cg2900/parameters/grid
+    chmod 0660 /sys/module/radio_cg2900/parameters/band
+    chmod 0660 /sys/module/radio_cg2900/parameters/grid
+
+# HTC_DEV_ADD MichaelJiang for LOGP
+    chown root system /proc/driver/hdf
+    chmod 0664 /proc/driver/hdf
+
+
+# Define TCP buffer sizes for various networks
+#   ReadMin, ReadInitial, ReadMax, WriteMin, WriteInitial, WriteMax,
+    setprop net.tcp.buffersize.default 4096,87380,110208,4096,16384,110208
+    setprop net.tcp.buffersize.wifi    524288,1048576,2097152,262144,524288,1048576
+    setprop net.tcp.buffersize.lte     524288,1048576,2097152,262144,524288,1048576
+    setprop net.tcp.buffersize.umts    4094,87380,110208,4096,16384,110208
+    setprop net.tcp.buffersize.hspa    4094,87380,262144,4096,16384,262144
+    setprop net.tcp.buffersize.edge    4093,26280,35040,4096,16384,35040
+    setprop net.tcp.buffersize.gprs    4092,8760,11680,4096,8760,11680
+
+# STE: Define support for SIM card hot swap
+    setprop icc.hotswap supported
+
+# STE: Define interface name for wlan
+    setprop wifi.interface wlan0
+
+# STE: Install cw1200_core WLAN module (openMAC solution only)
+    insmod /system/lib/modules/3.0.8+/kernel/net/compat-wireless-openmac/drivers/staging/cw1200/cw1200_core.ko
+
+# Modem
+    class_start modem
+    class_start default
+
+# STE: Enable wide-band speech for Bluetooth
+    setprop bt.hfp.wideband 1
+
+# Set this property so surfaceflinger is not started by system_init
+    setprop system_init.startsurfaceflinger 0
+
+    class_start core
+    class_start main
+
+# STE: Create Directory for Caching files for camera
+    mkdir /data/tuning 0700 media camera
+
+# HTC_CAM_ADD Set rawchip device permission
+    chmod 0666 /dev/rawchip0
+
+on nonencrypted
+    class_start late_start
+
+on charger
+    class_start charger
+
+on property:vold.decrypt=trigger_reset_main
+    class_reset main
+
+on property:vold.decrypt=trigger_load_persist_props
+    load_persist_props
+
+on property:vold.decrypt=trigger_post_fs_data
+    trigger post-fs-data
+
+on property:vold.decrypt=trigger_restart_min_framework
+    class_start main
+
+on property:vold.decrypt=trigger_restart_framework
+    class_start main
+    class_start late_start
+
+on property:vold.decrypt=trigger_shutdown_framework
+    class_reset late_start
+    class_reset main
+
+## Daemon processes to be run by init.
+##
+service ueventd /sbin/ueventd
+    class core
+    critical
+
+service console /system/bin/sh
+    class core
+    console
+    disabled
+
+on property:ro.debuggable=1
+    start console
+
+# Crash Safe Parameter Storage Area, serving production parameter requests from clients.
+# Configuration is read from file "/etc/cspsa.conf" and each found area spawns a CSPSA server
+# process.
+service cspsa /system/bin/logwrapper /system/bin/cspsa-server
+    class parameter_storage
+    user root
+    oneshot
+
+# init shrm net device required for Phonet communication with Modem
+service shrm-netdev /system/bin/ifconfig shrm0 up
+    class modem-u8500
+    oneshot
+
+# init Phonet net device required for Phonet communication with Modem
+service phonet-netdev /system/bin/ifconfig upnlink0 up
+    class main
+    oneshot
+
+#STE: Copy RF trim data from CSPSA, and start the Modem Storage Agent (MSA) service
+service modem /system/bin/sh /system/etc/ste_modem.sh
+    class modem-u8500
+    user radio
+    group radio
+
+#STE: Modem-supervisor
+service modem-supervisor /system/bin/modem-supervisor -r -f /dev/dbx500_mloader_fw -i /sys/devices/platform/ab8505-i2c.0/chip_id,/sys/devices/platform/ab8500-i2c.0/chip_id -c monitor -o 250 -w 1
+    class modem-u8500
+    user root
+
+#STE: Creating Modem Security daemon
+service copsd /system/bin/copsdaemon
+    class modem-core
+    user root
+
+#STE: Modem_log_relay
+service modem_log_relay /system/bin/modem_log_relay --ctrl_port=2001 --data_port=2002 --inv_port=2003 --report_port=2005
+    class modem
+    user root
+
+# adbd is controlled via property triggers in init.<platform>.usb.rc
+service adbd /sbin/adbd
+    class core
+    disabled
+
+# adbd on at boot in emulator
+on property:ro.kernel.qemu=1
+    start adbd
+
+# This property trigger has added to imitiate the previous behavior of "adb root".
+# The adb gadget driver used to reset the USB bus when the adbd daemon exited,
+# and the host side adb relied on this behavior to force it to reconnect with the
+# new adbd instance after init relaunches it. So now we force the USB bus to reset
+# here when adbd sets the service.adb.root property to 1.  We also restart adbd here
+# rather than waiting for init to notice its death and restarting it so the timing
+# of USB resetting and adb restarting more closely matches the previous behavior.
+on property:service.adb.root=1
+    write /sys/class/android_usb/android0/enable 0
+    restart adbd
+    write /sys/class/android_usb/android0/enable 1
+
+# HTC_DEV_ADD MichaelJiang for LOGP
+service hdf /sbin/hdf
+    class core
+        oneshot
+
+#service servicemanager /system/bin/servicemanager
+#    class core
+#    user system
+#    group system
+#    critical
+#    onrestart restart zygote
+#    onrestart restart media
+
+service vold /system/bin/vold
+    class core
+    socket vold stream 0660 root mount
+    ioprio be 2
+
+service netd /system/bin/netd
+    class main
+    socket netd stream 0660 root system dbus_access
+    socket dnsproxyd stream 0660 root inet
+
+service debuggerd /system/bin/debuggerd
+    class main
+
+#service surfaceflinger /system/bin/surfaceflinger
+#    class main
+#    user system
+#    group graphics
+#    onrestart restart zygote
+
+#service zygote /system/bin/app_process -Xzygote /system/bin --zygote --start-system-server
+#    class main
+#    socket zygote stream 660 root system
+#    onrestart write /sys/android_power/request_state wake
+#    onrestart write /sys/power/state on
+#    onrestart restart media
+#    onrestart restart netd
+
+service drm /system/bin/drmserver
+    class main
+    user drm
+    group system inet drmrpc
+
+service admsrv /system/bin/logwrapper /system/bin/admsrv
+    class main
+    user audio
+    group system audio inet net_bt net_bt_admin net_raw shell
+    ioprio rt 4
+    capability NET_ADMIN NET_RAW SYS_NICE
+
+service media /system/bin/logwrapper /system/bin/mediaserver
+    class main
+    user media
+    group audio camera inet net_bt net_bt_admin net_bw_acct drmrpc
+    ioprio rt 4
+
+service bootanim /system/bin/bootanimation
+    class main
+    user graphics
+    group graphics
+    disabled
+    oneshot
+
+service hdmid /system/bin/hdmid
+    class main
+    socket hdmid stream 0660 system graphics
+    oneshot
+
+service dbus /system/bin/logwrapper /system/bin/dbus-daemon --system --nofork
+    class main
+    socket dbus stream 660 bluetooth bluetooth
+    socket dbus_ste stream 660 bluetooth dbus_access
+    user bluetooth
+    group bluetooth net_bt_admin dbus_access
+
+service bluetoothd /system/bin/logwrapper /system/bin/bluetoothd -d -n
+    class main
+    socket bluetooth stream 660 bluetooth bluetooth
+    socket dbus_bluetooth stream 660 bluetooth bluetooth
+    # init.rc does not yet support applying capabilities, so run as root and
+    # let bluetoothd drop uid to bluetooth with the right linux capabilities
+    group bluetooth net_bt_admin misc radio
+    disabled
+
+service ste-cg29xx_ctrl /system/bin/logwrapper /system/xbin/ste-cg29xx_ctrl -b 115200 -p 6 -l 23 -i /system/bin/cg2900-channel_init.sh /dev/ttyAMA0
+    class main
+    user root
+    group bluetooth net_bt_admin misc root
+    oneshot
+
+service pand /system/bin/logwrapper /system/bin/pand -s -n -M -A -E -r NAP -u /system/bin/blue-up.sh
+    class main
+    user root
+    group bluetooth net_bt_admin misc
+    disabled
+    oneshot
+
+service installd /system/bin/installd
+    class main
+    socket installd stream 600 system system
+
+service flash_recovery /system/bin/logwrapper /system/etc/install-recovery.sh
+    class main
+    oneshot
+
+service racoon /system/bin/racoon
+    class main
+    socket racoon stream 600 system system
+    # IKE uses UDP port 500. Racoon will setuid to vpn after binding the port.
+    group vpn net_admin inet
+    disabled
+    oneshot
+
+service mtpd /system/bin/mtpd
+    class main
+    socket mtpd stream 600 system system
+    user vpn
+    group vpn net_admin inet net_raw
+    disabled
+    oneshot
+
+service keystore /system/bin/keystore /data/misc/keystore
+    class main
+    user keystore
+    group keystore
+    socket keystore stream 666
+
+service dumpstate /system/bin/dumpstate -s
+    class main
+    socket dumpstate stream 0660 shell log
+    disabled
+    oneshot
+
+# STE
+service lbsd /system/bin/lbsd
+    class main
+    user root
+    disabled
+    group radio
+
+on property:dev.bootcomplete=1
+    start lbsd
+
+# STE
+service thermald /system/bin/thermald
+    class main
+    user root
+    group root dbus_access
+
+# STE, C&N service daemon
+service cn_server /system/bin/cn_server
+    class modem-core
+    user root
+    group radio misc
+
+# STE, PS connection control
+service init_stepscc /system/bin/sh /data/misc/psdata/stepscc_init.sh
+    class main
+    oneshot
+
+service psccd /system/bin/psccd -f -c /data/misc/psdata/stepscc_conf
+    class modem
+    user root
+    group radio inet
+
+# STE, PS routing control
+service init_sterc /system/bin/sh /data/misc/psdata/sterc_init.sh
+    class main
+    oneshot
+
+service stercd /system/bin/stercd -d 9 -r /data/misc/psdata/sterc_script_connect -s /data/misc/psdata/sterc_script_disconnect -c /data/misc/psdata/sterc_conf
+    class modem
+    user root
+    group radio
+    oneshot
+
+# STE, SIM daemon
+service simd /system/bin/simd
+    class modem-core
+    user root
+    group radio
+
+# STE, SIMPB daemon
+service simpbd /system/bin/logwrapper /system/bin/simpbd
+    class modem-core
+    user root
+    group radio
+
+# STE, SMS Server control
+service sms_server /system/bin/sms_server
+    class modem
+    user root
+    group radio
+
+# STE, AT daemon
+service atd /system/bin/at_core -mode normal -serial ttyAMA0
+    class modem
+    user root
+    group radio audio system
+
+# STE, Modem Access daemon
+service mad /system/bin/ste_mad
+    class modem
+    user radio
+    group radio dbus_access misc
+
+# STE, RIL
+#service ril-daemon /system/bin/rild
+#    class main
+#    socket rild stream 660 root radio
+#    socket rild-debug stream 660 radio system
+#    socket rild-audio stream 660 radio audio
+#    user root
+#    group radio cache inet misc dbus_access
+
+#STE: Avahi Autoip daemon
+service avahi-autoipd /system/bin/avahi-autoipd usb0 -D
+    class main
+    user root
+
+#STE: Avahi daemon
+service avahi-daemon /system/bin/avahi-daemon
+    class main
+    user root
+
+#STE: Avahi-publish
+service avahi-publish /system/bin/avahi-publish -s READY _mobile._tcp 5353
+    class main
+    user root
+
+service watchdog-kicker /system/xbin/watchdog-kicker -d /dev/watchdog -t 120
+    class main
+    oneshot
+
+service battery_params /system/xbin/battery_params
+    class main
+    oneshot
+
+service usbid_init /system/bin/usbid_init.sh
+    class main
+    oneshot
+
+service kexec /system/xbin/kexec.dyn -p
+    oneshot
+
+#STE: RTC Calibration daemon
+service rtc_calibration /system/bin/rtc_calibration
+    user root
+
+service zram_config /system/bin/sh /system/etc/zram_config.sh
+    class main
+    oneshot
+
+# detect power key to reboot system (on boot image) for powertest tool (power_test).
+service boot_detect_key /sbin/boot_detect_key
+    oneshot
+
+# powertest tool (on boot image).
+service power_test /sbin/power_test
+user root
+oneshot
+

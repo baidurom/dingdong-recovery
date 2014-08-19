@@ -1,0 +1,51 @@
+# Copyright (c) 2010, Code Aurora Forum.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+key 399   GRAVE
+
+key 158   BACK              WAKE_DROPPED
+key 230   SOFT_RIGHT        WAKE
+key 60    SOFT_RIGHT        WAKE
+key 107   ENDCALL           WAKE_DROPPED
+key 62    ENDCALL           WAKE_DROPPED
+key 229   MENU              WAKE_DROPPED
+key 139   MENU              WAKE_DROPPED
+key 59    MENU              WAKE_DROPPED
+key 127   SEARCH            WAKE_DROPPED
+key 217   SEARCH            WAKE_DROPPED
+
+key 231   CALL              WAKE_DROPPED
+key 61    CALL              WAKE_DROPPED
+key 232   DPAD_CENTER       WAKE_DROPPED
+key 108   DPAD_DOWN         WAKE_DROPPED
+key 103   DPAD_UP           WAKE_DROPPED
+key 102   HOME              WAKE
+key 105   DPAD_LEFT         WAKE_DROPPED
+key 106   DPAD_RIGHT        WAKE_DROPPED
+key 115   VOLUME_UP         WAKE_DROPPED
+key 114   VOLUME_DOWN       WAKE_DROPPED
+key 116   POWER             WAKE
+key 212   CAMERA
+key 29    BACK              WAKE_DROPPED
+key 97    ENTER             WAKE_DROPPED
+key 113   MENU              WAKE_DROPPED
+key 128   HOME              WAKE
+
+key 155   ENVELOPE
+
+key 466   DPAD_CENTER       WAKE_DROPPED
+
+key 528   FOCUS
+key 766   CAMERA

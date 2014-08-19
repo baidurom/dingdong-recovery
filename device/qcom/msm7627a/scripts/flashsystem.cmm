@@ -1,0 +1,7 @@
+
+do setup.cmm
+
+if ("&SYSTEM_IMG"!="")
+(
+  do flash system &SYSTEM_IMG
+)

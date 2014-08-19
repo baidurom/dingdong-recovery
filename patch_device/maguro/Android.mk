@@ -1,0 +1,10 @@
+LOCAL_PATH := $(call my-dir)
+include $(DD_CLEAR)
+DD_PRODUCT := maguro
+DD_KERNEL := $(LOCAL_PATH)/kernel
+
+DD_KERNEL_BASE := 0x80000000
+DD_DEVICE_SCREEN_TYPE := "XHDPI"
+DD_PRODUCT_ROOT := $(LOCAL_PATH)/root
+DD_DEVICE_CONFIG := $(LOCAL_PATH)/*.conf
+include $(DD_RECOVERY)
