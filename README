@@ -1,24 +1,25 @@
-Download dingdong recovery sourcecode, please using follow command':
-
+1、Download dingdong recovery sourcecode, please using follow command':
 git clone https://github.com/baidurom/dingdong-recovery.git
 
 MTK branch name: mtk
 
-If clone failed or too slow, please download dingdong sourcecode with following URL:
+2、if you are in branch qcom and can not find branch mtk, using following commands to switch to branch mtk:
+git checkout origin/mtk
+git brancn mtk
+
+3、If clone failed or too slow, please download dingdong sourcecode with following URL:
 http://pan.baidu.com/s/1sj8rpcL
 
 when get the dingdong-recovery.tar.gz, using the following commands:
-
 tar -xzf dingdong-recovery.tar.gz   # get sourcecode directory
 git pull                            # synchronizing newest code
 git checkout mtk					# switch to mtk branch
 git checkout qcom					# switch to qcom branch
+@@ Do not download ZIP on github, that will have some errors when compiling! @@
 
-
-@@@@@ Do not download ZIP on github, that will have some errors when compiling! @@@@@
-
-1 the project is build android recovery only;
-2 Steps as following:
+4、Compile recovery
+(1) the project is build android recovery only;
+(2) Steps as following:
     $ ./dingdongRec_make.sh a820 -p mt6589 -t xhdpi
   please see the out/patch_device/a820/ , find recovery.img 
 
