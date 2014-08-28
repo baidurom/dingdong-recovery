@@ -110,16 +110,19 @@ void acfg_init_ex(byte themeonly){
   memset(acfg_var.battery_path, 0x00, PATH_MAX);
   memset(acfg_var.lun_file, 0x00, PATH_MAX);
   memset(acfg_var.reboot_cmd, 0x00, 128);
+  memset(acfg_var.bootloader_cmd, 0x00, 128);
 
-  acfg_var.enable_usb   = 1;
-  acfg_var.ckey_up      = 0;
-  acfg_var.ckey_down    = 0;
-  acfg_var.ckey_select  = 0;
-  acfg_var.ckey_back    = 0;
-  acfg_var.ckey_menu    = 0;
-  acfg_var.ckey_home    = 0;
-  acfg_var.virkeys_en   = 0;
-  acfg_var.root			= 0;
+  acfg_var.enable_usb   		= 0;
+  acfg_var.enable_sideload   	= 0;
+  acfg_var.enable_bootloader	= 0;
+  acfg_var.ckey_up      		= 0;
+  acfg_var.ckey_down    		= 0;
+  acfg_var.ckey_select  		= 0;
+  acfg_var.ckey_back    		= 0;
+  acfg_var.ckey_menu   		 	= 0;
+  acfg_var.ckey_home    		= 0;
+  acfg_var.virkeys_en   		= 0;
+  acfg_var.root					= 0;
 
   atheme_releaseall();
 }

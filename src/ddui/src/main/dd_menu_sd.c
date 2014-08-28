@@ -176,7 +176,7 @@ struct _menuItem * sd_ui_init()
     menuItem_set_show(temp, &sd_menu_show);
     menuNode_add(p, temp);
 
-    if (acfg()->sd_ext == 1 && acfg()->sd_int == 1)
+    if (acfg()->sd_ext != 0 && acfg()->sd_int != 0)
     {
         //install from /sdcard2 (internal SD)
         temp = common_ui_init();
@@ -196,12 +196,15 @@ struct _menuItem * sd_ui_init()
     menuItem_set_show(temp, &cache_menu_show);
     menuNode_add(p, temp);
 
-    //signature switch
-    temp = common_ui_init();
-    menuItem_set_name(temp, "<~sideload.install.name>");
-    menuItem_set_icon(temp, "@sd.choose");
-    menuItem_set_show(temp, &sideload_install_show);
-    menuNode_add(p, temp);
+    //sideload mode
+    if (acfg()->enable_sideload != 0) {
+        temp = common_ui_init();
+        return_null_if_fail(temp != NULL);
+        menuItem_set_name(temp, "<~sideload.install.name>");
+        menuItem_set_icon(temp, "@sd.choose");
+        menuItem_set_show(temp, &sideload_install_show);
+        menuNode_add(p, temp);
+    }
 
     return p;
 
