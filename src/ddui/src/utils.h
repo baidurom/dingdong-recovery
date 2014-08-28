@@ -236,6 +236,7 @@ typedef struct  {
   char  battery_path[PATH_MAX]; //battery_path
   char  lun_file[PATH_MAX]; //mass_storage path
   char  reboot_cmd[128];
+  char  bootloader_cmd[128];
   
   // ROM Text
   char rec_name[128];          // Recovery Name
@@ -247,6 +248,8 @@ typedef struct  {
   
   // CUSTOM KEY
   int enable_usb;
+  int enable_sideload;
+  int enable_bootloader;
   int ckey_up;
   int ckey_down;
   int ckey_select;

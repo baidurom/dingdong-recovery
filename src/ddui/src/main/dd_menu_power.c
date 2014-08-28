@@ -20,7 +20,10 @@ static STATUS power_child_show(menuItem *p)
             		ddOp_send(OP_REBOOT, 1, "reboot");
                 break;
             case POWER_BOOTLOADER:
-                ddOp_send(OP_REBOOT, 1, "bootloader");
+            	if (acfg()->bootloader_cmd != NULL)
+            		ddOp_send(OP_REBOOT, 1, acfg()->bootloader_cmd);
+            	else
+            		ddOp_send(OP_REBOOT, 1, "bootloader");
                 break;
             case POWER_RECOVERY:
                 ddOp_send(OP_REBOOT, 1, "recovery");
@@ -67,16 +70,18 @@ struct _menuItem * power_ui_init()
     menuItem_set_result(temp, POWER_REBOOT);
     menuItem_set_show(temp, &power_child_show);
     menuNode_add(p, temp);
+
     //reboot bootloader
-/*
-    temp = common_ui_init();
-    return_null_if_fail(temp != NULL);
-    menuItem_set_name(temp, "<~reboot.bootloader>");
-    menuItem_set_icon(temp, "@reboot.bootloader");
-    menuItem_set_result(temp, POWER_BOOTLOADER);
-    menuItem_set_show(temp, &power_child_show);
-    menuNode_add(p, temp);
-*/
+    if (acfg()->enable_bootloader != 0) {
+        temp = common_ui_init();
+        return_null_if_fail(temp != NULL);
+        menuItem_set_name(temp, "<~reboot.bootloader>");
+        menuItem_set_icon(temp, "@reboot.bootloader");
+        menuItem_set_result(temp, POWER_BOOTLOADER);
+        menuItem_set_show(temp, &power_child_show);
+        menuNode_add(p, temp);
+    }
+
     //reboot recovery
     temp = common_ui_init();
     return_null_if_fail(temp != NULL);
