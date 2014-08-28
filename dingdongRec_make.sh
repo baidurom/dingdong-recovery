@@ -80,7 +80,8 @@ function make_dingdong_recovery(){
     CP_SBIN=$OUT_DIR/tmp/RAMDISK/sbin
     CP_RES=$OUT_DIR/tmp/RAMDISK/res
     DREC=$OUT_DIR/recovery.img
-    RES_ICON_HDPI=src/res/icons-hdpi
+	RES_ICON_HDPI=src/res/icons-hdpi
+    RES_ICON_MDPI=src/res/icons-mdpi
     RES_ICON_XHDPI=src/res/icons-xhdpi
     RES_ICON_XXHDPI=src/res/icons-xxhdpi
 
@@ -168,6 +169,8 @@ function make_dingdong_recovery(){
     cp $PATCH_DIR/*.conf $OUT_RES/
     if [[ "$SCREEN_TYPE" == "hdpi" ]];then
         cp -Rf $RES_ICON_HDPI $OUT_RES/icons
+	elif [[ "$SCREEN_TYPE" == "mdpi" ]];then
+        cp -Rf $RES_ICON_MDPI $OUT_RES/icons
     elif [[ "$SCREEN_TYPE" == "xhdpi" ]];then
         cp -Rf $RES_ICON_XHDPI $OUT_RES/icons
     elif [[ "$SCREEN_TYPE" == "xxhdpi" ]];then
