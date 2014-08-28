@@ -9,6 +9,7 @@ dd_recovery_sbin := $(TARGET_ROOT_OUT)/sbin
 dd_recovery_resource := src/res
 dd_recovery_root := $(dd_recovery_product)/root
 dd_recovery_icon := $(dd_recovery_root)/res/icons
+dd_recovery_icon_mdpi := $(dd_recovery_root)/res/icons-mdpi
 dd_recovery_icon_hdpi := $(dd_recovery_root)/res/icons-hdpi
 dd_recovery_icon_xhdpi := $(dd_recovery_root)/res/icons-xhdpi
 dd_recovery_icon_xxhdpi := $(dd_recovery_root)/res/icons-xxhdpi
@@ -50,6 +51,7 @@ $(DD_PRODUCT): dd_recovery_resource := $(dd_recovery_resource)
 $(DD_PRODUCT): dd_recovery_root := $(dd_recovery_root)
 $(DD_PRODUCT): dd_recoveryimage_args := $(dd_recoveryimage_args)
 $(DD_PRODUCT): dd_recovery_icon := $(dd_recovery_icon)
+$(DD_PRODUCT): dd_recovery_icon_mdpi := $(dd_recovery_icon_mdpi)
 $(DD_PRODUCT): dd_recovery_icon_hdpi := $(dd_recovery_icon_hdpi)
 $(DD_PRODUCT): dd_recovery_icon_xhdpi := $(dd_recovery_icon_xhdpi)
 $(DD_PRODUCT): dd_recovery_icon_xxhdpi := $(dd_recovery_icon_xxhdpi)
@@ -86,21 +88,33 @@ endif
 
 ifeq ($(dd_recovery_screen_type), XHDPI)
 	mv $(dd_recovery_icon_xhdpi) $(dd_recovery_icon)
+	rm -rf $(dd_recovery_icon_mdpi)
 	rm -rf $(dd_recovery_icon_hdpi)
+	rm -rf $(dd_recovery_icon_xxhdpi)
+endif
+
+ifeq ($(dd_recovery_screen_type), MDPI)
+	mv $(dd_recovery_icon_mdpi) $(dd_recovery_icon)
+	rm -rf $(dd_recovery_icon_hdpi)
+	rm -rf $(dd_recovery_icon_xhdpi)
 	rm -rf $(dd_recovery_icon_xxhdpi)
 endif
 
 ifeq ($(dd_recovery_screen_type), XXHDPI)
 	mv $(dd_recovery_icon_xxhdpi) $(dd_recovery_icon)
+	rm -rf $(dd_recovery_icon_mdpi)
 	rm -rf $(dd_recovery_icon_hdpi)
 	rm -rf $(dd_recovery_icon_xhdpi)
 endif
 
 ifneq ($(dd_recovery_screen_type), XHDPI)
 ifneq ($(dd_recovery_screen_type), XXHDPI)
+ifneq ($(dd_recovery_screen_type), MDPI)
 	mv $(dd_recovery_icon_hdpi) $(dd_recovery_icon)
+	rm -rf $(dd_recovery_icon_mdpi)
 	rm -rf $(dd_recovery_icon_xhdpi)
 	rm -rf $(dd_recovery_icon_xxhdpi)
+endif
 endif
 endif
 
@@ -119,6 +133,7 @@ endif
 	$(MKBOOTFS) $(dd_recovery_root) | $(MINIGZIP) > $(dd_recovery_ramdisk)
 	$(MKBOOTIMG) $(dd_recoveryimage_args) --output $(dd_recovery_target)
 	$(hide) $(call assert-max-image-size, $(dd_recovery_target), $(BOARD_RECOVERYIMAGE_PARTITION_SIZE), raw)
+	cp $(dd_recovery_target) out/upload/recovery-$(DD_PRODUCT).img
 	cp $(dd_recovery_target) out/release/dingdongrecovery-$(DD_RECOVERY_VERSION)-$(DD_PRODUCT).img
 
 DD_PRODUCT_RELEASE := $(DD_PRODUCT)_release

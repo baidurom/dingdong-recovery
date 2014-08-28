@@ -618,21 +618,33 @@ $(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) \
 
 ifeq ($(subst ",,$(TARGET_RECOVERY_SCREEN_TYPE)), XHDPI)
 	mv $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xhdpi $(TARGET_RECOVERY_ROOT_OUT)/res/icons
+	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-mdpi
 	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-hdpi
+	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xxhdpi
+endif
+
+ifeq ($(subst ",,$(TARGET_RECOVERY_SCREEN_TYPE)),MDPI)
+	mv $(TARGET_RECOVERY_ROOT_OUT)/res/icons-mdpi $(TARGET_RECOVERY_ROOT_OUT)/res/icons
+	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-hdpi
+	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xhdpi
 	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xxhdpi
 endif
 
 ifeq ($(subst ",,$(TARGET_RECOVERY_SCREEN_TYPE)), XXHDPI)
 	mv $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xxhdpi $(TARGET_RECOVERY_ROOT_OUT)/res/icons
+	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-mdpi
 	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-hdpi
 	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xhdpi
 endif
 
 ifneq ($(subst ",,$(TARGET_RECOVERY_SCREEN_TYPE)), XHDPI)
 ifneq ($(subst ",,$(TARGET_RECOVERY_SCREEN_TYPE)), XXHDPI)
+ifneq ($(subst ",,$(TARGET_RECOVERY_SCREEN_TYPE)), MDPI)
 	mv $(TARGET_RECOVERY_ROOT_OUT)/res/icons-hdpi $(TARGET_RECOVERY_ROOT_OUT)/res/icons
+	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-mdpi
 	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xhdpi
 	rm -rf $(TARGET_RECOVERY_ROOT_OUT)/res/icons-xxhdpi
+endif
 endif
 endif
 	cp $(RECOVERY_INSTALL_OTA_KEYS) $(TARGET_RECOVERY_ROOT_OUT)/res/keys
