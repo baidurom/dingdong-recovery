@@ -247,6 +247,8 @@ byte ag_init(){
     
     //-- Init Frame Buffer
     if (ag_fbv.bits_per_pixel==16 || force_to_rbg65){
+      agclp    = (ag_fbv.bits_per_pixel>>3);
+      ag_fbsz  = (ag_fbv.xres * ag_fbv.yres * ((agclp==3)?4:agclp));
      /*RGB565*/
       ag_fbv.red.offset        = 11;
       ag_fbv.red.length        = 5;
@@ -263,10 +265,16 @@ byte ag_init(){
           close(ag_fb);
           return -1;
       }
+      ioctl(ag_fb, FBIOGET_FSCREENINFO, &ag_fbf);
+      ioctl(ag_fb, FBIOGET_VSCREENINFO, &ag_fbv);
+      printf("Pixel format: %dx%d @ %dbpp, length: %d\n", ag_fbv.xres, ag_fbv.yres, ag_fbv.bits_per_pixel, ag_fbf.line_length);
       ag_32   = 0;
       ag_fbuf = (word*) mmap(0,ag_fbf.smem_len,PROT_READ|PROT_WRITE,MAP_SHARED,ag_fb,0);
       ag_b    = (word*) malloc(ag_fbsz);
       ag_bz   = (word*) malloc(ag_fbsz);
+      memset(ag_fbuf,0,ag_fbf.smem_len);
+      memset(ag_b,0,ag_fbsz);
+      memset(ag_bz,0,ag_fbsz);
       
       //-- Resolution with Stride
       ag_16strd = 0;
@@ -310,7 +318,10 @@ byte ag_init(){
       ag_fbuf32 = (byte*) mmap(0,ag_fbf.smem_len,PROT_READ|PROT_WRITE,MAP_SHARED,ag_fb,0);
       ag_bf32   = (dword*) malloc(ag_fbsz);
       ag_bz32   = (dword*) malloc(ag_fbsz);
+      memset(ag_fbuf32,0,ag_fbf.smem_len);
       memset(ag_bf32,0,ag_fbsz);
+      memset(ag_bz32,0,ag_fbsz);
+
       ag_blank(NULL); //-- 32bit Use Blank
 
       int x,y;

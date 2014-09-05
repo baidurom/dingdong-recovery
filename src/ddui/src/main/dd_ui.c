@@ -96,7 +96,11 @@ static int dd_draw_homebanner(int x, int y, int w, int h) {
     ,
     acfg()->rec_device,
     acfg()->rec_version,
+#ifdef DD_USE_AUTHOR_INNER
+    DD_AUTHOR
+#else
     acfg()->rec_author
+#endif
     );
 	if (!atheme_id_draw(24, &dd_win_bg, x, y, w, h)){
 	    printf("Load home banner failed!\n");

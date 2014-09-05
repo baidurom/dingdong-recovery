@@ -36,8 +36,18 @@ ifneq ($(DD_KERNEL_PAGESIZE),)
 	dd_recoveryimage_args += --pagesize $(DD_KERNEL_PAGESIZE)
 endif
 ifneq ($(DD_BOOTRAMDISK_OFFSET),)
-	dd_recoveryimage_args += --ramdiskaddr $(DD_BOOTRAMDISK_OFFSET)
+	dd_recoveryimage_args += --ramdisk_offset $(DD_BOOTRAMDISK_OFFSET)
 endif
+ifneq ($(DD_RAMDISK_OFFSET),)
+	dd_recoveryimage_args += --ramdisk_offset $(DD_RAMDISK_OFFSET)
+endif
+ifneq ($(DD_TAGS_OFFSET),)
+	dd_recoveryimage_args += --tags_offset $(DD_TAGS_OFFSET)
+endif
+ifneq ($(DD_DTIMG),)
+	dd_recoveryimage_args += --dt $(DD_DTIMG)
+endif
+
 
 #BUILD_RECOVERY_BEFORE := $(filter $(TARGET_ROOT_OUT)/sbin/%, $(ALL_DEFAULT_INSTALLED_MODULES))
 .PHONY: $(DD_PRODUCT)

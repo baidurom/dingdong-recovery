@@ -1,0 +1,133 @@
+#!/bin/bash
+
+workdir=`pwd`
+toolpath=$workdir/unpack-bootimg-tools/mkboot
+patchrootdir=$workdir/patch_device
+rawrec=$1
+newdevname=$2
+patchdevdir=$patchrootdir/$newdevname
+androidmk=$patchdevdir/Android.mk
+exampledeviceconf=$patchrootdir/example/device.conf
+exampleinitconf=$patchrootdir/example/init.conf
+
+pout() {
+    printf "${C_OUT}${*}${C_CLEAR}\n"
+}
+
+perr() {
+    printf "${C_ERR}${*}${C_CLEAR}\n"
+}
+
+clean()
+{
+    rm -rf $patchdevdir
+    pout "......"
+    exit
+}
+
+function usage()
+{
+	pout " Usage: $0 recovery_path new_device_name"
+	pout "  $0 ./i9300-recovery.img i9300"
+	clean
+}
+
+function unpack_bootimg()
+{
+	pout ">>> unpacking $rawrecpath ..."
+	$toolpath $rawrec $patchdevdir
+	pout ">>> unpack recovery image done!"
+}
+
+function generate_androidmk()
+{
+    pout ""
+    pout ""
+    pout ""
+    echo "--------------------------------------------------------"
+    echo "Get img_info:"
+    echo "--------------------------------------------------------"
+    cat $patchdevdir/img_info
+    echo "--------------------------------------------------------"
+    pout ""
+    eval $(cat $patchdevdir/img_info)
+    if [ -z $kernel ]|| [ -z $ramdisk ] || [ -z $base_addr ]; then
+        pout "img_info file have not enough parameters."
+        clean
+    fi
+	pout "LOCAL_PATH := \$(call my-dir)" > $androidmk
+    pout "include \$(DD_CLEAR)" >> $androidmk
+    pout "DD_PRODUCT := $newdevname" >> $androidmk
+    pout "DD_KERNEL := \$(LOCAL_PATH)/kernel" >> $androidmk
+    if [ -f $patchdevdir/dt.img ] && [ -n $dtb_size ];then
+        pout "DD_DTIMG := \$(LOCAL_PATH)/dt.img" >> $androidmk
+    fi
+    pout "" >> $androidmk
+    pout "DD_KERNEL_BASE := $base_addr" >> $androidmk
+    pout "DD_KERNEL_PAGESIZE := $page_size" >> $androidmk
+    pout "DD_KERNEL_CMDLINE := $cmd_line" >> $androidmk
+    if [ -n $ramdisk_offset ];then
+        pout "DD_RAMDISK_OFFSET := $ramdisk_offset" >> $androidmk
+    fi
+    if [ -n $tags_offset ];then
+        pout "DD_TAGS_OFFSET := $tags_offset" >> $androidmk
+    fi
+    pout ""
+    pout "Please enter screen type:"
+    pout "MDPI:   resolution < 480p"
+    pout "HDPI:   480p <= resolution < 720p"
+    pout "XHDPI:  720p <= resolution < 1080p"
+    pout "XXHDPI: resolution >= 1080p"
+    pout ""
+    read -p "Enter screen type (MDPI/HDPI/XHDPI/XXHDPI): " screentype
+    case $screentype in
+        MDPI | HDPI | XHDPI | XXHDPI)
+        pout "DD_DEVICE_SCREEN_TYPE := \"$screentype\"" >> $androidmk
+        ;;
+    *)
+        pout "Invalid screen type: $screentype, please check it. Exit!"
+        clean
+        ;;
+    esac
+    
+    pout "" >> $androidmk
+    pout "DD_PRODUCT_ROOT := \$(LOCAL_PATH)/root" >> $androidmk
+    pout "DD_DEVICE_CONFIG := \$(LOCAL_PATH)/*.conf" >> $androidmk
+    pout "include \$(DD_RECOVERY)" >> $androidmk
+    pout ""
+    pout ""
+    echo "--------------------------------------------------------"
+    pout "Generate Android.mk:"
+    echo "--------------------------------------------------------"
+    cat $androidmk
+    echo "--------------------------------------------------------"
+    pout ""
+    pout ""
+}
+
+function handle_patch_device()
+{
+    generate_androidmk
+	mv $patchdevdir/ramdisk $patchdevdir/root
+    mv $patchdevdir/zImage $patchdevdir/kernel
+    rm -rf $patchdevdir/ramdisk.gz
+    rm -rf $patchdevdir/img_info
+    echo "cp -f $exampledeviceconf $patchdevdir/device.conf"
+    echo "cp -f $exampleinitconf $patchdevdir/init.conf"
+    cp -f $exampledeviceconf $patchdevdir/device.conf
+    cp -f $exampleinitconf $patchdevdir/init.conf
+}
+
+if [[ "$#" == "2" ]] && [[ -f $1 ]];then
+	pout "RAW recovery: $rawrec"
+	pout "NEW device name: $newdevname"
+	pout "Patch device path: $patchdevdir"
+else
+	usage
+fi
+
+unpack_bootimg;
+handle_patch_device;
+
+pout "FINISHED!"
+
