@@ -31,8 +31,8 @@ typedef int u32;
 // DD Main Configurations
 
 #define DD_AUTHOR        		"Dingdong"
-#define DD_USE_AUTHOR_INNER
-//#undef DD_USE_AUTHOR_INNER
+//#define DD_USE_AUTHOR_INNER
+#undef DD_USE_AUTHOR_INNER
 
 
 
