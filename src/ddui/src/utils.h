@@ -31,10 +31,10 @@ typedef int u32;
 // DD Main Configurations
 
 #define DD_AUTHOR        		"Dingdong"
-//#define DD_USE_AUTHOR_INNER
+
+#ifdef DD_USE_AUTHOR_INNER
 #undef DD_USE_AUTHOR_INNER
-
-
+#endif
 
 #define DD_NAME        "叮咚Recovery"
 //rec_version
